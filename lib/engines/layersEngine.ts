@@ -1,0 +1,49 @@
+import { FocusLayer, GymLayerConfig } from '@/lib/types/focus';
+
+export type StudyTechniqueState = {
+    phase: "focus" | "break";
+    cycleCount: number;
+    phaseStartedAt: string;
+};
+
+export const STUDY_CONFIGS = {
+    "pomodoro_25_5": { focusMin: 25, breakMin: 5 },
+    "study_50_10": { focusMin: 50, breakMin: 10 }
+};
+
+export function createStudyLayer(id: "pomodoro_25_5" | "study_50_10" | "active_recall"): FocusLayer {
+    if (id === "active_recall") {
+        return { id, kind: "studyTechnique" };
+    }
+    const config = STUDY_CONFIGS[id];
+    return {
+        id,
+        kind: "studyTechnique",
+        config: {
+            ...config,
+            state: {
+                phase: "focus",
+                cycleCount: 1,
+                phaseStartedAt: new Date().toISOString()
+            } as StudyTechniqueState
+        }
+    };
+}
+
+export function createGymLayer(): FocusLayer {
+    const config: GymLayerConfig = {
+        workoutName: null,
+        exercises: [],
+        activeExerciseId: null,
+        rest: {
+            isResting: false,
+            selectedSec: undefined,
+            restStartedAt: null
+        }
+    };
+    return {
+        id: "gym_set_tracker",
+        kind: "gymMode",
+        config
+    };
+}

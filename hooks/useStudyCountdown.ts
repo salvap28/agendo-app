@@ -1,0 +1,91 @@
+import { useState, useEffect } from 'react';
+import { useFocusStore } from '@/lib/stores/focusStore';
+import { StudyTechniqueState } from '@/lib/engines/layersEngine';
+
+export function useStudyCountdown() {
+    const { session, setLayer } = useFocusStore();
+    const [countdownFormatted, setCountdownFormatted] = useState<string | null>(null);
+    const [currentPhase, setCurrentPhase] = useState<"focus" | "break" | null>(null);
+
+    useEffect(() => {
+        if (!session || !session.activeLayer || session.activeLayer.kind !== "studyTechnique" || session.activeLayer.id === "active_recall") {
+            setCountdownFormatted(null);
+            setCurrentPhase(null);
+            return;
+        }
+
+        const config = session.activeLayer.config as { state?: StudyTechniqueState; focusMin: number; breakMin: number };
+        if (!config || !config.state) return;
+
+        const state = config.state;
+        const focusSecs = config.focusMin * 60;
+        const breakSecs = config.breakMin * 60;
+
+        let targetDurationSecs = state.phase === "focus" ? focusSecs : breakSecs;
+
+        // Helper to compute local remaining internally
+        const getRemainingSecs = () => {
+            const start = new Date(state.phaseStartedAt).getTime();
+            let end = new Date().getTime();
+
+            // This is simplified: it doesn't pause the countdown when session is paused natively.
+            // For a full MVP, we only run count down if not paused.
+            if (session.isPaused) {
+                return targetDurationSecs; // Or store exact paused elapsed
+            }
+
+            const elapsedMs = end - start;
+            const elapsedSecs = Math.floor(elapsedMs / 1000);
+            return Math.max(0, targetDurationSecs - elapsedSecs);
+        };
+
+        setCurrentPhase(state.phase);
+
+        if (session.isPaused) {
+            return; // don't tick
+        }
+
+        const interval = setInterval(() => {
+            const remaining = getRemainingSecs();
+
+            if (remaining <= 0) {
+                // Auto-switch phase
+                const nextPhase = state.phase === "focus" ? "break" : "focus";
+                const currentCount = state.cycleCount;
+
+                // Note: In real app, play sound/toast here
+                useFocusStore.setState((state) => {
+                    const currentLayer = state.session?.activeLayer;
+                    if (!currentLayer || !state.session) return state;
+
+                    return {
+                        session: {
+                            ...state.session,
+                            activeLayer: {
+                                id: currentLayer.id,
+                                kind: currentLayer.kind,
+                                config: {
+                                    ...config,
+                                    state: {
+                                        phase: nextPhase,
+                                        cycleCount: nextPhase === "focus" ? currentCount + 1 : currentCount,
+                                        phaseStartedAt: new Date().toISOString()
+                                    }
+                                } as any // Cast as any because Zustand store typing enforces GymLayerConfig | Record<string, unknown>
+                            }
+                        }
+                    };
+                });
+            }
+
+            const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+            const s = (remaining % 60).toString().padStart(2, '0');
+            setCountdownFormatted(`${m}:${s}`);
+
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [session]);
+
+    return { countdownFormatted, currentPhase };
+}
