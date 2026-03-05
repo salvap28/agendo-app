@@ -71,7 +71,7 @@ export function FloatingFocusPrompt() {
     const theme = hasTargetBlock ? getBlockColors(targetBlock.type) : null;
 
     return (
-        <div className="fixed bottom-28 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-5 fade-in duration-500">
+        <div className="fixed top-[max(env(safe-area-inset-top),1rem)] md:top-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-5 fade-in duration-500">
             <button
                 onClick={handleAction}
                 className={cn(

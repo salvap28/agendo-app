@@ -363,6 +363,19 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 </button>
             )}
 
+            {activePrimaryNode === "focus" && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        openFromBlock(block.id, block.type);
+                        handleClose();
+                    }}
+                    className="absolute top-[calc(env(safe-area-inset-top,0px)+68px)] left-1/2 -translate-x-1/2 z-[320] h-11 px-5 rounded-full bg-purple-500/25 border border-purple-300/35 text-purple-50 text-xs font-bold tracking-wider shadow-[0_10px_28px_-12px_rgba(168,85,247,0.6)] backdrop-blur-xl hover:bg-purple-500/35 hover:border-purple-200/45 hover:scale-[1.03] active:scale-95 transition-all duration-300 whitespace-nowrap"
+                >
+                    INICIAR FOCUS
+                </button>
+            )}
+
             {/* Galaxia Base (Cámara/Paneo) */}
             <div
                 ref={galaxyRef}
@@ -663,7 +676,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
                                 {/* ── LUNAS (Nivel 2) ── */}
                                 {isFocused && (
-                                    <div className="absolute top-8 left-1/2 w-0 h-0 flex items-center justify-center pointer-events-none">
+                                    <div
+                                        className={cn(
+                                            "absolute left-1/2 w-0 h-0 flex items-center justify-center pointer-events-none",
+                                            pn.id === "time" ? "top-1/2 -translate-y-1/2" : "top-8"
+                                        )}
+                                    >
 
                                         {/* TYPE SATELLITES */}
                                         {pn.id === "type" && BLOCK_TYPES_UI.map((tn, j) => {
