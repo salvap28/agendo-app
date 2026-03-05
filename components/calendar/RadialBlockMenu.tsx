@@ -79,6 +79,9 @@ const calculateNodePosition = (index: number, total: number, radius: number, ang
     return { x, y, angle: currentAngle };
 };
 
+const PRIMARY_ORBIT_RADIUS_MOBILE = 124;
+const PRIMARY_ORBIT_RADIUS_DESKTOP = 168;
+
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { blockId: string; isNewBlock?: boolean; onClose: () => void }) {
@@ -150,7 +153,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             }
 
             // Aplicar posiciones directo al DOM saltando el Virtual DOM (60 FPS puros)
-            const currentObjPrimary = isMobile ? 105 : 160;
+            const currentObjPrimary = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
             planetRefs.current.forEach((el, i) => {
                 if (el) {
                     const pos = calculateNodePosition(i, 5, currentObjPrimary, physics.angle); // 5 planets
@@ -168,7 +171,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         // Buscar índice del nodo activo para calcular su posición exacta actual
                         const activeIndex = ["type", "focus", "time", "status", "danger"].indexOf(activePrimaryNode);
                         if (activeIndex !== -1) {
-                            const currentObjPrimary = isMobile ? 105 : 160;
+                            const currentObjPrimary = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
                             const pos = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
                             // Centrar el nodo y hacer zoom
                             galaxyRef.current.style.translate = `${-pos.x}px ${-pos.y}px`;
@@ -187,7 +190,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [activePrimaryNode]);
+    }, [activePrimaryNode, isMobile]);
 
 
     const isCurrentBlock = useMemo(() => {
@@ -324,7 +327,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         { id: "delete" as const, label: "Eliminar", icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
     ];
 
-    const PRIMARY_RADIUS = isMobile ? 105 : 160;
+    const PRIMARY_RADIUS = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
     const SECONDARY_RADIUS = isMobile ? 75 : 100;
 
     const pillWidthExpanded = isMobile ? "w-32 rounded-[2rem] px-3" : "w-40 rounded-[2rem] px-5";
