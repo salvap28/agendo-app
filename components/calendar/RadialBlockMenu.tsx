@@ -154,10 +154,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     }, [activePrimaryNode, block?.recurrencePattern, block?.startAt, block?.endAt]);
 
     const setOrbitPosition = (el: HTMLElement, x: number, y: number) => {
-        // Keep a fixed radius with stable positioning on mobile/desktop.
-        el.style.left = `calc(50% + ${x}px)`;
-        el.style.top = `calc(50% + ${y}px)`;
-        el.style.removeProperty("translate");
+        // Use transform3d for strict GPU hardware acceleration, critical for mobile 60fps
+        el.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), 0)`;
+        // Enforce will-change to prevent Vercel/mobile repaints
+        el.style.willChange = 'transform';
     };
 
     const getInitialZoomForNode = useCallback((node: PrimaryNode) => {
@@ -299,6 +299,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             }
 
             // Aplicar posiciones directo al DOM saltando el Virtual DOM (60 FPS puros)
+            // Cuando hay un nodo activo, el ángulo global se CONGELA, lo que evita "brincos" 
+            // no deseados en la posición de destino
             const currentObjPrimary = primaryRadius;
             let targetAnchor = { x: 0, y: 0 };
 
@@ -307,6 +309,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 if (activeIndex !== -1) {
                     targetAnchor = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
                 }
+            } else {
+                // Return camera to center smoothly
+                targetAnchor = { x: 0, y: 0 };
             }
 
             // Interpolación lineal (Lerp) para movimiento suave de cámara 
@@ -316,6 +321,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             planetRefs.current.forEach((el, i) => {
                 if (el) {
                     const pos = calculateNodePosition(i, 5, currentObjPrimary, physics.angle); // 5 planets
+                    // The planet stays exactly in its expected orbital pos.
+                    // The 'camera/offset' subtraction simulates panning the entire system.
                     const x = pos.x - physics.offset.x;
                     const y = pos.y - physics.offset.y;
                     setOrbitPosition(el, x, y);
@@ -757,13 +764,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 key={pn.id}
                                 ref={(el) => { planetRefs.current[i] = el; }}
                                 className={cn(
-                                    "absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-700 pointer-events-auto",
+                                    // Removed absolute left/top layout for pure transform translation
+                                    "absolute left-1/2 top-1/2 flex flex-col items-center transition-[opacity,scale,filter] duration-700 pointer-events-auto",
                                     isDimmed ? "opacity-10 scale-75 blur-sm" : "opacity-100 scale-100",
                                     isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "z-[100]" : "z-10"
                                 )}
                                 style={{
-                                    left: `calc(50% + ${pos.x}px)`,
-                                    top: `calc(50% + ${pos.y}px)`,
+                                    // Initial fallback positioning, instantly overridden by physics loop via translate3d
                                     animation: `spring-out-planet 600ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH`
                                 }}
                             >
