@@ -99,6 +99,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [isClosing, setIsClosing] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
+    const [isFocusConfirming, setIsFocusConfirming] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [pressedType, setPressedType] = useState<BlockType | null>(null);
@@ -162,13 +163,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const getInitialZoomForNode = useCallback((node: PrimaryNode) => {
         if (isMobile) {
-            if (node === "time") return 0.9;
+            if (node === "time") return 1.18;
             if (node === "type") return 1;
             if (node === "status") return 1.05;
             if (node === "center") return 1.06;
             return 1.18;
         }
-        if (node === "time") return 1.15;
+        if (node === "time") return 1.35;
         return 1.3;
     }, [isMobile]);
 
@@ -190,8 +191,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         const nodeIndex = PRIMARY_NODE_ORDER.indexOf(node as Exclude<PrimaryNode, "center">);
         if (nodeIndex === -1) return;
 
-        // Bypassear la medición dinámica para listas móviles full-width, sino la cámara se aleja al infinito
-        if (isMobile && (node === "type" || node === "status")) {
+        // Bypassear la medición dinámica para listas móviles full-width y el TimePicker, sino la cámara ajusta el encuadre infinitamente al arrastrar
+        if ((isMobile && (node === "type" || node === "status")) || node === "time") {
             setZoomByNode((prev) => {
                 const targetZoom = getInitialZoomForNode(node);
                 if (Math.abs((prev[node] ?? 1) - targetZoom) <= 0.02) return prev;
@@ -272,9 +273,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     }, [
         activePrimaryNode,
         measureFocusContentAndUpdateZoom,
-        primaryRadius,
-        localStartMs,
-        localEndMs
+        primaryRadius
     ]);
 
     const setGalaxyCamera = (x: number, y: number, zoom: number) => {
@@ -305,6 +304,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             let targetAnchor = { x: 0, y: 0 };
 
             if (activePrimaryNode && activePrimaryNode !== "center") {
+                // Kill any residual drag speed instantly so we don't calculate a shifting anchor
+                physics.speed = 0;
                 const activeIndex = PRIMARY_NODE_ORDER.indexOf(activePrimaryNode);
                 if (activeIndex !== -1) {
                     targetAnchor = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
@@ -398,9 +399,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     // Handlers directos
     const handleBackgroundClick = (e: React.MouseEvent) => {
         if (e.target === containerRef.current) {
-            if (activePrimaryNode || isDeleteConfirming) {
+            if (activePrimaryNode || isDeleteConfirming || isFocusConfirming) {
                 setActivePrimaryNode(null);
                 setIsDeleteConfirming(false);
+                setIsFocusConfirming(false);
             } else {
                 handleClose();
             }
@@ -412,6 +414,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         if (!block) return;
 
         if (node === "delete") {
+            setIsFocusConfirming(false);
             if (block.recurrenceId) {
                 setDeleteConfirmOpen(true);
             } else {
@@ -428,14 +431,16 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         setIsDeleteConfirming(false);
 
         if (node === "focus") {
-            if (activePrimaryNode === "focus") {
+            if (isFocusConfirming) {
                 openFromBlock(block.id, block.type);
                 handleClose();
             } else {
-                setActivePrimaryNode("focus");
+                setIsFocusConfirming(true);
             }
             return;
         }
+
+        setIsFocusConfirming(false);
         // Si tocamos el mismo nodo activo, lo contraemos. Si no, lo expandimos y pausamos la rotación.
         setPressedType(null);
         setActivePrimaryNode(prev => prev === node ? null : node);
@@ -485,10 +490,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const PRIMARY_RADIUS = primaryRadius;
     const SECONDARY_RADIUS = isMobile ? 66 : 100;
 
-    const pillWidthExpanded = isMobile ? "w-32 rounded-[2rem] px-3" : "w-40 rounded-[2rem] px-5";
-    const pillHeightClass = isMobile ? "h-12" : "h-16";
-    const scaleExpanded = isMobile ? "scale-[1.10]" : "scale-[1.15]";
-    const pillWidthDefault = isMobile ? "w-12 rounded-full" : "w-16 rounded-full";
+    const pillWidthExpanded = isMobile ? "w-28 rounded-[2rem] px-3" : "w-40 rounded-[2rem] px-5";
+    const pillHeightClass = isMobile ? "h-11" : "h-16";
+    const scaleExpanded = isMobile ? "scale-[1.08]" : "scale-[1.15]";
+    const pillWidthDefault = isMobile ? "w-11 rounded-full" : "w-16 rounded-full";
 
     if (!block || !mounted) return null;
 
@@ -497,12 +502,27 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             ref={containerRef}
             className={cn(
                 "fixed inset-0 z-[200] flex items-center justify-center duration-500 overflow-hidden fill-mode-forwards",
+                activePrimaryNode ? "touch-none" : "",
                 isClosing ? "animate-out fade-out pointer-events-none" : "animate-in fade-in"
             )}
             onClick={handleBackgroundClick}
+            onWheel={(e) => {
+                if (activePrimaryNode) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+            }}
+            onTouchMove={(e) => {
+                if (activePrimaryNode) {
+                    e.stopPropagation();
+                }
+            }}
         >
             {/* Dark glass backdrop */}
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-2xl pointer-events-none" />
+            <div
+                className={cn("absolute inset-0 bg-black/75 backdrop-blur-2xl", activePrimaryNode ? "pointer-events-auto" : "pointer-events-none")}
+                onTouchMove={(e) => { if (activePrimaryNode) e.stopPropagation(); }}
+            />
 
             {/* BOTÓN VOLVER (Fuera del zoom/paneo para que siempre esté fijo) */}
             {activePrimaryNode && (
@@ -780,32 +800,32 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                     className={cn(
                                         "flex items-center justify-center border transition-all duration-300 backdrop-blur-md relative overflow-hidden",
                                         pillHeightClass,
-                                        pn.id === "focus" && isFocused ? pillWidthExpanded :
+                                        pn.id === "focus" && isFocusConfirming ? pillWidthExpanded :
                                             pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` : `${pillWidthDefault} hover:${scaleExpanded}`,
                                         "active:scale-95",
-                                        isFocused
+                                        isFocused || (pn.id === "focus" && isFocusConfirming)
                                             ? `${scaleExpanded} shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
                                             : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
-                                        pn.id === "focus" && !isFocused && "hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:border-purple-500/50" // Distinctive focus hover
+                                        pn.id === "focus" && !isFocusConfirming && "hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:border-purple-500/50" // Distinctive focus hover
                                     )}
                                     style={{
-                                        color: isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? 'white' : undefined,
+                                        color: isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) || (pn.id === "focus" && isFocusConfirming) ? 'white' : undefined,
                                     }}
                                 >
                                     <GlowingEffect spread={35} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" />
                                     {isFocused && pn.id !== "focus" && (
                                         <div className="absolute inset-0 rounded-full animate-ping opacity-20 border border-current" />
                                     )}
-                                    <div className={cn("flex items-center relative z-10 transition-all duration-300", (pn.id === "focus" && isFocused) || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "gap-2" : "gap-0")}>
-                                        <PIcon className={cn("w-6 h-6", isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "text-white" : pn.color)} />
+                                    <div className={cn("flex items-center relative z-10 transition-all duration-300", (pn.id === "focus" && isFocusConfirming) || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "gap-2" : "gap-0")}>
+                                        <PIcon className={cn("w-6 h-6", isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) || (pn.id === "focus" && isFocusConfirming) ? "text-white" : pn.color)} />
                                         {pn.id === "focus" && (
                                             <span
                                                 className={cn(
                                                     "font-bold whitespace-nowrap text-white text-sm transition-all duration-300",
-                                                    isFocused ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0 overflow-hidden"
+                                                    isFocusConfirming ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0 overflow-hidden"
                                                 )}
                                             >
-                                                Iniciar Focus
+                                                Modo Foco
                                             </span>
                                         )}
                                         {pn.id === "delete" && (
@@ -824,7 +844,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 <div
                                     className={cn(
                                         "absolute top-[calc(100%+8px)] text-[10px] uppercase tracking-widest font-medium transition-all duration-300 whitespace-nowrap",
-                                        isFocused ? "opacity-0 translate-y-2" : "opacity-100 text-white/50"
+                                        isFocused || (pn.id === "focus" && isFocusConfirming) ? "opacity-0 translate-y-2" : "opacity-100 text-white/50"
                                     )}
                                 >
                                     {pn.label}
@@ -946,9 +966,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         {/* TIME SATELLITE (Circular Time Picker) */}
                                         {pn.id === "time" && (
                                             <div
-                                                className="absolute pointer-events-auto flex items-center justify-center"
+                                                className="absolute pointer-events-auto flex items-center justify-center touch-none"
                                                 style={{ animation: `spring-out 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH` }}
                                                 onClick={e => e.stopPropagation()}
+                                                onPointerDown={e => e.stopPropagation()}
+                                                onPointerMove={e => e.stopPropagation()}
+                                                onTouchMove={e => e.stopPropagation()}
                                             >
                                                 <CircularTimePicker
                                                     hideCenterText
