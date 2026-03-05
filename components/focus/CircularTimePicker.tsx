@@ -13,11 +13,6 @@ interface CircularTimePickerProps {
     hideCenterText?: boolean;
 }
 
-const RADIUS = 120;
-const STROKE_WIDTH = 12;
-const CENTER = RADIUS + STROKE_WIDTH * 2;
-const SVG_SIZE = CENTER * 2;
-
 // Helper to convert minutes to an angle (0 to 2PI)
 // 12 hours = 720 minutes = 2PI
 // Top (0, -RADIUS) is 0 minutes
@@ -26,13 +21,6 @@ function getAngleFromMins(mins: number) {
     const angle = (clockMins / 720) * 2 * Math.PI;
     // We want 0 at top (-y), so we subtract PI/2
     return angle - Math.PI / 2;
-}
-
-function getPointFromAngle(angle: number) {
-    return {
-        x: CENTER + RADIUS * Math.cos(angle),
-        y: CENTER + RADIUS * Math.sin(angle)
-    };
 }
 
 // Format duration
@@ -69,6 +57,27 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
     const svgRef = useRef<SVGSVGElement>(null);
     const [dragging, setDragging] = useState<'start' | 'end' | 'arc' | null>(null);
     const [lastAngle, setLastAngle] = useState(0);
+
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    const RADIUS = isMobile ? 80 : 120;
+    const STROKE_WIDTH = isMobile ? 14 : 12;
+    const CENTER = RADIUS + STROKE_WIDTH * 2;
+    const SVG_SIZE = CENTER * 2;
+
+    const getPointFromAngle = (angle: number) => {
+        return {
+            x: CENTER + RADIUS * Math.cos(angle),
+            y: CENTER + RADIUS * Math.sin(angle)
+        };
+    };
 
     // Completely fluid visual state decoupled from the 5-min snap logic
     const [localStart, setLocalStart] = useState(startMins);
@@ -139,8 +148,10 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
     const computeDeltaMins = (clientX: number, clientY: number) => {
         if (!svgRef.current) return 0;
         const rect = svgRef.current.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+
+        // Use exact local center logic instead of arbitrary rect width based since stroke can affect bounding rect
+        const centerX = rect.left + CENTER;
+        const centerY = rect.top + CENTER;
 
         let angle = Math.atan2(clientY - centerY, clientX - centerX);
         // Map space so top is 0
@@ -166,8 +177,9 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
 
         if (!svgRef.current) return;
         const rect = svgRef.current.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
+
+        const centerX = rect.left + CENTER;
+        const centerY = rect.top + CENTER;
 
         let angle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
         let clockAngle = angle + Math.PI / 2;
@@ -346,7 +358,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 >
                     <circle r={STROKE_WIDTH * 4} fill="transparent" /> {/* Massive Hitbox */}
                     <circle
-                        r={(dragging === 'start' || hoveredNode === 'start') ? STROKE_WIDTH * 1.5 : STROKE_WIDTH * 0.85}
+                        r={(dragging === 'start' || hoveredNode === 'start') ? STROKE_WIDTH * (isMobile ? 1.7 : 1.5) : STROKE_WIDTH * (isMobile ? 1.4 : 0.85)}
                         fill="white"
                         className="shadow-[0_0_15px_rgba(255,255,255,0.4)] transition-all duration-200"
                     />
@@ -368,7 +380,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 >
                     <circle r={STROKE_WIDTH * 4} fill="transparent" /> {/* Massive Hitbox */}
                     <circle
-                        r={(dragging === 'end' || hoveredNode === 'end') ? STROKE_WIDTH * 1.5 : STROKE_WIDTH * 0.85}
+                        r={(dragging === 'end' || hoveredNode === 'end') ? STROKE_WIDTH * (isMobile ? 1.7 : 1.5) : STROKE_WIDTH * (isMobile ? 1.4 : 0.85)}
                         fill="white"
                         className="shadow-[0_0_15px_rgba(255,255,255,0.4)] transition-all duration-200"
                     />

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Block, BlockType, BlockStatus, RecurrencePattern } from "@/lib/types/blocks";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -93,6 +94,17 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const galaxyRef = useRef<HTMLDivElement>(null);
     const [isClosing, setIsClosing] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // Guided initialization pass
     const [guidedStep, setGuidedStep] = useState<"center" | "time" | "type" | null>(isNewBlock ? "center" : null);
@@ -137,9 +149,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             }
 
             // Aplicar posiciones directo al DOM saltando el Virtual DOM (60 FPS puros)
+            const currentObjPrimary = isMobile ? 105 : 160;
             planetRefs.current.forEach((el, i) => {
                 if (el) {
-                    const pos = calculateNodePosition(i, 5, 160, physics.angle); // 5 planets, 160 radius
+                    const pos = calculateNodePosition(i, 5, currentObjPrimary, physics.angle); // 5 planets
                     el.style.translate = `${pos.x}px ${pos.y}px`;
                 }
             });
@@ -154,7 +167,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         // Buscar índice del nodo activo para calcular su posición exacta actual
                         const activeIndex = ["type", "focus", "time", "status", "danger"].indexOf(activePrimaryNode);
                         if (activeIndex !== -1) {
-                            const pos = calculateNodePosition(activeIndex, 5, 160, physics.angle);
+                            const currentObjPrimary = isMobile ? 105 : 160;
+                            const pos = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
                             // Centrar el nodo y hacer zoom
                             galaxyRef.current.style.translate = `${-pos.x}px ${-pos.y}px`;
                             galaxyRef.current.style.scale = "1.3";
@@ -225,8 +239,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     // Handlers directos
     const handleBackgroundClick = (e: React.MouseEvent) => {
         if (e.target === containerRef.current) {
-            if (activePrimaryNode) {
+            if (activePrimaryNode || isDeleteConfirming) {
                 setActivePrimaryNode(null);
+                setIsDeleteConfirming(false);
             } else {
                 handleClose();
             }
@@ -241,11 +256,17 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             if (block.recurrenceId) {
                 setDeleteConfirmOpen(true);
             } else {
-                deleteBlock(block.id);
-                handleClose();
+                if (isDeleteConfirming) {
+                    deleteBlock(block.id);
+                    handleClose();
+                } else {
+                    setIsDeleteConfirming(true);
+                }
             }
             return;
         }
+
+        setIsDeleteConfirming(false);
 
         if (node === "focus") {
             if (activePrimaryNode === "focus") {
@@ -300,12 +321,17 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         { id: "delete" as const, label: "Eliminar", icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
     ];
 
-    const PRIMARY_RADIUS = 160;
-    const SECONDARY_RADIUS = 100;
+    const PRIMARY_RADIUS = isMobile ? 105 : 160;
+    const SECONDARY_RADIUS = isMobile ? 75 : 100;
 
-    if (!block) return null;
+    const pillWidthExpanded = isMobile ? "w-32 rounded-[2rem] px-3" : "w-40 rounded-[2rem] px-5";
+    const pillHeightClass = isMobile ? "h-12" : "h-16";
+    const scaleExpanded = isMobile ? "scale-[1.10]" : "scale-[1.15]";
+    const pillWidthDefault = isMobile ? "w-12 rounded-full" : "w-16 rounded-full";
 
-    return (
+    if (!block || !mounted) return null;
+
+    return createPortal(
         <div
             ref={containerRef}
             className={cn(
@@ -315,7 +341,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             onClick={handleBackgroundClick}
         >
             {/* Dark glass backdrop */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl pointer-events-none" />
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
             {/* BOTÓN VOLVER (Fuera del zoom/paneo para que siempre esté fijo) */}
             {activePrimaryNode && (
@@ -357,7 +383,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     className={cn(
                         "group absolute pointer-events-auto flex flex-col items-center justify-center rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl transition-all duration-500 shadow-[0_0_80px_rgba(255,255,255,0.1)]",
                         activePrimaryNode && activePrimaryNode !== "center" ? "z-10 opacity-30 scale-95 blur-sm cursor-pointer" : "z-[100] opacity-100",
-                        activePrimaryNode === "center" ? "p-6 w-[280px] cursor-default" : "p-6 w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30 hover:border-indigo-400/30 hover:shadow-[0_0_40px_rgba(129,140,248,0.2)]"
+                        activePrimaryNode === "center" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default` : "p-6 w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30 hover:border-indigo-400/30 hover:shadow-[0_0_40px_rgba(129,140,248,0.2)]"
                     )}
                     onClick={() => {
                         if (activePrimaryNode === "center") return;
@@ -394,7 +420,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             }
                                         }
                                     }}
-                                    className="text-lg font-bold tracking-tight text-white bg-black/40 border border-white/10 rounded-xl px-3 h-10 focus-visible:ring-1 focus-visible:ring-indigo-500/50 placeholder:text-white/20 shadow-inner"
+                                    className={cn("font-bold tracking-tight text-white bg-black/40 border border-white/10 rounded-xl px-3 h-10 focus-visible:ring-1 focus-visible:ring-indigo-500/50 placeholder:text-white/20 shadow-inner",
+                                        isMobile ? "text-base" : "text-lg")}
                                     placeholder="Nombre del bloque"
                                     autoFocus
                                 />
@@ -565,7 +592,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 className={cn(
                                     "absolute flex flex-col items-center transition-all duration-700 pointer-events-auto",
                                     isDimmed ? "opacity-10 scale-75 blur-sm" : "opacity-100 scale-100",
-                                    isFocused ? "z-[100]" : "z-10"
+                                    isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "z-[100]" : "z-10"
                                 )}
                                 style={{
                                     translate: `${pos.x}px ${pos.y}px`,
@@ -576,24 +603,26 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 <button
                                     onClick={(e) => handlePrimaryClick(pn.id, e)}
                                     className={cn(
-                                        "h-16 flex items-center justify-center border transition-all duration-300 backdrop-blur-md relative overflow-hidden",
-                                        pn.id === "focus" && isFocused ? "w-40 rounded-[2rem] px-5" : "w-16 rounded-full hover:scale-[1.15]",
+                                        "flex items-center justify-center border transition-all duration-300 backdrop-blur-md relative overflow-hidden",
+                                        pillHeightClass,
+                                        pn.id === "focus" && isFocused ? pillWidthExpanded :
+                                            pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` : `${pillWidthDefault} hover:${scaleExpanded}`,
                                         "active:scale-95",
                                         isFocused
-                                            ? `scale-[1.15] shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
-                                            : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
+                                            ? `${scaleExpanded} shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
+                                            : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
                                         pn.id === "focus" && !isFocused && "hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:border-purple-500/50" // Distinctive focus hover
                                     )}
                                     style={{
-                                        color: isFocused ? 'white' : undefined,
+                                        color: isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? 'white' : undefined,
                                     }}
                                 >
                                     <GlowingEffect spread={35} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" />
                                     {isFocused && pn.id !== "focus" && (
                                         <div className="absolute inset-0 rounded-full animate-ping opacity-20 border border-current" />
                                     )}
-                                    <div className={cn("flex items-center relative z-10 transition-all duration-300", pn.id === "focus" && isFocused ? "gap-2" : "gap-0")}>
-                                        <PIcon className={cn("w-6 h-6", isFocused ? "text-white" : pn.color)} />
+                                    <div className={cn("flex items-center relative z-10 transition-all duration-300", (pn.id === "focus" && isFocused) || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "gap-2" : "gap-0")}>
+                                        <PIcon className={cn("w-6 h-6", isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "text-white" : pn.color)} />
                                         {pn.id === "focus" && (
                                             <span
                                                 className={cn(
@@ -602,6 +631,16 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                 )}
                                             >
                                                 Iniciar Focus
+                                            </span>
+                                        )}
+                                        {pn.id === "delete" && (
+                                            <span
+                                                className={cn(
+                                                    "font-bold whitespace-nowrap text-white text-sm transition-all duration-300",
+                                                    isDeleteConfirming && !block.recurrenceId ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0 overflow-hidden"
+                                                )}
+                                            >
+                                                Confirmar
                                             </span>
                                         )}
                                     </div>
@@ -637,9 +676,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     <button
                                                         onClick={(e) => handleTypeSelect(tn.value, e)}
                                                         className={cn(
-                                                            "group pointer-events-auto h-10 rounded-full flex items-center relative overflow-hidden active:scale-95",
+                                                            "group pointer-events-auto rounded-full flex items-center relative overflow-hidden active:scale-95",
                                                             "transition-[max-width,padding,background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-                                                            "min-w-[40px] max-w-[40px] px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
+                                                            isMobile ? "max-w-[36px] min-w-[36px] h-9" : "min-w-[40px] max-w-[40px] h-10",
+                                                            "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
                                                             tn.hoverBg, "hover:border-transparent",
                                                             isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30"
                                                         )}
@@ -662,7 +702,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         {/* STATUS SATELLITES */}
                                         {pn.id === "status" && STATUS_OPTS.map((sn, j) => {
                                             // Equidistant perfect 360 degree distribution starting from top
-                                            const lPos = calculateNodePosition(j, STATUS_OPTS.length, 140, -90);
+                                            const lPos = calculateNodePosition(j, STATUS_OPTS.length, isMobile ? 100 : 140, -90);
                                             const LIcon = sn.icon;
                                             const isSelected = sn.value === activeStatus.value;
                                             return (
@@ -677,7 +717,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     <button
                                                         onClick={(e) => handleStatusSelect(sn.value, e)}
                                                         className={cn(
-                                                            "pointer-events-auto flex items-center gap-2 px-4 h-11 rounded-full whitespace-nowrap transition-all duration-300 hover:scale-110 active:scale-95 relative overflow-hidden",
+                                                            "pointer-events-auto flex items-center gap-2 px-4 rounded-full whitespace-nowrap transition-all duration-300 hover:scale-110 active:scale-95 relative overflow-hidden",
+                                                            isMobile ? "h-9 text-xs" : "h-11",
                                                             isSelected ? `${sn.bg} border ${sn.color.replace('text-', 'border-')}` : `bg-black/80 border border-white/10 backdrop-blur-sm hover:${sn.bg} hover:border-${sn.color.replace('text-', '')}/30`
                                                         )}
                                                     >
@@ -801,6 +842,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </div>,
+        document.body
     );
 }

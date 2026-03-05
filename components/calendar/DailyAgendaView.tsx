@@ -5,9 +5,10 @@ import { Block } from "@/lib/types/blocks";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, Play, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { BlockDrawer } from "./BlockDrawer";
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay, endOfDay } from "date-fns";
+import { RadialBlockMenu } from "./RadialBlockMenu";
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay, endOfDay, setHours, setMinutes } from "date-fns";
 import { getBlockColors } from "@/lib/utils/blockColors";
+import { Plus } from "lucide-react";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -90,12 +91,11 @@ function ActiveBlockCard({ block, isDeepWork, colors, onOpen }: ActiveBlockCardP
     );
 }
 
-export function DailyAgendaView({ onOpenPlanner }: DailyAgendaViewProps = {}) {
+export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlockId, isNewBlock, setIsNewBlock }: DailyAgendaViewProps) {
     const { blocks } = useBlocksStore();
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
     const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
-    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
     // --- Animation Key ---
     // Change this key every time selectedDate changes to force re-render the timeline
@@ -109,6 +109,8 @@ export function DailyAgendaView({ onOpenPlanner }: DailyAgendaViewProps = {}) {
         setSelectedDate(day);
         setAnimKey(prev => prev + 1);
     };
+
+    // Removed: handleCreateBlock function, as it's now handled by the FAB in SectionCalendar
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
@@ -267,11 +269,17 @@ export function DailyAgendaView({ onOpenPlanner }: DailyAgendaViewProps = {}) {
                                                 block={block}
                                                 isDeepWork={isDeepWork}
                                                 colors={colors}
-                                                onOpen={() => setSelectedBlockId(block.id)}
+                                                onOpen={() => {
+                                                    setIsNewBlock(false);
+                                                    setSelectedBlockId(block.id);
+                                                }}
                                             />
                                         ) : (
                                             <button
-                                                onClick={() => setSelectedBlockId(block.id)}
+                                                onClick={() => {
+                                                    setIsNewBlock(false);
+                                                    setSelectedBlockId(block.id);
+                                                }}
                                                 className={cn(
                                                     "w-full text-left p-5 transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.08]",
                                                     "rounded-[24px] bg-white/[0.04] backdrop-blur-xl border border-white/10",
@@ -309,11 +317,19 @@ export function DailyAgendaView({ onOpenPlanner }: DailyAgendaViewProps = {}) {
                 </div>
             </div>
 
-            <BlockDrawer
-                blockId={selectedBlockId}
-                isOpen={!!selectedBlockId}
-                onClose={() => setSelectedBlockId(null)}
-            />
+            {/* RadialBlockMenu is now rendered in SectionCalendar, not here */}
+            {/*
+            {selectedBlockId && (
+                <RadialBlockMenu
+                    blockId={selectedBlockId}
+                    isNewBlock={isNewBlock}
+                    onClose={() => {
+                        setSelectedBlockId(null);
+                        setIsNewBlock(false);
+                    }}
+                />
+            )}
+            */}
 
         </div>
     );
