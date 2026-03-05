@@ -2,18 +2,23 @@
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block } from "@/lib/types/blocks";
-import { useState, useMemo, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Play, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
+import { useState, useMemo } from "react";
+import { ChevronLeft, ChevronRight, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { RadialBlockMenu } from "./RadialBlockMenu";
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay, endOfDay, setHours, setMinutes } from "date-fns";
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay } from "date-fns";
 import { getBlockColors } from "@/lib/utils/blockColors";
-import { Plus } from "lucide-react";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
 // UI Config for Block Types (copied to have icons)
-const BLOCK_TYPES_UI: Record<string, any> = {
+type BlockTypeUiConfig = {
+    icon: unknown;
+    color: string;
+    border: string;
+    glow: string;
+};
+
+const BLOCK_TYPES_UI: Record<string, BlockTypeUiConfig> = {
     deep_work: { icon: Layers, color: "text-indigo-400", border: "border-l-indigo-500/50", glow: "shadow-[inset_2px_0_10px_rgba(99,102,241,0.2)]" },
     meeting: { icon: Briefcase, color: "text-blue-400", border: "border-l-blue-500/50", glow: "shadow-[inset_2px_0_10px_rgba(59,130,246,0.2)]" },
     gym: { icon: Dumbbell, color: "text-emerald-400", border: "border-l-emerald-500/50", glow: "shadow-[inset_2px_0_10px_rgba(16,185,129,0.2)]" },
@@ -24,7 +29,10 @@ const BLOCK_TYPES_UI: Record<string, any> = {
 };
 
 interface DailyAgendaViewProps {
-    onOpenPlanner?: (startDate: Date) => void;
+    selectedDate?: Date;
+    onSelectedDateChange?: (date: Date) => void;
+    setSelectedBlockId?: (id: string | null) => void;
+    setIsNewBlock?: (isNew: boolean) => void;
 }
 
 // --- Active Block Card: self-manages hover state for dynamic inline styles ---
@@ -91,11 +99,12 @@ function ActiveBlockCard({ block, isDeepWork, colors, onOpen }: ActiveBlockCardP
     );
 }
 
-export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlockId, isNewBlock, setIsNewBlock }: DailyAgendaViewProps) {
+export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelectedBlockId, setIsNewBlock }: DailyAgendaViewProps) {
     const { blocks } = useBlocksStore();
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
-    const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
+    const [internalSelectedDate, setInternalSelectedDate] = useState(startOfDay(new Date()));
+    const effectiveSelectedDate = selectedDate ? startOfDay(selectedDate) : internalSelectedDate;
 
     // --- Animation Key ---
     // Change this key every time selectedDate changes to force re-render the timeline
@@ -106,7 +115,12 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
     const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
     const handleDateClick = (day: Date) => {
-        setSelectedDate(day);
+        const normalizedDay = startOfDay(day);
+        if (onSelectedDateChange) {
+            onSelectedDateChange(normalizedDay);
+        } else {
+            setInternalSelectedDate(normalizedDay);
+        }
         setAnimKey(prev => prev + 1);
     };
 
@@ -130,9 +144,9 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
     // --- Timeline Logic ---
     const dailyBlocks = useMemo(() => {
         return blocks
-            .filter(b => isSameDay(b.startAt, selectedDate))
+            .filter(b => isSameDay(b.startAt, effectiveSelectedDate))
             .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-    }, [blocks, selectedDate]);
+    }, [blocks, effectiveSelectedDate]);
 
     return (
         <div className="flex flex-col h-full w-full bg-transparent text-neutral-200 select-none relative">
@@ -171,7 +185,7 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
                 {/* Dates Grid */}
                 <div className="grid grid-cols-7 gap-y-2 gap-x-1">
                     {calendarDays.map((day, i) => {
-                        const isSelected = isSameDay(day, selectedDate);
+                        const isSelected = isSameDay(day, effectiveSelectedDate);
                         const isCurrentMonth = isSameMonth(day, currentMonth);
                         const isPast = isBefore(day, startOfDay(new Date()));
                         const isToday = isSameDay(day, new Date());
@@ -220,7 +234,7 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
 
                         {/* Time labels inside axis */}
                         <div className="flex flex-col h-full absolute w-full right-3 pr-2" style={{ top: '0px' }}>
-                            {dailyBlocks.map((block, idx) => (
+                            {dailyBlocks.map((block) => (
                                 <div key={`time-${block.id}`} className="absolute w-full text-right" style={{
                                     // Use index relative positioning for now, we will map them linearly or as a list
                                     // Actually, in a pure agenda view, we don't place them absolutely by time, 
@@ -239,7 +253,7 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
                                 <span className="text-white/30 text-sm tracking-wide">No events scheduled.</span>
                             </div>
                         ) : (
-                            dailyBlocks.map((block, index) => {
+                            dailyBlocks.map((block) => {
                                 const ui = BLOCK_TYPES_UI[block.type] || BLOCK_TYPES_UI.other;
                                 const isDeepWork = block.type === "deep_work";
                                 const now = new Date();
@@ -270,15 +284,15 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
                                                 isDeepWork={isDeepWork}
                                                 colors={colors}
                                                 onOpen={() => {
-                                                    setIsNewBlock(false);
-                                                    setSelectedBlockId(block.id);
+                                                    setIsNewBlock?.(false);
+                                                    setSelectedBlockId?.(block.id);
                                                 }}
                                             />
                                         ) : (
                                             <button
                                                 onClick={() => {
-                                                    setIsNewBlock(false);
-                                                    setSelectedBlockId(block.id);
+                                                    setIsNewBlock?.(false);
+                                                    setSelectedBlockId?.(block.id);
                                                 }}
                                                 className={cn(
                                                     "w-full text-left p-5 transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.08]",
@@ -324,8 +338,8 @@ export function DailyAgendaView({ onOpenPlanner, selectedBlockId, setSelectedBlo
                     blockId={selectedBlockId}
                     isNewBlock={isNewBlock}
                     onClose={() => {
-                        setSelectedBlockId(null);
-                        setIsNewBlock(false);
+                        setSelectedBlockId?.(null);
+                        setIsNewBlock?.(false);
                     }}
                 />
             )}

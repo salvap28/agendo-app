@@ -97,6 +97,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [pressedType, setPressedType] = useState<BlockType | null>(null);
 
     useEffect(() => {
         setMounted(true);
@@ -278,12 +279,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             return;
         }
         // Si tocamos el mismo nodo activo, lo contraemos. Si no, lo expandimos y pausamos la rotación.
+        setPressedType(null);
         setActivePrimaryNode(prev => prev === node ? null : node);
     };
 
     const handleTypeSelect = (type: BlockType, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!block) return;
+        setPressedType(null);
         updateBlock(block.id, { type });
         if (guidedStep === "type") {
             setGuidedStep(null);
@@ -341,7 +344,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             onClick={handleBackgroundClick}
         >
             {/* Dark glass backdrop */}
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-2xl pointer-events-none" />
 
             {/* BOTÓN VOLVER (Fuera del zoom/paneo para que siempre esté fijo) */}
             {activePrimaryNode && (
@@ -664,6 +667,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             const lPos = calculateNodePosition(j, BLOCK_TYPES_UI.length, SECONDARY_RADIUS, -90);
                                             const LIcon = tn.icon;
                                             const isSelected = tn.value === activeType.value;
+                                            const isPressing = isMobile && pressedType === tn.value;
                                             return (
                                                 <div
                                                     key={tn.value}
@@ -675,20 +679,41 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                 >
                                                     <button
                                                         onClick={(e) => handleTypeSelect(tn.value, e)}
+                                                        onPointerDown={(e) => {
+                                                            e.stopPropagation();
+                                                            if (isMobile) setPressedType(tn.value);
+                                                        }}
+                                                        onPointerUp={() => {
+                                                            if (isMobile) setPressedType(null);
+                                                        }}
+                                                        onPointerLeave={() => {
+                                                            if (isMobile) setPressedType(null);
+                                                        }}
+                                                        onPointerCancel={() => {
+                                                            if (isMobile) setPressedType(null);
+                                                        }}
                                                         className={cn(
                                                             "group pointer-events-auto rounded-full flex items-center relative overflow-hidden active:scale-95",
                                                             "transition-[max-width,padding,background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
                                                             isMobile ? "max-w-[36px] min-w-[36px] h-9" : "min-w-[40px] max-w-[40px] h-10",
-                                                            "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
+                                                            isPressing ? "max-w-[200px] px-5 justify-start" : "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
                                                             tn.hoverBg, "hover:border-transparent",
-                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30"
+                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30",
+                                                            isPressing && "border-transparent"
                                                         )}
                                                     >
                                                         <GlowingEffect spread={25} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
-                                                        <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] relative z-10 shrink-0 w-full group-hover:w-auto">
-                                                            <LIcon className={cn("w-4 h-4 shrink-0 transition-all duration-500 ease-out group-hover:text-white", tn.color)} />
+                                                        <div className={cn(
+                                                            "flex items-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] relative z-10 shrink-0",
+                                                            isPressing ? "justify-start gap-2.5 w-auto" : "justify-center gap-0 w-full group-hover:justify-start group-hover:gap-2.5 group-hover:w-auto"
+                                                        )}>
+                                                            <LIcon className={cn(
+                                                                "w-4 h-4 shrink-0 transition-all duration-500 ease-out",
+                                                                isPressing ? "text-white" : `group-hover:text-white ${tn.color}`
+                                                            )} />
                                                             <span className={cn(
-                                                                "text-xs font-bold uppercase tracking-wider whitespace-nowrap opacity-0 max-w-0 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
+                                                                "text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                                                isPressing ? "opacity-100 max-w-[150px] text-white" : "opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
                                                                 tn.color
                                                             )}>
                                                                 {tn.label}
@@ -814,7 +839,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
             {/* ─── ALERT DIALOG DELETION ─── */}
             <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <AlertDialogContent className="bg-black/90 border-white/10 backdrop-blur-2xl text-white">
+                <AlertDialogContent
+                    overlayClassName="z-[450] bg-black/60 backdrop-blur-md"
+                    className="z-[460] bg-black/90 border-white/10 backdrop-blur-2xl text-white"
+                >
                     <AlertDialogHeader>
                         <AlertDialogTitle>¿Eliminar bloque repetitivo?</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/50">
