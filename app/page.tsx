@@ -5,6 +5,8 @@ import { BackgroundEclipse } from "@/components/ui/BackgroundEclipse";
 import { SectionIntro } from "@/components/home/SectionIntro";
 import { SectionContext } from "@/components/home/SectionContext";
 import { SectionCalendar } from "@/components/home/SectionCalendar";
+import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { useEffect } from "react";
 
 // Force dynamic rendering (usually needed if this was server component, keeping for safety)
 // export const dynamic = "force-dynamic";
@@ -13,6 +15,13 @@ export default function Home() {
   const contextRef = useRef<HTMLElement>(null);
   const calendarRef = useRef<HTMLElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const { fetchBlocks, isLoaded: blocksLoaded } = useBlocksStore();
+
+  useEffect(() => {
+    if (!blocksLoaded) {
+      fetchBlocks();
+    }
+  }, [blocksLoaded, fetchBlocks]);
 
   const scrollToSection = (ref: React.RefObject<HTMLElement | null>) => {
     if (ref.current) {

@@ -10,12 +10,13 @@ import { AnimatedGlowingBackground } from "@/components/ui/animated-glowing-back
 import { cn } from "@/lib/cn";
 
 export function FloatingFocusPrompt() {
-    const { session, returnToFocus, openFree } = useFocusStore();
+    const { session, returnToFocus, openFree, openFromBlock } = useFocusStore();
     const { blocks } = useBlocksStore();
 
     const [isVisible, setIsVisible] = useState(false);
     const [promptType, setPromptType] = useState<"return" | "start_block" | null>(null);
     const [blockTitle, setBlockTitle] = useState<string>("");
+    const [targetBlock, setTargetBlock] = useState<{ id: string; type: any } | null>(null);
 
     useEffect(() => {
         // Condition 1: If there is an active session, but we are not IN the focus view
@@ -44,6 +45,7 @@ export function FloatingFocusPrompt() {
             if (currentBlock) {
                 setPromptType("start_block");
                 setBlockTitle(currentBlock.title);
+                setTargetBlock({ id: currentBlock.id, type: currentBlock.type });
                 setIsVisible(true);
                 return;
             }
@@ -57,8 +59,10 @@ export function FloatingFocusPrompt() {
     const handleAction = () => {
         if (promptType === "return") {
             returnToFocus();
+        } else if (targetBlock) {
+            openFromBlock(targetBlock.id, targetBlock.type);
         } else {
-            openFree(); // Or ideally open the focus planner with this block pre-selected
+            openFree();
         }
     };
 

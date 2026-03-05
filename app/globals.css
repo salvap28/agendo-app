@@ -204,3 +204,213 @@
   display: inline-block;
   animation: digitEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* ── Gradient Button (Agendo Violet/Indigo palette) ──────────────────────── */
+
+@layer base {
+  @property --gb-pos-x {
+    syntax: '<percentage>';
+    initial-value: 11.14%;
+    inherits: false;
+  }
+
+  @property --gb-pos-y {
+    syntax: '<percentage>';
+    initial-value: 140%;
+    inherits: false;
+  }
+
+  @property --gb-spread-x {
+    syntax: '<percentage>';
+    initial-value: 150%;
+    inherits: false;
+  }
+
+  @property --gb-spread-y {
+    syntax: '<percentage>';
+    initial-value: 180%;
+    inherits: false;
+  }
+
+  @property --gb-color-1 {
+    syntax: '<color>';
+    initial-value: #020205;
+    inherits: false;
+  }
+
+  @property --gb-color-2 {
+    syntax: '<color>';
+    initial-value: #0e0628;
+    inherits: false;
+  }
+
+  @property --gb-color-3 {
+    syntax: '<color>';
+    initial-value: #2d1564;
+    inherits: false;
+  }
+
+  @property --gb-color-4 {
+    syntax: '<color>';
+    initial-value: #4c1d95;
+    inherits: false;
+  }
+
+  @property --gb-color-5 {
+    syntax: '<color>';
+    initial-value: #6d28d9;
+    inherits: false;
+  }
+
+  @property --gb-border-angle {
+    syntax: '<angle>';
+    initial-value: 20deg;
+    inherits: true;
+  }
+
+  @property --gb-border-color-1 {
+    syntax: '<color>';
+    initial-value: hsla(258, 75%, 60%, 0.15);
+    inherits: true;
+  }
+
+  @property --gb-border-color-2 {
+    syntax: '<color>';
+    initial-value: hsla(258, 80%, 65%, 0.6);
+    inherits: true;
+  }
+
+  @property --gb-stop-1 {
+    syntax: '<percentage>';
+    initial-value: 37.35%;
+    inherits: false;
+  }
+
+  @property --gb-stop-2 {
+    syntax: '<percentage>';
+    initial-value: 61.36%;
+    inherits: false;
+  }
+
+  @property --gb-stop-3 {
+    syntax: '<percentage>';
+    initial-value: 78.42%;
+    inherits: false;
+  }
+
+  @property --gb-stop-4 {
+    syntax: '<percentage>';
+    initial-value: 89.52%;
+    inherits: false;
+  }
+
+  @property --gb-stop-5 {
+    syntax: '<percentage>';
+    initial-value: 100%;
+    inherits: false;
+  }
+}
+
+@layer components {
+
+  /* ── AGENDO MAIN GRADIENT (violet → indigo) ── */
+  .gradient-button {
+    @apply relative appearance-none cursor-pointer;
+  }
+
+  .gradient-button-agendo {
+    background: radial-gradient(var(--gb-spread-x) var(--gb-spread-y) at var(--gb-pos-x) var(--gb-pos-y),
+        var(--gb-color-1) var(--gb-stop-1),
+        var(--gb-color-2) var(--gb-stop-2),
+        var(--gb-color-3) var(--gb-stop-3),
+        var(--gb-color-4) var(--gb-stop-4),
+        var(--gb-color-5) var(--gb-stop-5));
+    transition:
+      --gb-pos-x 0.5s,
+      --gb-pos-y 0.5s,
+      --gb-spread-x 0.5s,
+      --gb-spread-y 0.5s,
+      --gb-color-1 0.5s,
+      --gb-color-2 0.5s,
+      --gb-color-3 0.5s,
+      --gb-color-4 0.5s,
+      --gb-color-5 0.5s,
+      --gb-border-angle 0.5s,
+      --gb-border-color-1 0.5s,
+      --gb-border-color-2 0.5s,
+      --gb-stop-1 0.5s,
+      --gb-stop-2 0.5s,
+      --gb-stop-3 0.5s,
+      --gb-stop-4 0.5s,
+      --gb-stop-5 0.5s,
+      transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .gradient-button-agendo:active {
+    transform: scale(0.97);
+  }
+
+  .gradient-button-agendo::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(var(--gb-border-angle),
+        var(--gb-border-color-1),
+        var(--gb-border-color-2));
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .gradient-button-agendo:hover {
+    --gb-pos-x: 0%;
+    --gb-pos-y: 91.51%;
+    --gb-spread-x: 120%;
+    --gb-spread-y: 103%;
+    --gb-color-1: #6d28d9;
+    --gb-color-2: #7c3aed;
+    --gb-color-3: #a855f7;
+    --gb-color-4: #3b0764;
+    --gb-color-5: #0d0020;
+    --gb-border-angle: 190deg;
+    --gb-border-color-1: hsla(270, 80%, 90%, 0.1);
+    --gb-border-color-2: hsla(258, 85%, 80%, 0.65);
+    --gb-stop-1: 0%;
+    --gb-stop-2: 8.8%;
+    --gb-stop-3: 21.44%;
+    --gb-stop-4: 71.34%;
+    --gb-stop-5: 85.76%;
+  }
+
+  /* ── SUBTLE SECONDARY (glass-like dark) ── */
+  .gradient-button-subtle {
+    background: radial-gradient(140% 160% at 11% 140%,
+        rgba(255, 255, 255, 0.02) 37%,
+        rgba(99, 102, 241, 0.06) 61%,
+        rgba(139, 92, 246, 0.1) 78%,
+        rgba(109, 40, 217, 0.12) 89%,
+        rgba(76, 29, 149, 0.15) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background 0.4s, border-color 0.4s;
+  }
+
+  .gradient-button-subtle:hover {
+    background: radial-gradient(130% 140% at 0% 95%,
+        rgba(99, 102, 241, 0.15) 0%,
+        rgba(139, 92, 246, 0.2) 21%,
+        rgba(76, 29, 149, 0.18) 71%,
+        rgba(2, 2, 5, 0.9) 100%);
+    border-color: rgba(139, 92, 246, 0.25);
+  }
+
+  .gradient-button-subtle {
+    transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .gradient-button-agendo:active,
+  .gradient-button-subtle:active {
+    transform: scale(0.97);
+  }
+}

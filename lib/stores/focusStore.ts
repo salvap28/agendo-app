@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { FocusSession, FocusLayer, GymLayerConfig, GymExerciseLog, GymSet } from '@/lib/types/focus';
 import { createGymLayer } from '@/lib/engines/layersEngine';
 import { BlockType } from '@/lib/types/blocks';
+import { createClient } from '@/lib/supabase/client';
 
 // ── Local storage helpers ──────────────────────────────────────────────────
 
@@ -116,7 +117,8 @@ export const useFocusStore = create<FocusState>()(
                         totalPausedMs: 0,
                         pauseCount: 0,
                         exitCount: 0,
-                        history: ["Session started from block"]
+                        history: ["Session started from block"],
+                        activeLayer: blockType === "gym" ? createGymLayer() : undefined
                     }
                 });
             },
@@ -192,7 +194,7 @@ export const useFocusStore = create<FocusState>()(
                 set({ session: { ...session, isActive: true, history: [...(session.history || []), 'Returned to overlay'] } });
             },
 
-            finish: () => {
+            finish: async () => {
                 const { session } = get();
                 if (!session) return;
                 const now = new Date().toISOString();
@@ -200,16 +202,44 @@ export const useFocusStore = create<FocusState>()(
                 if (session.isPaused && session.pausedAt) {
                     finalTotalPausedMs += new Date().getTime() - new Date(session.pausedAt).getTime();
                 }
-                set({
-                    session: {
-                        ...session,
-                        isPaused: false,
-                        isActive: true,
-                        endedAt: now,
-                        totalPausedMs: finalTotalPausedMs,
-                        history: [...(session.history || []), 'Finished']
+
+                const finishedSession = {
+                    ...session,
+                    isPaused: false,
+                    isActive: false, // Marked as false so it's completed
+                    endedAt: now,
+                    totalPausedMs: finalTotalPausedMs,
+                    history: [...(session.history || []), 'Finished']
+                };
+
+                set({ session: finishedSession });
+
+                // Sync to Supabase
+                const supabase = createClient();
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { error } = await supabase.from('focus_sessions').insert({
+                        id: finishedSession.id,
+                        user_id: user.id,
+                        mode: finishedSession.mode,
+                        block_id: finishedSession.blockId,
+                        block_type: finishedSession.blockType,
+                        started_at: finishedSession.startedAt,
+                        ended_at: finishedSession.endedAt,
+                        is_active: false,
+                        is_paused: false,
+                        paused_at: null,
+                        total_paused_ms: finishedSession.totalPausedMs,
+                        pause_count: finishedSession.pauseCount,
+                        exit_count: finishedSession.exitCount,
+                        intention: finishedSession.intention,
+                        active_layer: finishedSession.activeLayer,
+                        history: finishedSession.history
+                    });
+                    if (error) {
+                        console.error('Error saving focus session:', JSON.stringify(error, null, 2));
                     }
-                });
+                }
             },
 
             extendBlock: (additionalMinutes) => {

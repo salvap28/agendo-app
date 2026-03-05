@@ -6,22 +6,24 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 
 const glassButtonVariants = cva(
-    "inline-flex items-center justify-center whitespace-nowrap rounded-2xl text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50 active:scale-95",
+    "gradient-button inline-flex items-center justify-center whitespace-nowrap rounded-2xl text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
     {
         variants: {
             variant: {
-                default:
-                    "bg-white/10 hover:bg-white/15 text-white border border-white/10 shadow-[0_4px_16px_0_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_0_rgba(100,100,255,0.15)] backdrop-blur-md",
-                ghost: "hover:bg-white/5 text-white/80 hover:text-white",
-                outline:
-                    "border border-white/20 bg-transparent hover:bg-white/5 text-white",
-                glow: "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-100 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)] hover:shadow-[0_0_25px_rgba(99,102,241,0.4)] backdrop-blur-md",
+                // Primary CTA: animated violet→indigo gradient
+                default: "gradient-button-agendo text-white",
+                // Subtle secondary: soft dark gradient with violet tint
+                ghost: "gradient-button-subtle text-white/80 hover:text-white",
+                outline: "gradient-button-subtle text-white",
+                // Aliases for primary/glow used in the codebase
+                glow: "gradient-button-agendo text-white",
+                primary: "gradient-button-agendo text-white",
             },
             size: {
-                default: "h-14 px-6 py-3",
-                sm: "h-10 rounded-xl px-4",
-                lg: "h-16 rounded-3xl px-8 text-base",
-                icon: "h-14 w-14",
+                default: "h-12 px-6 py-3",
+                sm: "h-9 rounded-xl px-4 text-xs",
+                lg: "h-14 rounded-3xl px-8 text-base",
+                icon: "h-12 w-12",
             },
         },
         defaultVariants: {
