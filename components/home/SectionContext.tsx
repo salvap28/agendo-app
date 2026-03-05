@@ -39,9 +39,13 @@ export function SectionContext({ onNext }: SectionContextProps) {
             const supabase = createClient();
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                // Try to get first name from metadata, fallback to email prefix
+                // Try to get username, then first name, fallback to email
+                const username = user.user_metadata?.username;
                 const fullName = user.user_metadata?.full_name || user.user_metadata?.name;
-                if (fullName) {
+
+                if (username) {
+                    setUserName(username);
+                } else if (fullName) {
                     setUserName(fullName.split(' ')[0]);
                 } else if (user.email) {
                     setUserName(user.email.split('@')[0]);
