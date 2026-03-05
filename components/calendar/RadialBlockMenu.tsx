@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Block, BlockType, BlockStatus, RecurrencePattern } from "@/lib/types/blocks";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
@@ -63,6 +63,7 @@ const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string
 
 // Nodos primarios que orbitan el bloque
 type PrimaryNode = "type" | "status" | "time" | "delete" | "focus" | "center";
+const PRIMARY_NODE_ORDER: Array<Exclude<PrimaryNode, "center">> = ["type", "focus", "time", "status", "delete"];
 
 // ─── ORBITAL MATH UTILS ─────────────────────────────────────────────────────
 
@@ -101,10 +102,22 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [isMobile, setIsMobile] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [pressedType, setPressedType] = useState<BlockType | null>(null);
+    const [primaryRadius, setPrimaryRadius] = useState(PRIMARY_ORBIT_RADIUS_DESKTOP);
 
     useEffect(() => {
         setMounted(true);
-        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        const checkMobile = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+
+            // Fixed orbit diameter relative to viewport size.
+            const viewportBase = Math.min(window.innerWidth, window.innerHeight);
+            const rawRadius = Math.round(viewportBase * (mobile ? 0.32 : 0.24));
+            const minRadius = mobile ? PRIMARY_ORBIT_RADIUS_MOBILE - 26 : PRIMARY_ORBIT_RADIUS_DESKTOP - 48;
+            const maxRadius = mobile ? PRIMARY_ORBIT_RADIUS_MOBILE + 26 : PRIMARY_ORBIT_RADIUS_DESKTOP + 52;
+            const nextRadius = Math.max(minRadius, Math.min(maxRadius, rawRadius));
+            setPrimaryRadius(nextRadius);
+        };
         checkMobile();
         window.addEventListener('resize', checkMobile);
         return () => window.removeEventListener('resize', checkMobile);
@@ -128,6 +141,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     // Fast local state for 60fps radial dragging without entire WeekView re-rendering
     const [localTime, setLocalTime] = useState({ start: block?.startAt, end: block?.endAt });
+    const localStartMs = localTime.start?.getTime() ?? 0;
+    const localEndMs = localTime.end?.getTime() ?? 0;
 
     useEffect(() => {
         if (activePrimaryNode === "center") {
@@ -138,11 +153,142 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         }
     }, [activePrimaryNode, block?.recurrencePattern, block?.startAt, block?.endAt]);
 
+    const setOrbitPosition = (el: HTMLElement, x: number, y: number) => {
+        // Keep a fixed radius with stable positioning on mobile/desktop.
+        el.style.left = `calc(50% + ${x}px)`;
+        el.style.top = `calc(50% + ${y}px)`;
+        el.style.removeProperty("translate");
+    };
+
+    const getInitialZoomForNode = useCallback((node: PrimaryNode) => {
+        if (isMobile) {
+            if (node === "time") return 0.9;
+            if (node === "type") return 1;
+            if (node === "status") return 1.05;
+            if (node === "center") return 1.06;
+            return 1.18;
+        }
+        if (node === "time") return 1.15;
+        return 1.3;
+    }, [isMobile]);
+
+    const [zoomByNode, setZoomByNode] = useState<Partial<Record<PrimaryNode, number>>>({});
+    const zoomByNodeRef = useRef<Partial<Record<PrimaryNode, number>>>(zoomByNode);
+
+    useEffect(() => {
+        zoomByNodeRef.current = zoomByNode;
+    }, [zoomByNode]);
+
+    const getFocusZoom = useCallback((node: PrimaryNode | null) => {
+        if (!node) return 1;
+        return zoomByNode[node] ?? getInitialZoomForNode(node);
+    }, [zoomByNode, getInitialZoomForNode]);
+
+    const measureFocusContentAndUpdateZoom = useCallback((node: PrimaryNode) => {
+        if (node === "center") return;
+
+        const nodeIndex = PRIMARY_NODE_ORDER.indexOf(node as Exclude<PrimaryNode, "center">);
+        if (nodeIndex === -1) return;
+
+        // Bypassear la medición dinámica para listas móviles full-width, sino la cámara se aleja al infinito
+        if (isMobile && (node === "type" || node === "status")) {
+            setZoomByNode((prev) => {
+                const targetZoom = getInitialZoomForNode(node);
+                if (Math.abs((prev[node] ?? 1) - targetZoom) <= 0.02) return prev;
+                const updated = { ...prev, [node]: targetZoom };
+                zoomByNodeRef.current = updated;
+                return updated;
+            });
+            return;
+        }
+
+        const root = planetRefs.current[nodeIndex];
+        if (!root) return;
+
+        const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))];
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+
+        for (const element of elements) {
+            const style = window.getComputedStyle(element);
+            if (style.display === "none" || style.visibility === "hidden") continue;
+
+            const rect = element.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+
+            minX = Math.min(minX, rect.left);
+            minY = Math.min(minY, rect.top);
+            maxX = Math.max(maxX, rect.right);
+            maxY = Math.max(maxY, rect.bottom);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) return;
+
+        const currentZoom = zoomByNodeRef.current[node] ?? getInitialZoomForNode(node);
+        const rawWidth = (maxX - minX) / Math.max(currentZoom, 0.01);
+        const rawHeight = (maxY - minY) / Math.max(currentZoom, 0.01);
+
+        const horizontalPadding = isMobile ? 14 : 24;
+        const topPadding = isMobile ? 112 : 96;
+        const bottomPadding = isMobile ? 18 : 24;
+
+        const availableWidth = Math.max(120, window.innerWidth - horizontalPadding * 2);
+        const availableHeight = Math.max(120, window.innerHeight - topPadding - bottomPadding);
+
+        const fitZoom = Math.min(availableWidth / rawWidth, availableHeight / rawHeight);
+        const maxZoom = isMobile ? 1.26 : 1.35;
+        const minZoom = isMobile ? 0.72 : 0.82;
+        const nextZoom = Math.max(minZoom, Math.min(maxZoom, fitZoom));
+
+        if (!Number.isFinite(nextZoom) || Math.abs(nextZoom - currentZoom) <= 0.02) return;
+
+        setZoomByNode((prev) => {
+            if (Math.abs((prev[node] ?? currentZoom) - nextZoom) <= 0.02) return prev;
+            const updated = { ...prev, [node]: nextZoom };
+            zoomByNodeRef.current = updated;
+            return updated;
+        });
+    }, [getInitialZoomForNode, isMobile]);
+
+    useEffect(() => {
+        if (!activePrimaryNode) return;
+
+        let canceled = false;
+        const runMeasure = () => {
+            if (canceled) return;
+            measureFocusContentAndUpdateZoom(activePrimaryNode);
+        };
+
+        const rafId = requestAnimationFrame(runMeasure);
+        const settleTimer = window.setTimeout(runMeasure, 620);
+
+        return () => {
+            canceled = true;
+            cancelAnimationFrame(rafId);
+            window.clearTimeout(settleTimer);
+        };
+    }, [
+        activePrimaryNode,
+        measureFocusContentAndUpdateZoom,
+        primaryRadius,
+        localStartMs,
+        localEndMs
+    ]);
+
+    const setGalaxyCamera = (x: number, y: number, zoom: number) => {
+        if (!galaxyRef.current) return;
+        galaxyRef.current.style.setProperty("translate", `${x}px ${y}px`);
+        galaxyRef.current.style.setProperty("scale", String(zoom));
+        galaxyRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${zoom})`;
+    };
+
     // Animación física de alto rendimiento a 60fps usando requestAnimationFrame
     useEffect(() => {
         let animationFrameId: number;
         // Estado local de la física para no disparar re-renders de React
-        const physics = { angle: 0, speed: 20 };
+        const physics = { angle: 0, speed: 20, offset: { x: 0, y: 0 } };
 
         const animate = () => {
             if (!activePrimaryNode) {
@@ -153,35 +299,37 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             }
 
             // Aplicar posiciones directo al DOM saltando el Virtual DOM (60 FPS puros)
-            const currentObjPrimary = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
+            const currentObjPrimary = primaryRadius;
+            let targetAnchor = { x: 0, y: 0 };
+
+            if (activePrimaryNode && activePrimaryNode !== "center") {
+                const activeIndex = PRIMARY_NODE_ORDER.indexOf(activePrimaryNode);
+                if (activeIndex !== -1) {
+                    targetAnchor = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
+                }
+            }
+
+            // Interpolación lineal (Lerp) para movimiento suave de cámara 
+            physics.offset.x += (targetAnchor.x - physics.offset.x) * 0.12;
+            physics.offset.y += (targetAnchor.y - physics.offset.y) * 0.12;
+
             planetRefs.current.forEach((el, i) => {
                 if (el) {
                     const pos = calculateNodePosition(i, 5, currentObjPrimary, physics.angle); // 5 planets
-                    el.style.translate = `${pos.x}px ${pos.y}px`;
+                    const x = pos.x - physics.offset.x;
+                    const y = pos.y - physics.offset.y;
+                    setOrbitPosition(el, x, y);
                 }
             });
 
             // Zoom de cámara: si hay un nodo activo, desplazamos la galaxia para centrarlo
             if (galaxyRef.current) {
                 if (activePrimaryNode) {
-                    if (activePrimaryNode === "center") {
-                        galaxyRef.current.style.translate = `0px 0px`;
-                        galaxyRef.current.style.scale = "1.3";
-                    } else {
-                        // Buscar índice del nodo activo para calcular su posición exacta actual
-                        const activeIndex = ["type", "focus", "time", "status", "danger"].indexOf(activePrimaryNode);
-                        if (activeIndex !== -1) {
-                            const currentObjPrimary = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
-                            const pos = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
-                            // Centrar el nodo y hacer zoom
-                            galaxyRef.current.style.translate = `${-pos.x}px ${-pos.y}px`;
-                            galaxyRef.current.style.scale = "1.3";
-                        }
-                    }
+                    const focusZoom = getFocusZoom(activePrimaryNode);
+                    setGalaxyCamera(0, 0, focusZoom);
                 } else {
                     // Volver a la vista normal
-                    galaxyRef.current.style.translate = `0px 0px`;
-                    galaxyRef.current.style.scale = "1";
+                    setGalaxyCamera(0, 0, 1);
                 }
             }
 
@@ -190,7 +338,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [activePrimaryNode, isMobile]);
+    }, [activePrimaryNode, isMobile, primaryRadius, getFocusZoom]);
 
 
     const isCurrentBlock = useMemo(() => {
@@ -327,8 +475,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         { id: "delete" as const, label: "Eliminar", icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
     ];
 
-    const PRIMARY_RADIUS = isMobile ? PRIMARY_ORBIT_RADIUS_MOBILE : PRIMARY_ORBIT_RADIUS_DESKTOP;
-    const SECONDARY_RADIUS = isMobile ? 75 : 100;
+    const PRIMARY_RADIUS = primaryRadius;
+    const SECONDARY_RADIUS = isMobile ? 66 : 100;
 
     const pillWidthExpanded = isMobile ? "w-32 rounded-[2rem] px-3" : "w-40 rounded-[2rem] px-5";
     const pillHeightClass = isMobile ? "h-12" : "h-16";
@@ -388,7 +536,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 <div
                     className={cn(
                         "absolute rounded-full border border-white/[0.04] transition-all duration-1000",
-                        activePrimaryNode ? "opacity-20 scale-95" : "opacity-100 scale-100"
+                        activePrimaryNode ? "opacity-20" : "opacity-100"
                     )}
                     style={{
                         width: PRIMARY_RADIUS * 2,
@@ -609,12 +757,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 key={pn.id}
                                 ref={(el) => { planetRefs.current[i] = el; }}
                                 className={cn(
-                                    "absolute flex flex-col items-center transition-all duration-700 pointer-events-auto",
+                                    "absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-700 pointer-events-auto",
                                     isDimmed ? "opacity-10 scale-75 blur-sm" : "opacity-100 scale-100",
                                     isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "z-[100]" : "z-10"
                                 )}
                                 style={{
-                                    translate: `${pos.x}px ${pos.y}px`,
+                                    left: `calc(50% + ${pos.x}px)`,
+                                    top: `calc(50% + ${pos.y}px)`,
                                     animation: `spring-out-planet 600ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH`
                                 }}
                             >
@@ -677,14 +826,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 {/* ── LUNAS (Nivel 2) ── */}
                                 {isFocused && (
                                     <div
-                                        className={cn(
-                                            "absolute left-1/2 w-0 h-0 flex items-center justify-center pointer-events-none",
-                                            pn.id === "time" ? "top-1/2 -translate-y-1/2" : "top-8"
-                                        )}
+                                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0 h-0 flex items-center justify-center pointer-events-none"
                                     >
 
-                                        {/* TYPE SATELLITES */}
-                                        {pn.id === "type" && BLOCK_TYPES_UI.map((tn, j) => {
+
+
+                                        {/* TYPE SATELLITES (DESKTOP) */}
+                                        {pn.id === "type" && !isMobile && BLOCK_TYPES_UI.map((tn, j) => {
                                             const lPos = calculateNodePosition(j, BLOCK_TYPES_UI.length, SECONDARY_RADIUS, -90);
                                             const LIcon = tn.icon;
                                             const isSelected = tn.value === activeType.value;
@@ -694,8 +842,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     key={tn.value}
                                                     className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                                                     style={{
-                                                        translate: `${lPos.x}px ${lPos.y}px`,
-                                                        animation: `spring-out 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) ${j * 30}ms BOTH`
+                                                        left: `${lPos.x}px`,
+                                                        top: `${lPos.y}px`,
+                                                        animation: `satellite-orbit 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) ${j * 30}ms BOTH`
                                                     }}
                                                 >
                                                     <button
@@ -717,7 +866,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             "group pointer-events-auto rounded-full flex items-center relative overflow-hidden active:scale-95",
                                                             "transition-[max-width,padding,background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
                                                             isMobile ? "max-w-[36px] min-w-[36px] h-9" : "min-w-[40px] max-w-[40px] h-10",
-                                                            isPressing ? "max-w-[200px] px-5 justify-start" : "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
+                                                            isPressing
+                                                                ? (isMobile ? "max-w-[132px] px-3.5 justify-start" : "max-w-[200px] px-5 justify-start")
+                                                                : "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
                                                             tn.hoverBg, "hover:border-transparent",
                                                             isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30",
                                                             isPressing && "border-transparent"
@@ -734,7 +885,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             )} />
                                                             <span className={cn(
                                                                 "text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-                                                                isPressing ? "opacity-100 max-w-[150px] text-white" : "opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
+                                                                isPressing
+                                                                    ? (isMobile ? "opacity-100 max-w-[84px] text-white" : "opacity-100 max-w-[150px] text-white")
+                                                                    : "opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
                                                                 tn.color
                                                             )}>
                                                                 {tn.label}
@@ -745,33 +898,38 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             );
                                         })}
 
-                                        {/* STATUS SATELLITES */}
-                                        {pn.id === "status" && STATUS_OPTS.map((sn, j) => {
+
+
+                                        {/* STATUS SATELLITES (DESKTOP) */}
+                                        {pn.id === "status" && !isMobile && STATUS_OPTS.map((sn, j) => {
                                             // Equidistant perfect 360 degree distribution starting from top
-                                            const lPos = calculateNodePosition(j, STATUS_OPTS.length, isMobile ? 100 : 140, -90);
+                                            const statusOrbitRadius = 140;
+                                            const lPos = calculateNodePosition(j, STATUS_OPTS.length, statusOrbitRadius, -90);
                                             const LIcon = sn.icon;
                                             const isSelected = sn.value === activeStatus.value;
+                                            const statusLabel = sn.label;
                                             return (
                                                 <div
                                                     key={sn.value}
                                                     className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                                                     style={{
-                                                        translate: `${lPos.x}px ${lPos.y}px`,
-                                                        animation: `spring-out 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) ${j * 50}ms BOTH`
+                                                        left: `${lPos.x}px`,
+                                                        top: `${lPos.y}px`,
+                                                        animation: `satellite-orbit 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) ${j * 50}ms BOTH`
                                                     }}
                                                 >
                                                     <button
                                                         onClick={(e) => handleStatusSelect(sn.value, e)}
                                                         className={cn(
-                                                            "pointer-events-auto flex items-center gap-2 px-4 rounded-full whitespace-nowrap transition-all duration-300 hover:scale-110 active:scale-95 relative overflow-hidden",
-                                                            isMobile ? "h-9 text-xs" : "h-11",
+                                                            "pointer-events-auto flex items-center gap-2 rounded-full whitespace-nowrap transition-all duration-300 hover:scale-110 active:scale-95 relative overflow-hidden",
+                                                            "h-11 px-4",
                                                             isSelected ? `${sn.bg} border ${sn.color.replace('text-', 'border-')}` : `bg-black/80 border border-white/10 backdrop-blur-sm hover:${sn.bg} hover:border-${sn.color.replace('text-', '')}/30`
                                                         )}
                                                     >
                                                         <GlowingEffect spread={30} proximity={70} inactiveZone={0.01} borderWidth={1} variant="subtle" />
                                                         <div className="flex items-center gap-2 relative z-10">
                                                             <LIcon className={cn("w-4 h-4", sn.color)} />
-                                                            <span className={cn("text-xs font-bold", sn.color)}>{sn.label}</span>
+                                                            <span className={cn("text-xs font-bold truncate", sn.color)}>{statusLabel}</span>
                                                         </div>
                                                     </button>
                                                 </div>
@@ -846,15 +1004,110 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 </div>
             </div>
 
+            {/* MOBILE LISTS (Rendered at root to avoid transform clipping) */}
+            {isMobile && activePrimaryNode === "type" && (
+                <div
+                    className="absolute left-0 right-0 top-1/2 z-[400] pointer-events-auto flex justify-center w-full"
+                    style={{ animation: 'mobile-menu-enter 400ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both' }}
+                >
+                    <div className="flex overflow-x-auto gap-3 pb-4 px-6 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] w-full max-w-full">
+                        {BLOCK_TYPES_UI.map((tn) => {
+                            const LIcon = tn.icon;
+                            const isSelected = tn.value === activeType.value;
+                            return (
+                                <button
+                                    key={tn.value}
+                                    onClick={(e) => handleTypeSelect(tn.value, e)}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center gap-2 min-w-[96px] h-24 p-3 rounded-3xl transition-all duration-300 snap-center relative overflow-hidden active:scale-95",
+                                        isSelected
+                                            ? "bg-white/[0.12] ring-1 ring-white/20 shadow-xl"
+                                            : "bg-black/80 border border-white/10 hover:bg-white/[0.05]"
+                                    )}
+                                >
+                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    {isSelected && (
+                                        <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", tn.bg)} />
+                                    )}
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-2xl flex items-center justify-center transition-all z-10",
+                                        isSelected ? `${tn.bg} ${tn.color.replace('text-', 'text-')} shadow-[0_0_15px_currentColor]` : "bg-white/[0.04] text-white/40"
+                                    )}>
+                                        <LIcon size={20} />
+                                    </div>
+                                    <span className={cn(
+                                        "text-xs font-bold uppercase tracking-wider z-10 transition-colors whitespace-nowrap",
+                                        isSelected ? "text-white" : "text-white/50"
+                                    )}>
+                                        {tn.label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {isMobile && activePrimaryNode === "status" && (
+                <div
+                    className="absolute left-0 right-0 top-1/2 z-[400] pointer-events-auto flex justify-center w-full"
+                    style={{ animation: 'mobile-menu-enter 400ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both' }}
+                >
+                    <div className="flex overflow-x-auto gap-3 pb-4 px-6 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] w-full max-w-full">
+                        {STATUS_OPTS.map((sn) => {
+                            const LIcon = sn.icon;
+                            const isSelected = sn.value === activeStatus.value;
+                            return (
+                                <button
+                                    key={sn.value}
+                                    onClick={(e) => handleStatusSelect(sn.value, e)}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center gap-2 min-w-[96px] h-24 p-3 rounded-3xl transition-all duration-300 snap-center relative overflow-hidden active:scale-95",
+                                        isSelected
+                                            ? "bg-white/[0.12] ring-1 ring-white/20 shadow-xl"
+                                            : "bg-black/80 border border-white/10 hover:bg-white/[0.05]"
+                                    )}
+                                >
+                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    {isSelected && (
+                                        <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", sn.bg)} />
+                                    )}
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-2xl flex items-center justify-center transition-all z-10",
+                                        isSelected ? `${sn.bg} ${sn.color} shadow-[0_0_15px_currentColor]` : "bg-white/[0.04] text-white/40"
+                                    )}>
+                                        <LIcon size={20} />
+                                    </div>
+                                    <span className={cn(
+                                        "text-xs font-bold uppercase tracking-wider z-10 transition-colors whitespace-nowrap",
+                                        isSelected ? "text-white" : "text-white/50"
+                                    )}>
+                                        {sn.label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Global Styles for the spring animation */}
             <style>{`
+                @keyframes mobile-menu-enter {
+                    0% { opacity: 0; transform: translateY(120px) scale(0.95); }
+                    100% { opacity: 1; transform: translateY(80px) scale(1); }
+                }
                 @keyframes spring-out {
                     0% { scale: 0.5; opacity: 0; }
                     100% { scale: 1; opacity: 1; }
                 }
                 @keyframes spring-out-planet {
-                    0% { translate: 0px 0px; scale: 0; opacity: 0; }
+                    0% { left: 50%; top: 50%; scale: 0; opacity: 0; }
                     100% { scale: 1; opacity: 1; } 
+                }
+                @keyframes satellite-orbit {
+                    0% { left: 0px; top: 0px; opacity: 0; }
+                    100% { opacity: 1; }
                 }
             `}</style>
 

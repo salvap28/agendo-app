@@ -222,7 +222,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                     {/* STATUS */}
                     <div>
                         <SectionLabel>Estado</SectionLabel>
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {STATUS_OPTS.map((s) => {
                                 const isActive = block.status === s.value;
                                 const Icon = s.icon;
@@ -231,22 +231,29 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                         key={s.value}
                                         onClick={() => handleStatusChange(s.value)}
                                         className={cn(
-                                            "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium text-left group",
+                                            "flex flex-col items-center justify-center gap-2 min-w-[100px] p-4 rounded-3xl transition-all duration-300 snap-center group relative overflow-hidden",
                                             isActive
-                                                ? "bg-white/[0.07] text-white"
-                                                : "text-white/40 hover:bg-white/[0.04] hover:text-white/80"
+                                                ? "bg-white/[0.08] ring-1 ring-white/20 shadow-lg"
+                                                : "bg-white/[0.02] hover:bg-white/[0.04] active:bg-white/[0.06]"
                                         )}
                                     >
-                                        <div className={cn(
-                                            "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
-                                            isActive ? `bg-white/10 ${s.color}` : "bg-white/[0.04] text-white/30 group-hover:text-white/60"
-                                        )}>
-                                            <Icon size={14} />
-                                        </div>
-                                        <span>{s.label}</span>
+                                        {/* Background Glow for active state */}
                                         {isActive && (
-                                            <span className={cn("ml-auto w-1.5 h-1.5 rounded-full shadow-[0_0_6px_currentColor]", s.dot)} />
+                                            <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", s.dot)} />
                                         )}
+
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center transition-all z-10",
+                                            isActive ? `bg-white/10 ${s.color} shadow-[0_0_15px_currentColor]` : "bg-white/[0.04] text-white/30 group-hover:text-white/50"
+                                        )}>
+                                            <Icon size={24} />
+                                        </div>
+                                        <span className={cn(
+                                            "text-sm font-semibold z-10 transition-colors",
+                                            isActive ? "text-white" : "text-white/50"
+                                        )}>
+                                            {s.label}
+                                        </span>
                                     </button>
                                 );
                             })}
@@ -277,7 +284,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                     {/* CATEGORY */}
                     <div>
                         <SectionLabel>Categoría</SectionLabel>
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {BLOCK_TYPES_UI.map((t) => {
                                 const isActive = block.type === t.value;
                                 const Icon = t.icon;
@@ -286,22 +293,29 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                         key={t.value}
                                         onClick={() => handleTypeChange(t.value)}
                                         className={cn(
-                                            "flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium text-left group",
+                                            "flex flex-col items-center justify-center gap-2 min-w-[100px] p-4 rounded-3xl transition-all duration-300 snap-center group relative overflow-hidden",
                                             isActive
-                                                ? "bg-white/[0.07] text-white"
-                                                : "text-white/40 hover:bg-white/[0.04] hover:text-white/70"
+                                                ? "bg-white/[0.08] ring-1 ring-white/20 shadow-lg"
+                                                : "bg-white/[0.02] hover:bg-white/[0.04] active:bg-white/[0.06]"
                                         )}
                                     >
-                                        <div className={cn(
-                                            "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
-                                            isActive ? `bg-white/10 ${t.color}` : "bg-white/[0.04] text-white/30 group-hover:text-white/50"
-                                        )}>
-                                            <Icon size={13} />
-                                        </div>
-                                        <span className="truncate">{t.label}</span>
+                                        {/* Background Glow for active state */}
                                         {isActive && (
-                                            <span className={cn("ml-auto w-1.5 h-1.5 rounded-full shrink-0", t.glow)} />
+                                            <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", t.glow)} />
                                         )}
+
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center transition-all z-10",
+                                            isActive ? `bg-white/10 ${t.color} shadow-[0_0_15px_currentColor]` : "bg-white/[0.04] text-white/30 group-hover:text-white/50"
+                                        )}>
+                                            <Icon size={24} />
+                                        </div>
+                                        <span className={cn(
+                                            "text-sm font-semibold z-10 transition-colors",
+                                            isActive ? "text-white" : "text-white/50"
+                                        )}>
+                                            {t.label}
+                                        </span>
                                     </button>
                                 );
                             })}
