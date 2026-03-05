@@ -10,6 +10,8 @@ import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 
+import { createClient } from "@/lib/supabase/client";
+
 const BLOCK_LABELS: Record<string, string> = {
     deep_work: "Deep Work",
     meeting: "Meeting",
@@ -30,8 +32,24 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [greeting, setGreeting] = useState("Hello");
     const [nextBlock, setNextBlock] = useState<Block | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [userName, setUserName] = useState("Salva");
 
     useEffect(() => {
+        const fetchUser = async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Try to get first name from metadata, fallback to email prefix
+                const fullName = user.user_metadata?.full_name || user.user_metadata?.name;
+                if (fullName) {
+                    setUserName(fullName.split(' ')[0]);
+                } else if (user.email) {
+                    setUserName(user.email.split('@')[0]);
+                }
+            }
+        };
+        fetchUser();
+
         // Dynamic greeting
         const hour = new Date().getHours();
         if (hour < 12) setGreeting("Good morning");
@@ -80,7 +98,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         marginBottom: '32px'
                     }}
                 >
-                    {greeting}, Salva.
+                    {greeting}, {userName}.
                 </h2>
 
                 {/* Next Block Protagonist */}

@@ -99,7 +99,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     useEffect(() => {
         if (isNewBlock) {
-            setActivePrimaryNode("center");
+            // Delay auto-opening center to allow the orbital entrance animation to play first
+            const timer = setTimeout(() => {
+                setActivePrimaryNode("center");
+            }, 600);
+            return () => clearTimeout(timer);
         }
     }, [isNewBlock]);
 
@@ -170,7 +174,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         return () => cancelAnimationFrame(animationFrameId);
     }, [activePrimaryNode]);
 
-    if (!block) return null;
 
     const isCurrentBlock = useMemo(() => {
         if (!block) return false;
@@ -232,6 +235,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const handlePrimaryClick = (node: PrimaryNode, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!block) return;
 
         if (node === "delete") {
             if (block.recurrenceId) {
@@ -258,6 +262,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const handleTypeSelect = (type: BlockType, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!block) return;
         updateBlock(block.id, { type });
         if (guidedStep === "type") {
             setGuidedStep(null);
@@ -269,11 +274,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const handleStatusSelect = (status: BlockStatus, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!block) return;
         setStatus(block.id, status);
         setActivePrimaryNode(null);
     };
 
     const confirmDelete = (type: 'one' | 'series') => {
+        if (!block) return;
         if (type === 'one') deleteBlock(block.id);
         else if (block.recurrenceId) deleteBlockSeries(block.recurrenceId);
         setDeleteConfirmOpen(false);
@@ -281,8 +288,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     };
 
     // Datos visuales del bloque actual
-    const activeType = BLOCK_TYPES_UI.find(t => t.value === block.type) || BLOCK_TYPES_UI[6];
-    const activeStatus = STATUS_OPTS.find(s => s.value === block.status) || STATUS_OPTS[0];
+    const activeType = BLOCK_TYPES_UI.find(t => t.value === block?.type) || BLOCK_TYPES_UI[6];
+    const activeStatus = STATUS_OPTS.find(s => s.value === block?.status) || STATUS_OPTS[0];
 
     // Array de primary nodes
     const primaryNodes = [
@@ -295,6 +302,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const PRIMARY_RADIUS = 160;
     const SECONDARY_RADIUS = 100;
+
+    if (!block) return null;
 
     return (
         <div
