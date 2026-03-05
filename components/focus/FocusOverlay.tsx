@@ -90,9 +90,9 @@ export function FocusOverlay() {
 
     // Derived per-char array for animated rendering (must come after formatted is declared)
     const formattedChars = React.useMemo(() => formatted.split(''), [formatted]);
-    React.useEffect(() => { setPrevFormatted(formattedChars); }, [formatted]);
-
-    if (!session || !session.isActive) return null;
+    // We only unmount if there's no session, OR if it's inactive AND hasn't ended.
+    // (If it has ended, we keep the overlay mounted so the ReflectionSheet can show).
+    if (!session || (!session.isActive && !session.endedAt)) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col text-white overflow-hidden animate-in fade-in zoom-in-[0.98] duration-1000 ease-out" style={{ background: "#000" }}>
@@ -262,9 +262,9 @@ export function FocusOverlay() {
                     {/* Pause / Resume */}
                     <GlassButton
                         onClick={session.isPaused ? resume : pause}
-                        variant="default"
+                        variant="ghost"
                         size="icon"
-                        className="w-12 h-12 border-white/10"
+                        className="w-12 h-12 border-white/10 hover:bg-white/10"
                     >
                         {session.isPaused
                             ? <Play fill="white" className="w-4 h-4 ml-0.5" />
@@ -276,14 +276,13 @@ export function FocusOverlay() {
                     <div className="w-px h-6 bg-white/10 mx-1" />
 
                     {/* Finish — white pill, the primary CTA */}
-                    <GlassButton
+                    <button
                         onClick={finish}
-                        size="default"
-                        className="bg-white text-black hover:bg-gray-100 hover:text-black shadow-[0_0_24px_rgba(255,255,255,0.25)] border-transparent h-10 px-5"
+                        className="inline-flex items-center justify-center gap-2 h-10 px-5 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors shadow-[0_0_24px_rgba(255,255,255,0.25)] select-none"
                     >
-                        <CheckSquare className="w-4 h-4 mr-2" />
+                        <CheckSquare className="w-4 h-4" />
                         Finalizar
-                    </GlassButton>
+                    </button>
                 </div>
             </div>
 

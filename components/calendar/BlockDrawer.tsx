@@ -65,6 +65,17 @@ const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: strin
     { value: "other", label: "Other", icon: MoreHorizontal, color: "text-neutral-400", glow: "bg-neutral-400" },
 ];
 
+// Maps a block type to the CSS classes for the Focus button
+const FOCUS_BUTTON_STYLE: Record<string, { bg: string; border: string; shadow: string; text: string }> = {
+    gym: { bg: "bg-emerald-500/15 hover:bg-emerald-500/25", border: "border border-emerald-500/30", shadow: "shadow-[0_0_24px_rgba(16,185,129,0.3)]", text: "text-emerald-100" },
+    study: { bg: "bg-amber-500/15 hover:bg-amber-500/25", border: "border border-amber-500/30", shadow: "shadow-[0_0_24px_rgba(245,158,11,0.3)]", text: "text-amber-100" },
+    meeting: { bg: "bg-rose-500/15 hover:bg-rose-500/25", border: "border border-rose-500/30", shadow: "shadow-[0_0_24px_rgba(225,29,72,0.3)]", text: "text-rose-100" },
+    break: { bg: "bg-orange-500/15 hover:bg-orange-500/25", border: "border border-orange-500/30", shadow: "shadow-[0_0_24px_rgba(249,115,22,0.3)]", text: "text-orange-100" },
+    admin: { bg: "bg-slate-500/15 hover:bg-slate-500/25", border: "border border-slate-500/30", shadow: "shadow-[0_0_24px_rgba(100,116,139,0.3)]", text: "text-slate-200" },
+    deep_work: { bg: "bg-indigo-500/15 hover:bg-indigo-500/25", border: "border border-indigo-500/30", shadow: "shadow-[0_0_24px_rgba(99,102,241,0.3)]", text: "text-indigo-100" },
+    other: { bg: "bg-white/10 hover:bg-white/15", border: "border border-white/20", shadow: "shadow-[0_0_14px_rgba(0,0,0,0.3)]", text: "text-white/80" },
+};
+
 const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string; dot: string }[] = [
     { value: "planned", label: "Planificado", icon: MoreHorizontal, color: "text-white/50", dot: "bg-white/30" },
     { value: "active", label: "En progreso", icon: Play, color: "text-green-400", dot: "bg-green-400" },
@@ -185,14 +196,24 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                     </div>
 
                     {/* ── FOCUS BUTTON — primary CTA, always visible ── */}
-                    <GlassButton
-                        onClick={() => { openFromBlock(block.id, block.type); onClose(); }}
-                        variant="primary"
-                        className="w-full mt-5 h-11 rounded-2xl gap-2"
-                    >
-                        <Zap size={15} className="text-indigo-300" />
-                        <span>Iniciar Focus</span>
-                    </GlassButton>
+                    {(() => {
+                        const focusStyle = FOCUS_BUTTON_STYLE[block.type] ?? FOCUS_BUTTON_STYLE.other;
+                        return (
+                            <button
+                                onClick={() => { openFromBlock(block.id, block.type); onClose(); }}
+                                className={cn(
+                                    "w-full mt-5 h-11 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200",
+                                    focusStyle.bg,
+                                    focusStyle.border,
+                                    focusStyle.shadow,
+                                    focusStyle.text
+                                )}
+                            >
+                                <Zap size={15} />
+                                <span>Iniciar Focus</span>
+                            </button>
+                        );
+                    })()}
                 </div>
 
                 {/* ─── SCROLLABLE BODY ─────────────────────────────────────── */}

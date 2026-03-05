@@ -3,7 +3,9 @@
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block } from "@/lib/types/blocks";
 import { BlockItem } from "./BlockItem";
-import { BlockDrawer } from "./BlockDrawer";
+import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { BlockDrawer } from "./BlockDrawer"; // Keep it around just in case for now, or we can fully delete later
+import { RadialBlockMenu } from "./RadialBlockMenu";
 import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/cn";
@@ -65,6 +67,7 @@ export function WeekView() {
     // State
     const [currentDate, setCurrentDate] = useState(new Date()); // Week reference
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+    const [isNewBlock, setIsNewBlock] = useState(false);
     const [isPlannerOpen, setIsPlannerOpen] = useState(false);
 
     const handlePrevWeek = () => {
@@ -158,8 +161,8 @@ export function WeekView() {
 
     // --- Handlers ---
 
-    // 1. Create on Empty Slot -> Now Opens Focus Planner Modal
-    const handlePointerDown = (e: React.PointerEvent) => {
+    // 1. Create on Empty Slot -> Now Creates Block and opens Orbital Menu in creation mode
+    const handlePointerDown = async (e: React.PointerEvent) => {
         if (e.button !== 0 || !gridRef.current) return;
 
         const dayIndex = getDayIndexFromX(e.clientX);
@@ -173,9 +176,18 @@ export function WeekView() {
         finalStart.setDate(finalStart.getDate() + dayIndex);
         finalStart.setHours(snappedStart.getHours(), snappedStart.getMinutes(), 0, 0);
 
-        // Update the current interaction date to the clicked slot so the Planner Modal picks it up
-        setCurrentDate(finalStart);
-        setIsPlannerOpen(true);
+        const finalEnd = new Date(finalStart.getTime() + 60 * 60000); // 1 hr default
+
+        const newBlock = await createBlock({
+            startAt: finalStart,
+            endAt: finalEnd,
+            title: ""
+        });
+
+        if (newBlock) {
+            setIsNewBlock(true);
+            setSelectedBlockId(newBlock.id);
+        }
     };
 
     // 2. Click/Drag on Existing Block
@@ -306,6 +318,7 @@ export function WeekView() {
         // If we simply clicked (never met threshold), isDragging is FALSE.
         // We open the drawer for the initial block.
         if (interaction.initialBlock && !interaction.isDragging && interaction.type !== 'create') {
+            setIsNewBlock(false);
             setSelectedBlockId(interaction.initialBlock.id);
             setInteraction(null);
             setGhostBlock(null);
@@ -332,6 +345,7 @@ export function WeekView() {
                 const newBlock = await createBlock({ startAt: startToUse, endAt: endToUse });
                 // Also open drawer for new block?
                 if (newBlock) {
+                    setIsNewBlock(true);
                     setSelectedBlockId(newBlock.id);
                 }
             } else if (interaction.initialBlock) {
@@ -366,13 +380,6 @@ export function WeekView() {
                     <div className="text-lg font-medium text-white/90 w-44">
                         {weekStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </div>
-
-                    <button
-                        onClick={handleToday}
-                        className="px-4 py-1.5 text-sm font-medium bg-white/[0.05] border border-white/10 hover:bg-white/10 text-white rounded-lg transition-colors shadow-sm"
-                    >
-                        Today
-                    </button>
 
                     <div className="flex items-center text-white/50 font-medium text-sm ml-2">
                         <button onClick={handlePrevWeek} className="p-1 hover:text-white hover:bg-white/5 rounded-md transition-colors">
@@ -531,19 +538,16 @@ export function WeekView() {
                 </div>
             </div>
 
-            <BlockDrawer
-                blockId={selectedBlockId}
-                isOpen={!!selectedBlockId}
-                onClose={() => setSelectedBlockId(null)}
-            />
-
-            {/* Desktop FAB for Mobile-style Time Picker Wheel */}
-            <button
-                onClick={() => setIsPlannerOpen(true)}
-                className="absolute bottom-6 right-6 w-14 h-14 bg-indigo-500 rounded-full flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:scale-105 active:scale-95 transition-all z-[100]"
-            >
-                <Plus size={28} />
-            </button>
+            {selectedBlockId && (
+                <RadialBlockMenu
+                    blockId={selectedBlockId}
+                    isNewBlock={isNewBlock}
+                    onClose={() => {
+                        setSelectedBlockId(null);
+                        setIsNewBlock(false);
+                    }}
+                />
+            )}
 
             <FocusPlannerModal
                 isOpen={isPlannerOpen}

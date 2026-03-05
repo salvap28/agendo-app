@@ -13,6 +13,12 @@ export type BlockStatus =
     | "completed"
     | "canceled";
 
+export interface RecurrencePattern {
+    type: 'daily' | 'weekly' | 'custom';
+    days?: number[]; // 0-6 for Sun-Sat
+    endDate?: Date;
+}
+
 export interface Block {
     id: string;
     title: string;
@@ -28,11 +34,7 @@ export interface Block {
 
     // Recurrence
     recurrenceId?: string;
-    recurrencePattern?: {
-        type: 'daily' | 'weekly' | 'custom';
-        days?: number[]; // 0-6 for Sun-Sat
-        endDate?: Date;
-    };
+    recurrencePattern?: RecurrencePattern;
 }
 
 /**

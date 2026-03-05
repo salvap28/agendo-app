@@ -8,6 +8,7 @@ import { isSameDay, isAfter, isBefore } from "date-fns";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { AnimatedGlowingBackground } from "@/components/ui/animated-glowing-background";
 import { cn } from "@/lib/cn";
+import { getBlockColors } from "@/lib/utils/blockColors";
 
 export function FloatingFocusPrompt() {
     const { session, returnToFocus, openFree, openFromBlock } = useFocusStore();
@@ -66,6 +67,9 @@ export function FloatingFocusPrompt() {
         }
     };
 
+    const hasTargetBlock = promptType === "start_block" && targetBlock;
+    const theme = hasTargetBlock ? getBlockColors(targetBlock.type) : null;
+
     return (
         <div className="fixed bottom-28 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-bottom-5 fade-in duration-500">
             <button
@@ -76,11 +80,27 @@ export function FloatingFocusPrompt() {
                         "bg-black/80 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
                         "hover:scale-105 hover:bg-black/90 hover:border-white/20 hover:shadow-[0_8px_40px_rgba(255,255,255,0.15)]"
                     ] : [
-                        "shadow-[0_8px_32px_rgba(99,102,241,0.25)]",
-                        "hover:scale-105 hover:shadow-[0_8px_40px_rgba(124,58,237,0.4)] border border-transparent"
+                        "shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:scale-105 border border-transparent"
                     ]
                 )}
+                style={
+                    // Apply dynamic hover shadow for start_block type
+                    promptType === "start_block" && theme
+                        ? { "--hover-shadow": `0 8px 40px ${theme.glow1}` } as any
+                        : undefined
+                }
             >
+                {/* Dynamically insert hover shadow through an internal style tag or rely on utility classes if possible.
+                    Since Tailwind hover classes are static, we apply a clever pseudo trick:
+                 */}
+                {promptType === "start_block" && theme && (
+                    <style>{`
+                        button[style*="--hover-shadow"]:hover {
+                            box-shadow: var(--hover-shadow) !important;
+                        }
+                    `}</style>
+                )}
+
                 {/* Agendo Glow Effect or Spinning Border Effect */}
                 {promptType === "return" ? (
                     <GlowingEffect
@@ -92,7 +112,7 @@ export function FloatingFocusPrompt() {
                         variant="default"
                     />
                 ) : (
-                    <AnimatedGlowingBackground />
+                    <AnimatedGlowingBackground colorTheme={theme} />
                 )}
 
                 <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 border border-white/5 mr-1 group-hover:bg-white/20 transition-colors">

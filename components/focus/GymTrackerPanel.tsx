@@ -374,24 +374,23 @@ function GymExerciseAccordionItem({
 
                                 {/* Actions */}
                                 <div className="flex items-center gap-1 shrink-0">
-                                    <GlassButton
+                                    <button
                                         onClick={() => updateGymSet(exercise.id, set.id, { isCompleted: !set.isCompleted })}
-                                        size="icon"
-                                        style={set.isCompleted ? { background: "#10b981", color: "black", borderColor: "#34d399", boxShadow: "0 0 12px rgba(16,185,129,0.3)" } : undefined}
                                         className={cn(
-                                            "w-9 h-9 rounded-xl",
-                                            !set.isCompleted && "bg-white/5 border-white/10 text-white/30 hover:bg-white/10 hover:text-white/80"
+                                            "w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 border",
+                                            set.isCompleted
+                                                ? "bg-emerald-500 border-emerald-400 text-black shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+                                                : "bg-white/5 border-white/10 text-white/30 hover:bg-emerald-500/20 hover:border-emerald-500/40 hover:text-emerald-400"
                                         )}
                                     >
                                         {set.isCompleted ? <Check className="w-5 h-5" strokeWidth={3} /> : <Check className="w-5 h-5 opacity-50" />}
-                                    </GlassButton>
-                                    <GlassButton
+                                    </button>
+                                    <button
                                         onClick={() => deleteGymSet(exercise.id, set.id)}
-                                        size="icon"
-                                        className="w-8 h-8 rounded-lg bg-transparent border-transparent text-white/20 hover:text-red-400 hover:bg-red-400/10"
+                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-400/10 transition-all"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
-                                    </GlassButton>
+                                    </button>
                                 </div>
                             </div>
                         ))}

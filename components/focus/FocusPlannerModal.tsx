@@ -94,7 +94,7 @@ export function FocusPlannerModal({ isOpen, onClose, initialStart, initialEnd }:
 
         createBlock({
             title: title || "Focus Session",
-            type: "focus" as any, // Default type or adjust as needed if type is still required
+            type: "deep_work", // Valid enum block_type
             startAt,
             endAt,
         });

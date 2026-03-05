@@ -7,8 +7,10 @@ interface CircularTimePickerProps {
     startMins: number; // 0 to 1439 (minutes since midnight)
     endMins: number;   // 0 to 1440+
     onChange: (start: number, end: number) => void;
+    onChangeEnd?: (start: number, end: number) => void; // Added onChangeEnd
     busyBlocks?: { start: number; end: number }[];
     className?: string;
+    hideCenterText?: boolean;
 }
 
 const RADIUS = 120;
@@ -63,7 +65,7 @@ function formatTimeShort(mins: number) {
     return `${h12}:${mnt.toString().padStart(2, '0')}`;
 }
 
-export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = [], className }: CircularTimePickerProps) {
+export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, busyBlocks = [], className, hideCenterText }: CircularTimePickerProps) {
     const svgRef = useRef<SVGSVGElement>(null);
     const [dragging, setDragging] = useState<'start' | 'end' | 'arc' | null>(null);
     const [lastAngle, setLastAngle] = useState(0);
@@ -235,6 +237,9 @@ export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = 
         const handlePointerUp = (e: PointerEvent) => {
             if (dragging) {
                 document.body.releasePointerCapture(e.pointerId);
+                const snappedStart = Math.round(localStart / 5) * 5 % 1440;
+                const snappedEnd = Math.round(localEnd / 5) * 5 % 1440;
+                onChangeEnd?.(snappedStart, snappedEnd);
                 setDragging(null);
             }
         };
@@ -248,6 +253,9 @@ export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = 
             window.removeEventListener('pointerup', handlePointerUp);
         };
     }, [dragging, startMins, endMins, onChange, lastAngle]);
+
+    // Local hover states for better SVG scaling origin control
+    const [hoveredNode, setHoveredNode] = useState<'start' | 'end' | null>(null);
 
     return (
         <div className={cn("relative flex items-center justify-center select-none touch-none", className)}>
@@ -333,13 +341,19 @@ export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = 
                     transform={`translate(${startP.x}, ${startP.y})`}
                     className="cursor-pointer"
                     onPointerDown={(e) => handlePointerDown('start', e)}
+                    onPointerEnter={() => setHoveredNode('start')}
+                    onPointerLeave={() => setHoveredNode(null)}
                 >
-                    <circle r={STROKE_WIDTH * 2.5} fill="transparent" /> {/* Massive Hitbox */}
-                    <circle r={STROKE_WIDTH * 0.75} fill="white" className="shadow-[0_0_15px_rgba(255,255,255,0.4)]" />
-                    <text x={-20} y={-10} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="end">
+                    <circle r={STROKE_WIDTH * 4} fill="transparent" /> {/* Massive Hitbox */}
+                    <circle
+                        r={(dragging === 'start' || hoveredNode === 'start') ? STROKE_WIDTH * 1.5 : STROKE_WIDTH * 0.85}
+                        fill="white"
+                        className="shadow-[0_0_15px_rgba(255,255,255,0.4)] transition-all duration-200"
+                    />
+                    <text x={-25} y={-12} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="end">
                         start
                     </text>
-                    <text x={-20} y={2} fill="rgba(255,255,255,0.9)" fontSize="12" fontWeight="500" dominantBaseline="middle" textAnchor="end">
+                    <text x={-25} y={4} fill="rgba(255,255,255,0.9)" fontSize="14" fontWeight="600" dominantBaseline="middle" textAnchor="end">
                         {formatTimeShort(startMins)}
                     </text>
                 </g>
@@ -349,27 +363,35 @@ export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = 
                     transform={`translate(${endP.x}, ${endP.y})`}
                     className="cursor-pointer"
                     onPointerDown={(e) => handlePointerDown('end', e)}
+                    onPointerEnter={() => setHoveredNode('end')}
+                    onPointerLeave={() => setHoveredNode(null)}
                 >
-                    <circle r={STROKE_WIDTH * 2.5} fill="transparent" /> {/* Massive Hitbox */}
-                    <circle r={STROKE_WIDTH * 0.75} fill="white" className="shadow-[0_0_15px_rgba(255,255,255,0.4)]" />
-                    <text x={20} y={-10} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="start">
+                    <circle r={STROKE_WIDTH * 4} fill="transparent" /> {/* Massive Hitbox */}
+                    <circle
+                        r={(dragging === 'end' || hoveredNode === 'end') ? STROKE_WIDTH * 1.5 : STROKE_WIDTH * 0.85}
+                        fill="white"
+                        className="shadow-[0_0_15px_rgba(255,255,255,0.4)] transition-all duration-200"
+                    />
+                    <text x={25} y={-12} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="start">
                         end
                     </text>
-                    <text x={20} y={2} fill="rgba(255,255,255,0.9)" fontSize="12" fontWeight="500" dominantBaseline="middle" textAnchor="start">
+                    <text x={25} y={4} fill="rgba(255,255,255,0.9)" fontSize="14" fontWeight="600" dominantBaseline="middle" textAnchor="start">
                         {formatTimeShort(endMins)}
                     </text>
                 </g>
             </svg>
 
             {/* Holy Center - Duration & Range */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-4xl font-medium text-white tracking-tight drop-shadow-md">
-                    {formatDuration(startMins, endMins)}
-                </span>
-                <span className="text-sm text-white/50 font-medium mt-1">
-                    {formatTime(startMins)} - {formatTime(endMins)}
-                </span>
-            </div>
+            {!hideCenterText && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-4xl font-medium text-white tracking-tight drop-shadow-md">
+                        {formatDuration(startMins, endMins)}
+                    </span>
+                    <span className="text-sm text-white/50 font-medium mt-1">
+                        {formatTime(startMins)} - {formatTime(endMins)}
+                    </span>
+                </div>
+            )}
         </div>
     );
 }
