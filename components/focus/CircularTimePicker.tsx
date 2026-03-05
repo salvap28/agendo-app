@@ -87,21 +87,28 @@ export function CircularTimePicker({ startMins, endMins, onChange, busyBlocks = 
 
     // Calculate Arc Path
     // If end is after start, we draw clockwise. 
-    // If diff is >= 12h, the arc needs 2 segments or large-arc flag.
     let diffMins = localEnd - localStart;
-    if (diffMins < 0) diffMins += 1440;
+
+    // Handle cross-day scenario directly: if localEnd < localStart, the duration crosses midnight
+    if (diffMins < 0) {
+        diffMins += 1440;
+    }
+
+    // Since the dial ONLY shows 12 hours (720 mins = 360 degrees),
+    // any duration > 12h visually wraps AROUND the circle perfectly causing overlap.
+    // So visually, we cap the arc to a full circle minus a tiny gap if >= 12h
+    const visualDiff = Math.min(diffMins, 719.99);
+
+    // The arc flag should be 1 if the VISUAL angle goes more than 180 degrees (which is > 6 hours / 360 mins)
+    const largeArcFlag = visualDiff > 360 ? 1 : 0;
 
     // Draw Arc
-    const isLargeArc = diffMins > 360 ? 1 : 0; // if > 6 hours on a 12 hour dial, it's > 180 deg
-    // BUT since the dial only shows 12 hours, if duration > 12h it loops around entirely.
-    // For simplicity, allow max 12h for the visual arc (12h = full circle).
-    const visualDiff = Math.min(diffMins, 719.99); // don't visually overlap perfectly if 12h to keep a tiny gap
     const drawEndAngle = startAngle + (visualDiff / 720) * 2 * Math.PI;
     const drawEndP = getPointFromAngle(drawEndAngle);
 
     let arcPath = `M ${startP.x} ${startP.y}`;
     if (visualDiff > 0) {
-        arcPath += ` A ${RADIUS} ${RADIUS} 0 ${visualDiff > 360 ? 1 : 0} 1 ${drawEndP.x} ${drawEndP.y}`;
+        arcPath += ` A ${RADIUS} ${RADIUS} 0 ${largeArcFlag} 1 ${drawEndP.x} ${drawEndP.y}`;
     }
 
     const checkCollision = (start: number, end: number) => {

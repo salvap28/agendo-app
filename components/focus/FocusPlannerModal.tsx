@@ -25,8 +25,8 @@ export function FocusPlannerModal({ isOpen, onClose, initialStart, initialEnd }:
     const [isMounted, setIsMounted] = useState(false);
 
     // Convert Dates to minutes since midnight for the dial
-    const [startMins, setStartMins] = useState(9 * 60); // Default 9:00 AM
-    const [endMins, setEndMins] = useState(10 * 60 + 30); // Default 10:30 AM
+    const [startMins, setStartMins] = useState(0);
+    const [endMins, setEndMins] = useState(60);
     const [title, setTitle] = useState("");
 
 
@@ -34,11 +34,24 @@ export function FocusPlannerModal({ isOpen, onClose, initialStart, initialEnd }:
         if (isOpen) {
             setIsMounted(true);
             const now = new Date();
+
             if (initialStart) {
                 setStartMins(initialStart.getHours() * 60 + initialStart.getMinutes());
+            } else {
+                // Default to top of the next hour or a clean 15m interval
+                const next15 = new Date(Math.ceil(now.getTime() / (15 * 60000)) * (15 * 60000));
+                setStartMins(next15.getHours() * 60 + next15.getMinutes());
             }
+
             if (initialEnd) {
                 setEndMins(initialEnd.getHours() * 60 + initialEnd.getMinutes());
+            } else if (initialStart) {
+                // If we have start but no end, default to +1 hour
+                setEndMins((initialStart.getHours() * 60 + initialStart.getMinutes() + 60) % 1440);
+            } else {
+                // Default end: +1 hour from default start
+                const next15 = new Date(Math.ceil(now.getTime() / (15 * 60000)) * (15 * 60000));
+                setEndMins((next15.getHours() * 60 + next15.getMinutes() + 60) % 1440);
             }
         } else {
             // Unmount after delay to allow exit animation if handled by parent

@@ -292,7 +292,7 @@ export function WeekView() {
         }
     };
 
-    const handlePointerUp = (e: React.PointerEvent) => {
+    const handlePointerUp = async (e: React.PointerEvent) => {
         if (!interaction) return;
 
         // Release captures
@@ -329,9 +329,11 @@ export function WeekView() {
             if (interaction.type === "create") {
                 // If create was just a click, we still create a default 1h block?
                 // Logic above sets isDragging=true for create immediately, so it always falls here.
-                const newBlock = createBlock({ startAt: startToUse, endAt: endToUse });
+                const newBlock = await createBlock({ startAt: startToUse, endAt: endToUse });
                 // Also open drawer for new block?
-                setSelectedBlockId(newBlock.id);
+                if (newBlock) {
+                    setSelectedBlockId(newBlock.id);
+                }
             } else if (interaction.initialBlock) {
                 updateBlock(interaction.initialBlock.id, { startAt: startToUse, endAt: endToUse });
             }
