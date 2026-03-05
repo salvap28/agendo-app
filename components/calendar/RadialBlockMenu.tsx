@@ -43,14 +43,14 @@ import {
 
 // ─── CONFIGURATION ──────────────────────────────────────────────────────────
 
-const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: string; bg: string }[] = [
-    { value: "deep_work", label: "Deep Work", icon: Layers, color: "text-indigo-400", bg: "bg-indigo-400/20" },
-    { value: "meeting", label: "Meeting", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/20" },
-    { value: "gym", label: "Gym", icon: Dumbbell, color: "text-emerald-400", bg: "bg-emerald-400/20" },
-    { value: "study", label: "Study", icon: BookOpen, color: "text-amber-400", bg: "bg-amber-400/20" },
-    { value: "admin", label: "Admin", icon: Activity, color: "text-slate-400", bg: "bg-slate-400/20" },
-    { value: "break", label: "Break", icon: Coffee, color: "text-rose-400", bg: "bg-rose-400/20" },
-    { value: "other", label: "Other", icon: MoreHorizontal, color: "text-neutral-400", bg: "bg-neutral-400/20" },
+const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: string; bg: string; hoverBg: string }[] = [
+    { value: "deep_work", label: "Deep Work", icon: Layers, color: "text-indigo-400", bg: "bg-indigo-400/20", hoverBg: "hover:bg-indigo-500" },
+    { value: "meeting", label: "Meeting", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/20", hoverBg: "hover:bg-blue-500" },
+    { value: "gym", label: "Gym", icon: Dumbbell, color: "text-emerald-400", bg: "bg-emerald-400/20", hoverBg: "hover:bg-emerald-500" },
+    { value: "study", label: "Study", icon: BookOpen, color: "text-amber-400", bg: "bg-amber-400/20", hoverBg: "hover:bg-amber-500" },
+    { value: "admin", label: "Admin", icon: Activity, color: "text-slate-400", bg: "bg-slate-400/20", hoverBg: "hover:bg-slate-500" },
+    { value: "break", label: "Break", icon: Coffee, color: "text-rose-400", bg: "bg-rose-400/20", hoverBg: "hover:bg-rose-500" },
+    { value: "other", label: "Other", icon: MoreHorizontal, color: "text-neutral-400", bg: "bg-neutral-400/20", hoverBg: "hover:bg-neutral-500" },
 ];
 
 const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string; bg: string }[] = [
@@ -637,16 +637,22 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     <button
                                                         onClick={(e) => handleTypeSelect(tn.value, e)}
                                                         className={cn(
-                                                            "group pointer-events-auto w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-[1.3] active:scale-95 relative overflow-hidden",
-                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')}` : "bg-black/80 border border-white/10 backdrop-blur-sm"
+                                                            "group pointer-events-auto h-10 rounded-full flex items-center relative overflow-hidden active:scale-95",
+                                                            "transition-[max-width,padding,background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                                            "min-w-[40px] max-w-[40px] px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
+                                                            tn.hoverBg, "hover:border-transparent",
+                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30"
                                                         )}
                                                     >
                                                         <GlowingEffect spread={25} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
-                                                        <LIcon className={cn("w-4 h-4 transition-transform duration-300 group-hover:scale-110 relative z-10", tn.color)} />
-
-                                                        {/* Tooltip Label */}
-                                                        <div className="absolute top-[calc(100%+8px)] opacity-0 group-hover:opacity-100 group-hover:translate-y-1 transition-all duration-300 text-[10px] uppercase tracking-widest font-bold text-white/70 whitespace-nowrap pointer-events-none">
-                                                            {tn.label}
+                                                        <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-2.5 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] relative z-10 shrink-0 w-full group-hover:w-auto">
+                                                            <LIcon className={cn("w-4 h-4 shrink-0 transition-all duration-500 ease-out group-hover:text-white", tn.color)} />
+                                                            <span className={cn(
+                                                                "text-xs font-bold uppercase tracking-wider whitespace-nowrap opacity-0 max-w-0 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
+                                                                tn.color
+                                                            )}>
+                                                                {tn.label}
+                                                            </span>
                                                         </div>
                                                     </button>
                                                 </div>

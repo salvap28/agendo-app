@@ -9,6 +9,7 @@ import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -33,6 +34,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [nextBlock, setNextBlock] = useState<Block | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
+    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -125,7 +127,8 @@ export function SectionContext({ onNext }: SectionContextProps) {
 
                             {/* Glass Pill for Block */}
                             <div
-                                className="relative flex flex-col items-center text-center justify-center w-full"
+                                onClick={() => setSelectedBlockId(nextBlock.id)}
+                                className="relative flex flex-col items-center text-center justify-center w-full cursor-pointer hover:scale-[1.02] transition-transform"
                                 style={{
                                     background: 'rgba(255,255,255,0.04)',
                                     border: '1px solid rgba(255,255,255,0.08)',
@@ -209,6 +212,13 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 </div>
 
             </div>
+
+            {selectedBlockId && (
+                <RadialBlockMenu
+                    blockId={selectedBlockId}
+                    onClose={() => setSelectedBlockId(null)}
+                />
+            )}
 
         </section>
     );
