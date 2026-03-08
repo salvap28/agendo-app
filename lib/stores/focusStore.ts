@@ -50,6 +50,7 @@ interface FocusState {
 
     // Gym tracker
     activateGymTracker: () => void;
+    startGymWorkout: (routine: any) => void;
     addGymExercise: (name: string) => void;
     updateGymExercise: (exerciseId: string, updates: Partial<GymExerciseLog>) => void;
     selectGymExercise: (exerciseId: string) => void;
@@ -278,6 +279,31 @@ export const useFocusStore = create<FocusState>()(
                 const { session, setLayer } = get();
                 if (!session) return;
                 setLayer(createGymLayer());
+            },
+
+            startGymWorkout: (routine: any) => {
+                const { session } = get();
+                if (!session) return;
+
+                // Initialize exercises from the routine
+                const loadedExercises: GymExerciseLog[] = routine.exercises.map((ex: any) => ({
+                    id: crypto.randomUUID(),
+                    name: ex.name,
+                    programmedRest: routine.rest_timer_sec || 180,
+                    sets: []
+                }));
+
+                set({
+                    session: updateGymConfig(session, cfg => ({
+                        ...cfg,
+                        activeRoutineId: routine.id,
+                        workoutName: routine.name,
+                        workoutColor: routine.color,
+                        exercises: loadedExercises,
+                        activeExerciseId: loadedExercises.length > 0 ? loadedExercises[0].id : null,
+                        rest: { isResting: false }
+                    }))
+                });
             },
 
             addGymExercise: (name: string) => {

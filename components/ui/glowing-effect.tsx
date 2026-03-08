@@ -15,6 +15,7 @@ interface GlowingEffectProps {
     disabled?: boolean;
     movementDuration?: number;
     borderWidth?: number;
+    customGradient?: string;
 }
 
 const GlowingEffect = memo(
@@ -29,6 +30,7 @@ const GlowingEffect = memo(
         movementDuration = 2,
         borderWidth = 1,
         disabled = false,
+        customGradient,
     }: GlowingEffectProps) => {
         const containerRef = useRef<HTMLDivElement>(null);
         const lastPosition = useRef({ x: 0, y: 0 });
@@ -124,6 +126,8 @@ const GlowingEffect = memo(
         // subtle: very low-opacity white-only
         // white: sharp white border
         const gradient = (() => {
+            if (customGradient) return customGradient;
+
             if (variant === "white") {
                 return `repeating-conic-gradient(
           from 236.84deg at 50% 50%,

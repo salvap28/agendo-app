@@ -19,8 +19,27 @@ export type GymExerciseLog = {
     sets: GymSet[];
 };
 
+export type RoutineExercise = {
+    id: string; // unique ID
+    name: string;
+};
+
+export type WorkoutRoutine = {
+    id: string;
+    user_id: string;
+    name: string;
+    color: string;
+    rep_type: string;
+    planned_days: number[]; // 0-6 (0 = Sun, 1 = Mon...)
+    rest_timer_sec: number;
+    exercises: RoutineExercise[];
+    created_at: string;
+};
+
 export type GymLayerConfig = {
+    activeRoutineId?: string | null;
     workoutName?: string | null;
+    workoutColor?: string | null;
     exercises: GymExerciseLog[];
     activeExerciseId?: string | null;
     rest: {
@@ -28,24 +47,6 @@ export type GymLayerConfig = {
         selectedSec?: number;
         restStartedAt?: string | null;
     };
-};
-
-// Future schema (not implemented)
-export type WorkoutRoutine = {
-    id: string;
-    name: string;
-    createdAt: string;
-    updatedAt: string;
-    exercises: { name: string; defaultSets?: { weight: number; reps: number }[] }[];
-};
-
-export type WorkoutSession = {
-    id: string;
-    startedAt: string;
-    endedAt: string;
-    routineId?: string | null;
-    routineName?: string | null;
-    exercises: { name: string; sets: { weight: number; reps: number; createdAt: string }[] }[];
 };
 
 // ── FocusLayer ─────────────────────────────────────────────────────────────
