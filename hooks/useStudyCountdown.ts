@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
 import { StudyTechniqueState } from '@/lib/engines/layersEngine';
+import { sendNotification } from '@/lib/utils/notifications';
 
 export function useStudyCountdown() {
     const { session, setLayer } = useFocusStore();
@@ -51,7 +52,15 @@ export function useStudyCountdown() {
                 const nextPhase = state.phase === "focus" ? "break" : "focus";
                 const currentCount = state.cycleCount;
 
-                // Note: In real app, play sound/toast here
+                sendNotification(
+                    state.phase === "focus" ? "¡Tiempo de descanso!" : "¡De vuelta al enfoque!",
+                    {
+                        body: state.phase === "focus" 
+                            ? "Tómate un respiro, te lo has ganado." 
+                            : "Es hora de volver a concentrarte.",
+                        icon: "/favicon.ico"
+                    }
+                );
                 useFocusStore.setState((state) => {
                     const currentLayer = state.session?.activeLayer;
                     if (!currentLayer || !state.session) return state;

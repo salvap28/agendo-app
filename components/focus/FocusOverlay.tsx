@@ -16,6 +16,7 @@ import { FocusCardsCarousel } from './FocusCardsCarousel';
 import { TechniquePickerCard } from './TechniquePickerCard';
 import { IntentInputOverlay } from './IntentInputOverlay';
 import { GlassButton } from '@/components/ui/glass-button';
+import { requestNotificationPermission } from '@/lib/utils/notifications';
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
     deep_work: "Deep Work",
@@ -55,6 +56,10 @@ export function FocusOverlay() {
 
     // Compute Context for Toasts (same as carousel but only for toasts here)
     const [toastMessage, setToastMessage] = React.useState<{ title?: string; desc?: string } | null>(null);
+
+    React.useEffect(() => {
+        requestNotificationPermission();
+    }, []);
 
     React.useEffect(() => {
         if (!session) return;

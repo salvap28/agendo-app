@@ -7,6 +7,7 @@ import { ChevronLeft, Zap, Check, Play, Settings } from 'lucide-react';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
 import { GlassButton } from '@/components/ui/glass-button';
 import { cn } from '@/lib/cn';
+import { sendNotification } from '@/lib/utils/notifications';
 
 function RestOverlay({ config }: { config: GymLayerConfig }) {
     const { cancelGymRest, finishGymRest } = useFocusStore();
@@ -20,7 +21,13 @@ function RestOverlay({ config }: { config: GymLayerConfig }) {
             const elapsed = (Date.now() - started) / 1000;
             const remaining = Math.max(0, (config.rest.selectedSec || 0) - elapsed);
             setLeft(Math.ceil(remaining));
-            if (remaining <= 0) finishGymRest();
+            if (remaining <= 0) {
+                sendNotification("¡Descanso terminado!", { 
+                    body: "Preparado para la siguiente serie.",
+                    icon: "/favicon.ico" 
+                });
+                finishGymRest();
+            }
         }, 250);
         return () => clearInterval(interval);
     }, [config.rest.isResting, config.rest.restStartedAt, config.rest.selectedSec, finishGymRest]);

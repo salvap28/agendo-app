@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
+import { sendNotification } from '@/lib/utils/notifications';
 
 export function useRestTimer() {
     const [targetSecs, setTargetSecs] = useState<number | null>(null);
@@ -37,6 +38,10 @@ export function useRestTimer() {
 
             if (remaining <= 0) {
                 // Usually trigger alarm/toast here
+                sendNotification("¡Tiempo de descanso terminado!", { 
+                    body: "Preparado para seguir.",
+                    icon: "/favicon.ico" 
+                });
                 stopRest();
             } else {
                 const m = Math.floor(remaining / 60).toString().padStart(2, '0');
