@@ -28,10 +28,8 @@ export function useStudyCountdown() {
             const start = new Date(state.phaseStartedAt).getTime();
             let end = new Date().getTime();
 
-            // This is simplified: it doesn't pause the countdown when session is paused natively.
-            // For a full MVP, we only run count down if not paused.
-            if (session.isPaused) {
-                return targetDurationSecs; // Or store exact paused elapsed
+            if (session.isPaused && session.pausedAt) {
+                end = new Date(session.pausedAt).getTime();
             }
 
             const elapsedMs = end - start;

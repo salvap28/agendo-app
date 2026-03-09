@@ -161,12 +161,43 @@ export const useFocusStore = create<FocusState>()(
                 const now = new Date();
                 const pausedAt = new Date(session.pausedAt);
                 const pauseDurationMs = now.getTime() - pausedAt.getTime();
+                
+                let activeLayer = session.activeLayer;
+                if (activeLayer) {
+                    if (activeLayer.kind === 'studyTechnique' && activeLayer.config) {
+                        const cfg = activeLayer.config as any;
+                        if (cfg.state && cfg.state.phaseStartedAt) {
+                            const newPhaseStartedAt = new Date(new Date(cfg.state.phaseStartedAt).getTime() + pauseDurationMs).toISOString();
+                            activeLayer = {
+                                ...activeLayer,
+                                config: {
+                                    ...cfg,
+                                    state: { ...cfg.state, phaseStartedAt: newPhaseStartedAt }
+                                }
+                            };
+                        }
+                    } else if (activeLayer.kind === 'gymMode' && activeLayer.config) {
+                        const cfg = activeLayer.config as any;
+                        if (cfg.rest && cfg.rest.isResting && cfg.rest.restStartedAt) {
+                            const newRestStartedAt = new Date(new Date(cfg.rest.restStartedAt).getTime() + pauseDurationMs).toISOString();
+                            activeLayer = {
+                                ...activeLayer,
+                                config: {
+                                    ...cfg,
+                                    rest: { ...cfg.rest, restStartedAt: newRestStartedAt }
+                                }
+                            };
+                        }
+                    }
+                }
+
                 set({
                     session: {
                         ...session,
                         isPaused: false,
                         pausedAt: undefined,
                         totalPausedMs: session.totalPausedMs + pauseDurationMs,
+                        activeLayer,
                         history: [...(session.history || []), 'Resumed']
                     }
                 });
