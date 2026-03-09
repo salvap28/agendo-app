@@ -5,6 +5,7 @@ import { BackgroundEclipse } from "@/components/ui/BackgroundEclipse";
 import { SectionIntro } from "@/components/home/SectionIntro";
 import { SectionContext } from "@/components/home/SectionContext";
 import { SectionCalendar } from "@/components/home/SectionCalendar";
+import { UserMenu } from "@/components/home/UserMenu";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 
@@ -55,6 +56,8 @@ export default function Home() {
 
       <div className={`relative w-full h-[100dvh] overflow-hidden bg-[#020205] text-neutral-100 selection:bg-indigo-500/30 font-sans ${isLoaded ? 'animate-fade-blur' : 'opacity-0'}`}>
         
+        <UserMenu />
+
         {/* --- BACKGROUND LAYERS (Fixed) --- */}
         {!isLowEnd ? (
              <BackgroundEclipse onLoaded={() => setIsLoaded(true)} />
