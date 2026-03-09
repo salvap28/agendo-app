@@ -10,6 +10,7 @@ import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
+import { getBlockColors } from "@/lib/utils/blockColors";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -109,85 +110,158 @@ export function SectionContext({ onNext }: SectionContextProps) {
 
                 {/* Next Block Protagonist */}
                 <div className="flex flex-col items-center w-full">
-                    {nextBlock ? (
-                        <>
-                            {/* Label */}
-                            <span
-                                style={{
-                                    fontSize: '12px',
-                                    letterSpacing: '0.12em',
-                                    textTransform: 'uppercase',
-                                    opacity: 0.5,
-                                    color: '#FFFFFF',
-                                    marginBottom: '16px'
-                                }}
-                            >
-                                {nextBlock.status === "active" ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
-                            </span>
+                    {(() => {
+                        let displayBlock = nextBlock;
+                        let isSessionPaused = false;
+                        let isSessionActive = false;
 
-                            {/* Glass Pill for Block */}
-                            <div
-                                onClick={() => setSelectedBlockId(nextBlock.id)}
-                                className="relative flex flex-col items-center text-center justify-center w-full cursor-pointer hover:scale-[1.02] transition-transform"
-                                style={{
-                                    background: 'rgba(255,255,255,0.04)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    borderRadius: '16px',
-                                    padding: '16px 20px',
-                                    backdropFilter: 'blur(8px)',
-                                    WebkitBackdropFilter: 'blur(8px)',
-                                    maxWidth: '420px'
-                                }}
-                            >
-                                <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
-                                <h3
-                                    className="text-[16px] font-medium text-white/90 mb-1"
+                        if (session) {
+                            if (session.mode === "free") {
+                                displayBlock = {
+                                    id: "free-session",
+                                    type: "other",
+                                    title: "Free Focus Session",
+                                    startAt: new Date(session.startedAt || Date.now()),
+                                    endAt: new Date(),
+                                    status: "active"
+                                } as Block;
+                                isSessionPaused = !session.isActive;
+                                isSessionActive = session.isActive;
+                            } else if (session.blockId) {
+                                const sessionBlock = blocks.find(b => b.id === session.blockId);
+                                if (sessionBlock) {
+                                    displayBlock = sessionBlock;
+                                    isSessionPaused = !session.isActive;
+                                    isSessionActive = session.isActive;
+                                }
+                            }
+                        }
+
+                        if (!displayBlock) {
+                            return (
+                                <div className="flex flex-col items-center text-center w-full">
+                                    <span
+                                        style={{
+                                            fontSize: '12px',
+                                            letterSpacing: '0.12em',
+                                            textTransform: 'uppercase',
+                                            opacity: 0.5,
+                                            color: '#FFFFFF',
+                                            marginBottom: '16px'
+                                        }}
+                                    >
+                                        STATUS
+                                    </span>
+                                    <p
+                                        className="line-clamp-2 text-center"
+                                        style={{
+                                            maxWidth: '420px',
+                                            opacity: 0.75,
+                                            fontWeight: 500,
+                                            color: '#FFFFFF'
+                                        }}
+                                    >
+                                        Your schedule is clear. Plan your day.
+                                    </p>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <>
+                                {/* Label */}
+                                <span
+                                    style={{
+                                        fontSize: '12px',
+                                        letterSpacing: '0.12em',
+                                        textTransform: 'uppercase',
+                                        opacity: isSessionPaused ? 0.9 : 0.5,
+                                        color: isSessionPaused ? '#a78bfa' : '#FFFFFF',
+                                        marginBottom: '16px',
+                                        fontWeight: isSessionPaused ? 600 : 400
+                                    }}
+                                    className={isSessionPaused ? "animate-pulse" : ""}
                                 >
-                                    {nextBlock.title}
-                                </h3>
-                                <p
-                                    className="line-clamp-2 text-center"
+                                    {isSessionPaused ? "SESIÓN PAUSADA - CLICK PARA CONTINUAR" : (isSessionActive || displayBlock.status === "active") ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
+                                </span>
+
+                                {/* Glass Pill for Block */}
+                                <div
+                                    onClick={() => {
+                                        if (isSessionPaused || isSessionActive) {
+                                            returnToFocus();
+                                        } else {
+                                            setSelectedBlockId(displayBlock.id);
+                                        }
+                                    }}
+                                    className={cn(
+                                        "relative flex flex-col items-center text-center justify-center w-full cursor-pointer hover:scale-[1.02] transition-transform rounded-[16px]",
+                                        (isSessionActive || displayBlock.status === "active") && !isSessionPaused ? "overflow-hidden" : "",
+                                        isSessionPaused ? "animate-pulse shadow-[0_0_30px_rgba(124,58,237,0.3)] ring-1 ring-[#a78bfa]/50" : ""
+                                    )}
                                     style={{
                                         maxWidth: '420px',
-                                        opacity: 0.75,
-                                        fontWeight: 400,
-                                        color: '#FFFFFF'
+                                        background: isSessionPaused ? 'rgba(124,58,237,0.1)' : 'transparent'
                                     }}
                                 >
-                                    {nextBlock.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {nextBlock.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    <span className="mx-2 opacity-30">•</span>
-                                    {BLOCK_LABELS[nextBlock.type] || "Focus"}
-                                </p>
+                                    {(isSessionActive || displayBlock.status === "active") && !isSessionPaused ? (() => {
+                                        const colors = getBlockColors(displayBlock.type);
+                                    return (
+                                        <>
+                                            <div
+                                                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
+                                                style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
+                                            />
+                                            <div
+                                                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
+                                                style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
+                                            />
+                                            <div 
+                                                className="absolute inset-[1.5px] rounded-[14.5px] bg-[#0a0b12] backdrop-blur-xl pointer-events-none"
+                                                style={{ border: `1px solid ${colors.innerBorder}` }}
+                                            />
+                                        </>
+                                    );
+                                })() : (
+                                    <>
+                                        <div className="absolute inset-0 rounded-[16px] pointer-events-none" style={{
+                                            background: isSessionPaused ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0.04)',
+                                            border: isSessionPaused ? '1px solid rgba(167,139,250,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                                            backdropFilter: 'blur(8px)',
+                                            WebkitBackdropFilter: 'blur(8px)'
+                                        }} />
+                                        {isSessionPaused ? (
+                                            <GlowingEffect spread={40} proximity={60} inactiveZone={0.01} borderWidth={2} variant="default" />
+                                        ) : (
+                                            <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                        )}
+                                    </>
+                                )}
+
+                                <div className="relative z-10 p-[16px_20px] w-full flex flex-col items-center">
+                                    <h3
+                                        className={cn("text-[16px] font-medium mb-1", isSessionPaused ? "text-[#a78bfa]" : "text-white/90")}
+                                    >
+                                        {displayBlock.title}
+                                    </h3>
+                                    <p
+                                        className="line-clamp-2 text-center"
+                                        style={{
+                                            maxWidth: '420px',
+                                            opacity: 0.75,
+                                            fontWeight: 400,
+                                            color: '#FFFFFF'
+                                        }}
+                                    >
+                                        {displayBlock.id === "free-session" ? "Unscheduled Focus" : `${displayBlock.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${displayBlock.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                        <span className="mx-2 opacity-30">•</span>
+                                        {BLOCK_LABELS[displayBlock.type] || "Focus"}
+                                    </p>
+                                </div>
                             </div>
                         </>
-                    ) : (
-                        <div className="flex flex-col items-center text-center w-full">
-                            {/* Label for empty state to keep vertical rhythm consistent */}
-                            <span
-                                style={{
-                                    fontSize: '12px',
-                                    letterSpacing: '0.12em',
-                                    textTransform: 'uppercase',
-                                    opacity: 0.5,
-                                    color: '#FFFFFF',
-                                    marginBottom: '16px'
-                                }}
-                            >
-                                STATUS
-                            </span>
-                            <p
-                                className="line-clamp-2 text-center"
-                                style={{
-                                    maxWidth: '420px',
-                                    opacity: 0.75,
-                                    fontWeight: 500,
-                                    color: '#FFFFFF'
-                                }}
-                            >
-                                Your schedule is clear. Plan your day.
-                            </p>
-                        </div>
-                    )}
+                    );
+                    })()}
                 </div>
 
                 {/* Actions Group */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { useFocusStore } from "@/lib/stores/focusStore";
 import { Block } from "@/lib/types/blocks";
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
@@ -40,42 +41,62 @@ interface ActiveBlockCardProps {
     block: Block;
     isDeepWork: boolean;
     colors: ReturnType<typeof getBlockColors>;
+    isSessionPaused?: boolean;
     onOpen: () => void;
 }
 
-function ActiveBlockCard({ block, isDeepWork, colors, onOpen }: ActiveBlockCardProps) {
+function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }: ActiveBlockCardProps) {
     const [isHovered, setIsHovered] = useState(false);
 
     return (
         <div
-            className="relative w-full overflow-hidden rounded-[24px] transition-shadow duration-300"
+            className={cn(
+                "relative w-full rounded-[24px] transition-shadow duration-300",
+                isSessionPaused ? "animate-pulse ring-2 ring-opacity-50" : "overflow-hidden"
+            )}
             style={{
-                boxShadow: isHovered
+                boxShadow: isSessionPaused
+                    ? `0 0 30px ${colors.glow1}`
+                    : isHovered
                     ? `0 0 20px 4px ${colors.glow1}, 0 0 40px 8px ${colors.glow2}`
                     : "none",
-            }}
+                "--tw-ring-color": isSessionPaused ? colors.primary : undefined,
+            } as any}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
-            {/* Spinning conic gradient — Layer 1: main dual-streak */}
-            <div
-                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
-                style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
-            />
-            {/* Layer 2: faster sharper streak */}
-            <div
-                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
-                style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
-            />
+            {!isSessionPaused && (
+                <>
+                    {/* Spinning conic gradient — Layer 1: main dual-streak */}
+                    <div
+                        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
+                        style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
+                    />
+                    {/* Layer 2: faster sharper streak */}
+                    <div
+                        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
+                        style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
+                    />
+                </>
+            )}
             {/* Inner button sits 1.5px inset — opaque bg blocks the gradient center */}
             <button
                 onClick={onOpen}
-                className="absolute text-left p-5 rounded-[22.5px] bg-[#0a0b12] backdrop-blur-xl transition-colors duration-200 hover:bg-[#11131e]"
-                style={{ inset: "1.5px", border: `1px solid ${colors.innerBorder}` }}
+                className={cn(
+                    "absolute text-left p-5 backdrop-blur-xl transition-colors duration-200",
+                    isSessionPaused ? "rounded-[24px] bg-[#11131e]/90 hover:bg-[#1a1d2e]/90" : "rounded-[22.5px] bg-[#0a0b12] hover:bg-[#11131e]"
+                )}
+                style={{ 
+                    inset: isSessionPaused ? "0px" : "1.5px", 
+                    border: isSessionPaused ? "none" : `1px solid ${colors.innerBorder}` 
+                }}
             >
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-white/90 font-medium text-[16px] tracking-tight">
+                    <span className="text-white/90 font-medium text-[16px] tracking-tight flex items-center gap-2">
                         {block.title}
+                        {isSessionPaused && (
+                            <span className="text-[9px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-sm" style={{ color: colors.primary, backgroundColor: `${colors.primary}20` }}>Paused</span>
+                        )}
                     </span>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                         <span className="text-[12px] text-white/40 flex items-center gap-1">
@@ -92,7 +113,10 @@ function ActiveBlockCard({ block, isDeepWork, colors, onOpen }: ActiveBlockCardP
             </button>
             {/* Spacer: gives the wrapper its natural height since button is absolute */}
             <div className="invisible p-5">
-                <div className="text-[16px]">{block.title}</div>
+                <div className="text-[16px] flex items-center gap-2">
+                    {block.title}
+                    {isSessionPaused && <span className="text-[9px] px-1.5 py-0.5">Paused</span>}
+                </div>
                 <div className="text-[12px] mt-0.5">{format(block.startAt, "h:mm a")} - {format(block.endAt, "h:mm a")}</div>
             </div>
         </div>
@@ -101,6 +125,7 @@ function ActiveBlockCard({ block, isDeepWork, colors, onOpen }: ActiveBlockCardP
 
 export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelectedBlockId, setIsNewBlock }: DailyAgendaViewProps) {
     const { blocks } = useBlocksStore();
+    const { session, returnToFocus } = useFocusStore();
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
     const [internalSelectedDate, setInternalSelectedDate] = useState(startOfDay(new Date()));
@@ -258,6 +283,9 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                                 const isDeepWork = block.type === "deep_work";
                                 const now = new Date();
                                 const isCurrentlyActive = isSameDay(block.startAt, now) && block.startAt <= now && block.endAt > now;
+                                const isSessionForThisBlock = session?.blockId === block.id;
+                                const isSessionPaused = isSessionForThisBlock && !session.isActive;
+                                const isSessionRunning = isSessionForThisBlock && session.isActive;
                                 const colors = getBlockColors(block.type);
 
                                 return (
@@ -277,15 +305,20 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                                         <div className="absolute -left-[16.5px] top-[18px] w-1.5 h-1.5 rounded-full bg-white/30 shadow-[0_0_8px_rgba(255,255,255,0.3)]" />
 
                                         {/* Glass System Card */}
-                                        {isCurrentlyActive ? (
-                                            // OUTER: animated gradient wrapper
+                                        {isCurrentlyActive || isSessionForThisBlock ? (
+                                            // OUTER: animated gradient wrapper or paused style
                                             <ActiveBlockCard
                                                 block={block}
                                                 isDeepWork={isDeepWork}
                                                 colors={colors}
+                                                isSessionPaused={isSessionPaused}
                                                 onOpen={() => {
-                                                    setIsNewBlock?.(false);
-                                                    setSelectedBlockId?.(block.id);
+                                                    if (isSessionPaused || isSessionRunning) {
+                                                        returnToFocus();
+                                                    } else {
+                                                        setIsNewBlock?.(false);
+                                                        setSelectedBlockId?.(block.id);
+                                                    }
                                                 }}
                                             />
                                         ) : (
