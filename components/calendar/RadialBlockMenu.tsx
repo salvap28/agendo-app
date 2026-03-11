@@ -105,6 +105,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [mounted, setMounted] = useState(false);
     const [pressedType, setPressedType] = useState<BlockType | null>(null);
     const [primaryRadius, setPrimaryRadius] = useState(PRIMARY_ORBIT_RADIUS_DESKTOP);
+    const [isAddingNotification, setIsAddingNotification] = useState(false);
+    const [customNotificationMins, setCustomNotificationMins] = useState("");
 
     useEffect(() => {
         setMounted(true);
@@ -399,13 +401,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     // Handlers directos
     const handleBackgroundClick = (e: React.MouseEvent) => {
-        if (e.target === containerRef.current) {
-            if (activePrimaryNode || isDeleteConfirming || isFocusConfirming) {
+        if (e.target === e.currentTarget) {
+            if (activePrimaryNode && activePrimaryNode !== "center") {
                 setActivePrimaryNode(null);
-                setIsDeleteConfirming(false);
-                setIsFocusConfirming(false);
-            } else {
+            } else if (guidedStep === "center") {
                 handleClose();
+            } else {
+                setActivePrimaryNode(null);
+                setGuidedStep("center");
             }
         }
     };
@@ -522,7 +525,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             {/* Dark glass backdrop */}
             <div
                 className={cn("absolute inset-0 bg-black/75 backdrop-blur-2xl", activePrimaryNode ? "pointer-events-auto" : "pointer-events-none")}
-                onTouchMove={(e) => { if (activePrimaryNode) e.stopPropagation(); }}
+                onClick={handleBackgroundClick}
             />
 
             {/* BOTÓN VOLVER (Fuera del zoom/paneo para que siempre esté fijo) */}
@@ -573,17 +576,20 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     }}
                 />
 
-                {/* ── SOL CENTRAL (Bloque) ── */}
+                {/* ── CENTRAL SUN COMPONENTS ── */}
+
                 <div
                     className={cn(
-                        "group absolute pointer-events-auto flex flex-col items-center justify-center rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl transition-all duration-500 shadow-[0_0_80px_rgba(255,255,255,0.1)]",
+                        "group absolute pointer-events-auto flex flex-col items-center justify-center transition-all duration-500",
                         activePrimaryNode && activePrimaryNode !== "center" && activePrimaryNode !== "notifications" ? "z-10 opacity-30 scale-95 blur-sm cursor-pointer" : "z-[100] opacity-100",
-                        activePrimaryNode === "center" || activePrimaryNode === "notifications" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default` : "p-6 w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30 hover:border-indigo-400/30 hover:shadow-[0_0_40px_rgba(129,140,248,0.2)]"
+                        activePrimaryNode === "center" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl shadow-[0_0_30px_rgba(255,255,255,0.05)] hover:shadow-[0_0_60px_rgba(255,255,255,0.15)]` :
+                            activePrimaryNode === "notifications" ? "cursor-default border-none bg-transparent shadow-none w-0 h-0" :
+                                "p-6 rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl shadow-[0_0_30px_rgba(255,255,255,0.05)] hover:shadow-[0_0_60px_rgba(255,255,255,0.15)] w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30"
                     )}
                     onClick={() => {
                         if (activePrimaryNode === "center" || activePrimaryNode === "notifications") return;
-                        if (activePrimaryNode) setActivePrimaryNode(null);
-                        else setActivePrimaryNode("center");
+                        setActivePrimaryNode("center");
+                        setGuidedStep("center");
                     }}
                     style={{
                         animation: `spring-out 600ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH`
@@ -752,45 +758,117 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                             </div>
                         </div>
                     ) : activePrimaryNode === "notifications" ? (
-                        <div className="flex flex-col w-full gap-3 relative z-10 animate-in fade-in zoom-in-95 duration-300">
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 text-center mb-1">Avisos de inicio</span>
-                            <div className="grid grid-cols-2 gap-2 w-full">
-                                {[
-                                    { value: 0, label: "En el momento" },
-                                    { value: 5, label: "5 min antes" },
-                                    { value: 10, label: "10 min antes" },
-                                    { value: 15, label: "15 min antes" },
-                                    { value: 30, label: "30 min antes" },
-                                    { value: 60, label: "1 hora antes" },
-                                ].map(opt => {
-                                    const isActive = block.notifications?.includes(opt.value) || (opt.value === 5 && !block.notifications && block.notifications !== null);
-                                    return (
-                                        <button
-                                            key={opt.value}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                let current = block.notifications || [5];
-                                                if (current.includes(opt.value)) {
-                                                    current = current.filter(v => v !== opt.value);
-                                                } else {
-                                                    current = [...current, opt.value].sort((a, b) => a - b);
-                                                }
-                                                updateBlock(block.id, { notifications: current });
-                                            }}
-                                            className={cn(
-                                                "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-300 text-[10.5px] font-semibold border backdrop-blur-md",
-                                                isActive
-                                                    ? "bg-amber-500/20 text-amber-100 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-                                                    : "bg-black/40 text-white/50 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white/90"
-                                            )}
-                                        >
-                                            <span className="leading-tight">{opt.label}</span>
-                                            {isActive && <CheckCircle2 className="w-[14px] h-[14px] text-amber-400 shrink-0 ml-1" />}
-                                        </button>
-                                    );
-                                })}
+                        <>
+                            {/* SATELLITE "+" BUTTON ORBITING TOP */}
+                            <div
+                                className="absolute pointer-events-auto z-[105]"
+                                style={{
+                                    left: '50%',
+                                    top: '50%',
+                                    transform: `translate(-50%, -100px)` // Sits directly on the Y axis above the sun
+                                }}
+                            >
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsAddingNotification((prev) => !prev);
+                                        setCustomNotificationMins("5");
+                                    }}
+                                    className={cn(
+                                        "w-12 h-12 flex items-center justify-center rounded-full transition-all duration-300 ease-out shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-white/10 group active:scale-95",
+                                        isAddingNotification
+                                            ? "bg-amber-500/20 border-amber-500/50 shadow-[0_0_25px_rgba(245,158,11,0.3)] ring-amber-500/30 rotate-45"
+                                            : "bg-black/60 border-white/20 backdrop-blur-md hover:bg-black/80 hover:border-amber-500/40 hover:shadow-[0_0_25px_rgba(245,158,11,0.25)] hover:ring-amber-500/20"
+                                    )}
+                                >
+                                    <span className={cn(
+                                        "text-2xl font-light mb-0.5 transition-colors duration-300",
+                                        isAddingNotification ? "text-amber-400" : "text-white/60 group-hover:text-amber-300"
+                                    )}>+</span>
+                                    <GlowingEffect spread={isAddingNotification ? 35 : 20} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                </button>
                             </div>
-                        </div>
+
+                            {/* THE LIST HANGING BELOW */}
+                            <div
+                                className="flex flex-col items-center w-[220px] absolute z-10 animate-in fade-in zoom-in-95 duration-300 pointer-events-auto cursor-auto"
+                                style={{
+                                    left: '50%',
+                                    top: '50%',
+                                    transform: `translate(-50%, 70px)`
+                                }}
+                            >
+                                <div className="flex flex-col w-full gap-2.5 max-h-[160px] overflow-y-auto pr-2">
+                                    {(block.notifications || []).sort((a, b) => a - b).map(offset => (
+                                        <div key={offset} className="flex items-center justify-between w-full h-11 px-4 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] ring-1 ring-white/5 group hover:border-amber-500/30 hover:bg-black/60 transition-all duration-300">
+                                            <div className="flex items-center gap-2.5">
+                                                <Bell className="w-4 h-4 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
+                                                <span className="text-[13px] font-medium text-white/90 tracking-wide">
+                                                    {offset === 0 ? "En el momento" : `${offset} min antes`}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateBlock(block.id, { notifications: block.notifications?.filter(n => n !== offset) || [] });
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/20 text-white/20 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+
+                                    {isAddingNotification && (
+                                        <div className="flex items-center justify-between w-full h-11 px-3 rounded-2xl bg-black/60 border border-amber-500/40 backdrop-blur-xl animate-in slide-in-from-bottom-2 fade-in shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/20" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center gap-2 flex-1 relative">
+                                                <Bell className="w-4 h-4 text-amber-400 ml-1" />
+                                                <Input
+                                                    autoFocus
+                                                    type="number"
+                                                    min="0"
+                                                    value={customNotificationMins}
+                                                    onChange={(e) => setCustomNotificationMins(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                            const val = parseInt(customNotificationMins, 10);
+                                                            if (!isNaN(val) && val >= 0) {
+                                                                const current = block.notifications || [];
+                                                                if (!current.includes(val)) {
+                                                                    updateBlock(block.id, { notifications: [...current, val] });
+                                                                }
+                                                            }
+                                                            setIsAddingNotification(false);
+                                                        }
+                                                        if (e.key === "Escape") setIsAddingNotification(false);
+                                                    }}
+                                                    className="w-14 h-8 text-center px-1 rounded-md bg-transparent border-b border-amber-500/30 text-white font-semibold text-[14px] focus-visible:ring-0 focus-visible:border-amber-400 focus-visible:bg-black/40 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none placeholder:text-white/20"
+                                                    placeholder="0"
+                                                />
+                                                <span className="text-[12px] font-medium text-white/50">min</span>
+                                            </div>
+
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const val = parseInt(customNotificationMins, 10);
+                                                    if (!isNaN(val) && val >= 0) {
+                                                        const current = block.notifications || [];
+                                                        if (!current.includes(val)) {
+                                                            updateBlock(block.id, { notifications: [...current, val] });
+                                                        }
+                                                    }
+                                                    setIsAddingNotification(false);
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center rounded-full text-amber-950 bg-amber-500 hover:bg-amber-400 transition-all ml-1 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
                     ) : (
                         <>
                             <div className="flex flex-col items-center justify-center group-hover:scale-[1.05] transition-transform duration-300">
@@ -845,16 +923,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` :
                                                 isFocused && pn.id === "time" ? "w-28 flex-shrink-0 rounded-full" : `${pillWidthDefault} hover:${scaleExpanded}`,
                                         "active:scale-95",
+                                        pn.color,
                                         isFocused && pn.id === "time"
                                             ? `${scaleExpanded} bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)] border-white/15`
                                             : isFocused || (pn.id === "focus" && isFocusConfirming)
                                                 ? `${scaleExpanded} shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
-                                                : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
-                                        pn.id === "focus" && !isFocusConfirming && "hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:border-purple-500/50" // Distinctive focus hover
+                                                : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30 hover:shadow-[0_0_25px_currentColor]`,
+                                        pn.id === "focus" && !isFocusConfirming && "hover:shadow-[0_0_25px_currentColor] hover:border-purple-500/50" // Distinctive focus hover
                                     )}
-                                    style={{
-                                        color: isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) || (pn.id === "focus" && isFocusConfirming) ? 'white' : undefined,
-                                    }}
                                 >
                                     <GlowingEffect spread={35} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" />
                                     {isFocused && pn.id !== "focus" && (
@@ -955,7 +1031,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                                 ? (isMobile ? "max-w-[132px] px-3.5 justify-start" : "max-w-[200px] px-5 justify-start")
                                                                 : "px-0 justify-center hover:max-w-[200px] hover:px-5 hover:justify-start",
                                                             tn.hoverBg, "hover:border-transparent",
-                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_15px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30",
+                                                            tn.color,
+                                                            isSelected ? `${tn.bg} border ${tn.color.replace('text-', 'border-')} shadow-[0_0_20px_currentColor]` : "bg-black/80 border border-white/10 backdrop-blur-sm hover:border-white/30 hover:shadow-[0_0_15px_currentColor]",
                                                             isPressing && "border-transparent"
                                                         )}
                                                     >
@@ -1008,13 +1085,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         className={cn(
                                                             "pointer-events-auto flex items-center gap-2 rounded-full whitespace-nowrap transition-all duration-300 hover:scale-110 active:scale-95 relative overflow-hidden",
                                                             "h-11 px-4",
-                                                            isSelected ? `${sn.bg} border ${sn.color.replace('text-', 'border-')}` : `bg-black/80 border border-white/10 backdrop-blur-sm hover:${sn.bg} hover:border-${sn.color.replace('text-', '')}/30`
+                                                            sn.color,
+                                                            isSelected ? `${sn.bg} border ${sn.color.replace('text-', 'border-')} shadow-[0_0_20px_currentColor]` : `bg-black/80 border border-white/10 backdrop-blur-sm hover:${sn.bg} hover:border-${sn.color.replace('text-', '')}/30 hover:shadow-[0_0_15px_currentColor]`
                                                         )}
                                                     >
                                                         <GlowingEffect spread={30} proximity={70} inactiveZone={0.01} borderWidth={1} variant="subtle" />
-                                                        <div className="flex items-center gap-2 relative z-10">
-                                                            <LIcon className={cn("w-4 h-4", sn.color)} />
-                                                            <span className={cn("text-xs font-bold truncate", sn.color)}>{statusLabel}</span>
+                                                        <div className="flex items-center gap-2 relative z-10 text-current">
+                                                            <LIcon className="w-4 h-4" />
+                                                            <span className="text-xs font-bold truncate">{statusLabel}</span>
                                                         </div>
                                                     </button>
                                                 </div>
@@ -1034,7 +1112,19 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                 <CircularTimePicker
                                                     hideCenterText
                                                     startMins={localTime.start!.getHours() * 60 + localTime.start!.getMinutes()}
-                                                    endMins={localTime.end!.getHours() * 60 + localTime.end!.getMinutes()}
+                                                    endMins={localTime.end!.getHours() * 60 + localTime.end!.getMinutes() +
+                                                        (localTime.end!.getDate() !== localTime.start!.getDate() ? 1440 : 0)}
+                                                    busyBlocks={blocks.filter(b =>
+                                                        b.id !== block.id &&
+                                                        b.startAt.getFullYear() === localTime.start!.getFullYear() &&
+                                                        b.startAt.getMonth() === localTime.start!.getMonth() &&
+                                                        b.startAt.getDate() === localTime.start!.getDate()
+                                                    ).map(b => {
+                                                        const sMins = b.startAt.getHours() * 60 + b.startAt.getMinutes();
+                                                        let eMins = b.endAt.getHours() * 60 + b.endAt.getMinutes();
+                                                        if (b.endAt.getDate() !== b.startAt.getDate()) eMins += 1440;
+                                                        return { start: sMins, end: eMins };
+                                                    })}
                                                     onChange={(start: number, end: number) => {
                                                         const newStart = new Date(localTime.start!);
                                                         newStart.setHours(Math.floor(start / 60), start % 60, 0, 0);

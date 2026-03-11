@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { createClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
 import { BellRing, Check } from "lucide-react";
+import { requestNotificationPermission } from "@/lib/utils/notifications";
 
 const supabase = createClient();
 
@@ -64,10 +65,10 @@ export default function NotificationsTab() {
                     onClick={handleTestNotification}
                     disabled={testStatus === "waiting"}
                     className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg ${testStatus === "sent"
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
-                            : testStatus === "waiting"
-                                ? "bg-indigo-500/50 text-white cursor-wait animate-pulse border border-indigo-400/50"
-                                : "bg-primary border border-white/20 text-white hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(currentColor,0.4)]"
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+                        : testStatus === "waiting"
+                            ? "bg-indigo-500/50 text-white cursor-wait animate-pulse border border-indigo-400/50"
+                            : "bg-primary border border-white/20 text-white hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(currentColor,0.4)]"
                         }`}
                 >
                     {testStatus === "sent" ? (
@@ -94,7 +95,16 @@ export default function NotificationsTab() {
                         </div>
                         <GlassSwitch
                             checked={settings.notify_block_reminders}
-                            onCheckedChange={(val) => updateSetting('notify_block_reminders', val)}
+                            onCheckedChange={async (val) => {
+                                if (val) {
+                                    const granted = await requestNotificationPermission();
+                                    if (!granted) {
+                                        alert("Necesitás habilitar permisos en tu navegador/celular para activar las notificaciones.");
+                                        return;
+                                    }
+                                }
+                                updateSetting('notify_block_reminders', val);
+                            }}
                         />
                     </div>
                 </div>
