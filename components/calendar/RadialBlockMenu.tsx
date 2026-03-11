@@ -801,11 +801,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         "flex items-center justify-center border transition-all duration-300 backdrop-blur-md relative overflow-hidden",
                                         pillHeightClass,
                                         pn.id === "focus" && isFocusConfirming ? pillWidthExpanded :
-                                            pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` : `${pillWidthDefault} hover:${scaleExpanded}`,
+                                            pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` :
+                                                isFocused && pn.id === "time" ? "w-28 flex-shrink-0 rounded-full" : `${pillWidthDefault} hover:${scaleExpanded}`,
                                         "active:scale-95",
-                                        isFocused || (pn.id === "focus" && isFocusConfirming)
-                                            ? `${scaleExpanded} shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
-                                            : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
+                                        isFocused && pn.id === "time"
+                                            ? `${scaleExpanded} bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)] border-white/15`
+                                            : isFocused || (pn.id === "focus" && isFocusConfirming)
+                                                ? `${scaleExpanded} shadow-[0_0_30px_currentColor] border-white/40 ${pn.bg}`
+                                                : pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? "" : `bg-[#0c0c0f] border-white/10 hover:${pn.bg} hover:border-${pn.color.replace('text-', '')}/30`,
                                         pn.id === "focus" && !isFocusConfirming && "hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:border-purple-500/50" // Distinctive focus hover
                                     )}
                                     style={{
@@ -817,7 +820,21 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         <div className="absolute inset-0 rounded-full animate-ping opacity-20 border border-current" />
                                     )}
                                     <div className={cn("flex items-center relative z-10 transition-all duration-300", (pn.id === "focus" && isFocusConfirming) || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) ? "gap-2" : "gap-0")}>
-                                        <PIcon className={cn("w-6 h-6", isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) || (pn.id === "focus" && isFocusConfirming) ? "text-white" : pn.color)} />
+                                        {isFocused && pn.id === "time" ? (() => {
+                                            const diffMs = (localTime.end?.getTime() ?? 0) - (localTime.start?.getTime() ?? 0);
+                                            let diffMins = Math.round(diffMs / 60000);
+                                            if (diffMins < 0) diffMins += 1440;
+                                            const hrs = Math.floor(diffMins / 60);
+                                            const mins = diffMins % 60;
+                                            const durationStr = hrs === 0 ? `${mins}m` : mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
+                                            return (
+                                                <span className="text-lg font-bold text-white tracking-tight whitespace-nowrap">
+                                                    {durationStr}
+                                                </span>
+                                            );
+                                        })() : (
+                                            <PIcon className={cn("w-6 h-6", isFocused || (pn.id === "delete" && isDeleteConfirming && !block.recurrenceId) || (pn.id === "focus" && isFocusConfirming) ? "text-white" : pn.color)} />
+                                        )}
                                         {pn.id === "focus" && (
                                             <span
                                                 className={cn(

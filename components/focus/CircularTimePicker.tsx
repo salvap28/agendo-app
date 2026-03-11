@@ -278,13 +278,44 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
                 className="overflow-visible"
             >
+                {/* Dial Ticks & Numbers */}
+                <g className="pointer-events-none select-none">
+                    {Array.from({ length: 12 }).map((_, i) => {
+                        const angle = (i / 12) * 2 * Math.PI - Math.PI / 2;
+                        const outerP = { x: CENTER + RADIUS * Math.cos(angle), y: CENTER + RADIUS * Math.sin(angle) };
+                        const isMainHour = i === 0 || i === 3 || i === 6 || i === 9;
+                        const tickLength = isMainHour ? 10 : 5;
+                        const innerP = { x: CENTER + (RADIUS - tickLength) * Math.cos(angle), y: CENTER + (RADIUS - tickLength) * Math.sin(angle) };
+                        const textP = { x: CENTER + (RADIUS - 24) * Math.cos(angle), y: CENTER + (RADIUS - 24) * Math.sin(angle) };
+
+                        const num = i === 0 ? 12 : i;
+
+                        return (
+                            <g key={i}>
+                                <line
+                                    x1={innerP.x} y1={innerP.y}
+                                    x2={outerP.x} y2={outerP.y}
+                                    stroke="rgba(255,255,255,0.15)"
+                                    strokeWidth={isMainHour ? 2 : 1.5}
+                                    strokeLinecap="round"
+                                />
+                                {isMainHour && (
+                                    <text x={textP.x} y={textP.y} fill="rgba(255,255,255,0.4)" fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle">
+                                        {num}
+                                    </text>
+                                )}
+                            </g>
+                        );
+                    })}
+                </g>
+
                 {/* Base Track */}
                 <circle
                     cx={CENTER}
                     cy={CENTER}
                     r={RADIUS}
                     fill="none"
-                    stroke="rgba(255,255,255,0.1)"
+                    stroke="rgba(255,255,255,0.06)"
                     strokeWidth={STROKE_WIDTH}
                 />
 
@@ -334,8 +365,9 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 {/* Active Arc - Main gradient */}
                 <defs>
                     <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#7C3AED" />
-                        <stop offset="100%" stopColor="#4F46E5" />
+                        <stop offset="0%" stopColor="#818cf8" />
+                        <stop offset="50%" stopColor="#a855f7" />
+                        <stop offset="100%" stopColor="#ec4899" />
                     </linearGradient>
                 </defs>
                 <path
@@ -365,8 +397,8 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                     <text x={-25} y={-12} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="end">
                         start
                     </text>
-                    <text x={-25} y={4} fill="rgba(255,255,255,0.9)" fontSize="14" fontWeight="600" dominantBaseline="middle" textAnchor="end">
-                        {formatTimeShort(startMins)}
+                    <text x={-25} y={4} fill="rgba(255,255,255,0.9)" fontSize="13" fontWeight="600" dominantBaseline="middle" textAnchor="end">
+                        {formatTime(startMins)}
                     </text>
                 </g>
 
@@ -387,8 +419,8 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                     <text x={25} y={-12} fill="rgba(255,255,255,0.4)" fontSize="10" fontWeight="500" dominantBaseline="middle" textAnchor="start">
                         end
                     </text>
-                    <text x={25} y={4} fill="rgba(255,255,255,0.9)" fontSize="14" fontWeight="600" dominantBaseline="middle" textAnchor="start">
-                        {formatTimeShort(endMins)}
+                    <text x={25} y={4} fill="rgba(255,255,255,0.9)" fontSize="13" fontWeight="600" dominantBaseline="middle" textAnchor="start">
+                        {formatTime(endMins)}
                     </text>
                 </g>
             </svg>

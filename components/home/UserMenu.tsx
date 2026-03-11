@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 
@@ -61,7 +61,7 @@ export function UserMenu() {
     const handleLogout = async () => {
         const supabase = createClient();
         await supabase.auth.signOut();
-        router.push("/auth/login");
+        router.push("/login");
         router.refresh(); // Refresh to clear states
     };
 
@@ -73,28 +73,22 @@ export function UserMenu() {
     return (
         <div
             ref={menuRef}
-            className={cn(
-                "fixed top-[max(env(safe-area-inset-top),1.5rem)] inset-x-0 w-full flex justify-center z-[100] transition-all duration-300",
-                isScrolled ? "opacity-30 hover:opacity-100" : "opacity-100"
-            )}
+            className="absolute top-[max(env(safe-area-inset-top),1.5rem)] inset-x-0 w-full flex justify-center z-[100] transition-all duration-300"
         >
             <div className="relative">
                 <button
                     onClick={() => setIsOpen(!isOpen)}
-                    className="flex items-center gap-2 group px-4 py-2 rounded-full bg-white/[0.03] hover:bg-white/[0.08] backdrop-blur-md border border-white/5 transition-all shadow-[0_4px_24px_-4px_rgba(0,0,0,0.3)]"
+                    className="flex items-center gap-2 group px-2 py-1 transition-all"
                 >
-                    <span className="text-white/90 text-sm font-medium tracking-wide">
+                    <span className="text-white text-base font-medium tracking-wide drop-shadow-sm">
                         {userName}
                     </span>
-                    <span
+                    <ChevronDown
                         className={cn(
-                            "text-white/50 text-[10px] sm:text-xs font-mono transition-transform duration-300",
-                            isOpen ? "rotate-0 text-white/90" : "rotate-180"
+                            "w-5 h-5 text-white transition-transform duration-300 drop-shadow-sm group-hover:translate-y-[2px]",
+                            isOpen ? "rotate-180" : "rotate-0"
                         )}
-                        style={{ marginTop: isOpen ? '4px' : '-2px' }}
-                    >
-                        ^
-                    </span>
+                    />
                 </button>
 
                 {/* Dropdown elements */}

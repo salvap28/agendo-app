@@ -4,16 +4,14 @@ import { useEffect, useState } from "react";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { createClient } from "@/lib/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+import { GlassSwitch } from "@/components/ui/glass-switch";
 
 const supabase = createClient();
 
 export default function PreferencesTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
-    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        setMounted(true);
         async function init() {
             if (!isInitialized) {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -25,11 +23,8 @@ export default function PreferencesTab() {
         init();
     }, [isInitialized, fetchSettings]);
 
-    // Evita el flash de hidratación del SSR, pero carga instantáneamente del local storage
-    if (!mounted) return null;
-
     return (
-        <div className="flex flex-col gap-8 w-full">
+        <div suppressHydrationWarning className="flex flex-col gap-8 w-full">
             <div>
                 <h1 className="text-3xl font-semibold mb-3">Preferencias</h1>
                 <p className="text-foreground/60 text-base">Configura cómo funciona Agendo por defecto.</p>
@@ -85,28 +80,60 @@ export default function PreferencesTab() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="flex flex-col gap-3">
                             <label className="text-sm text-foreground/80 font-medium">Minutos de Enfoque Predeterminados</label>
-                            <div className="flex items-center gap-4">
-                                <Input
-                                    type="number"
-                                    min="1" max="120"
-                                    value={settings.focus_default_minutes}
-                                    onChange={(e) => updateSetting('focus_default_minutes', parseInt(e.target.value) || 25)}
-                                    className="bg-black/20 border-white/10 h-12 rounded-xl w-32 text-center text-lg"
-                                />
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('focus_default_minutes', Math.max(1, settings.focus_default_minutes - 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.focus_default_minutes}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('focus_default_minutes', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('focus_default_minutes', Math.min(120, settings.focus_default_minutes + 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
                                 <span className="text-base text-foreground/50 font-medium">min</span>
                             </div>
                         </div>
 
                         <div className="flex flex-col gap-3">
                             <label className="text-sm text-foreground/80 font-medium">Minutos de Descanso Predeterminados</label>
-                            <div className="flex items-center gap-4">
-                                <Input
-                                    type="number"
-                                    min="1" max="60"
-                                    value={settings.rest_default_minutes}
-                                    onChange={(e) => updateSetting('rest_default_minutes', parseInt(e.target.value) || 5)}
-                                    className="bg-black/20 border-white/10 h-12 rounded-xl w-32 text-center text-lg"
-                                />
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('rest_default_minutes', Math.max(1, settings.rest_default_minutes - 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.rest_default_minutes}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('rest_default_minutes', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('rest_default_minutes', Math.min(60, settings.rest_default_minutes + 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
                                 <span className="text-base text-foreground/50 font-medium">min</span>
                             </div>
                         </div>
@@ -117,16 +144,10 @@ export default function PreferencesTab() {
                             <h4 className="text-base font-medium text-foreground/90">Iniciar descanso automáticamente</h4>
                             <p className="text-sm text-foreground/50 max-w-[80%]">Al terminar un bloque de concentración, el contador de descanso inicia solo para que no pierdas el ritmo.</p>
                         </div>
-                        <button
-                            onClick={() => updateSetting('auto_start_rest', !settings.auto_start_rest)}
-                            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-[#0a0b12] ${settings.auto_start_rest ? 'bg-primary' : 'bg-white/20'
-                                }`}
-                        >
-                            <span
-                                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.auto_start_rest ? 'translate-x-7' : 'translate-x-1'
-                                    }`}
-                            />
-                        </button>
+                        <GlassSwitch
+                            checked={settings.auto_start_rest}
+                            onCheckedChange={(val) => updateSetting('auto_start_rest', val)}
+                        />
                     </div>
                 </div>
 

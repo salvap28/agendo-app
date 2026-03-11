@@ -12,6 +12,10 @@ export interface UserSettings {
     focus_default_minutes: number;
     rest_default_minutes: number;
     auto_start_rest: boolean;
+    notify_block_reminders: boolean;
+    notify_focus_timer: boolean;
+    notify_gym_rest: boolean;
+    notify_daily_briefing: boolean;
 }
 
 const defaultSettings: UserSettings = {
@@ -22,6 +26,10 @@ const defaultSettings: UserSettings = {
     focus_default_minutes: 25,
     rest_default_minutes: 5,
     auto_start_rest: false,
+    notify_block_reminders: true,
+    notify_focus_timer: true,
+    notify_gym_rest: true,
+    notify_daily_briefing: true,
 };
 
 interface SettingsState {
@@ -64,7 +72,7 @@ export const useSettingsStore = create<SettingsState>()(
                             }
                         } else {
                             // If table is missing, just ignore and use defaults.
-                            if (error.code !== '42P01') {
+                            if (error.code !== '42P01' && !error.message?.includes('schema cache')) {
                                 console.error('Error al cargar configuración:', error.message || error);
                             }
                         }
@@ -99,7 +107,7 @@ export const useSettingsStore = create<SettingsState>()(
                         .update({ [key]: value })
                         .eq('user_id', userId);
 
-                    if (error && error.code !== '42P01') {
+                    if (error && error.code !== '42P01' && !error.message?.includes('schema cache')) {
                         console.error('Error al guardar configuración en BD:', error.message || error);
                     }
                 } catch (error: any) {

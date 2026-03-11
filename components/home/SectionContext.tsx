@@ -90,7 +90,6 @@ export function SectionContext({ onNext }: SectionContextProps) {
     return (
         <section
             className="relative w-full min-h-[100dvh] snap-start flex flex-col items-center justify-center p-6"
-            style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.4))' }}
         >
             <div className="flex flex-col items-center w-full z-20">
 
@@ -206,61 +205,61 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                 >
                                     {(isSessionActive || displayBlock.status === "active") && !isSessionPaused ? (() => {
                                         const colors = getBlockColors(displayBlock.type);
-                                    return (
+                                        return (
+                                            <>
+                                                <div
+                                                    className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
+                                                    style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
+                                                />
+                                                <div
+                                                    className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
+                                                    style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
+                                                />
+                                                <div
+                                                    className="absolute inset-[1.5px] rounded-[14.5px] bg-[#0a0b12] backdrop-blur-xl pointer-events-none"
+                                                    style={{ border: `1px solid ${colors.innerBorder}` }}
+                                                />
+                                            </>
+                                        );
+                                    })() : (
                                         <>
-                                            <div
-                                                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
-                                                style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
-                                            />
-                                            <div
-                                                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
-                                                style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
-                                            />
-                                            <div 
-                                                className="absolute inset-[1.5px] rounded-[14.5px] bg-[#0a0b12] backdrop-blur-xl pointer-events-none"
-                                                style={{ border: `1px solid ${colors.innerBorder}` }}
-                                            />
+                                            <div className="absolute inset-0 rounded-[16px] pointer-events-none" style={{
+                                                background: isSessionPaused ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0.04)',
+                                                border: isSessionPaused ? '1px solid rgba(167,139,250,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                                                backdropFilter: 'blur(8px)',
+                                                WebkitBackdropFilter: 'blur(8px)'
+                                            }} />
+                                            {isSessionPaused ? (
+                                                <GlowingEffect spread={40} proximity={60} inactiveZone={0.01} borderWidth={2} variant="default" />
+                                            ) : (
+                                                <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                            )}
                                         </>
-                                    );
-                                })() : (
-                                    <>
-                                        <div className="absolute inset-0 rounded-[16px] pointer-events-none" style={{
-                                            background: isSessionPaused ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0.04)',
-                                            border: isSessionPaused ? '1px solid rgba(167,139,250,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                                            backdropFilter: 'blur(8px)',
-                                            WebkitBackdropFilter: 'blur(8px)'
-                                        }} />
-                                        {isSessionPaused ? (
-                                            <GlowingEffect spread={40} proximity={60} inactiveZone={0.01} borderWidth={2} variant="default" />
-                                        ) : (
-                                            <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
-                                        )}
-                                    </>
-                                )}
+                                    )}
 
-                                <div className="relative z-10 p-[16px_20px] w-full flex flex-col items-center">
-                                    <h3
-                                        className={cn("text-[16px] font-medium mb-1", isSessionPaused ? "text-[#a78bfa]" : "text-white/90")}
-                                    >
-                                        {displayBlock.title}
-                                    </h3>
-                                    <p
-                                        className="line-clamp-2 text-center"
-                                        style={{
-                                            maxWidth: '420px',
-                                            opacity: 0.75,
-                                            fontWeight: 400,
-                                            color: '#FFFFFF'
-                                        }}
-                                    >
-                                        {displayBlock.id === "free-session" ? "Unscheduled Focus" : `${displayBlock.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${displayBlock.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                                        <span className="mx-2 opacity-30">•</span>
-                                        {BLOCK_LABELS[displayBlock.type] || "Focus"}
-                                    </p>
+                                    <div className="relative z-10 p-[16px_20px] w-full flex flex-col items-center">
+                                        <h3
+                                            className={cn("text-[16px] font-medium mb-1", isSessionPaused ? "text-[#a78bfa]" : "text-white/90")}
+                                        >
+                                            {displayBlock.title}
+                                        </h3>
+                                        <p
+                                            className="line-clamp-2 text-center"
+                                            style={{
+                                                maxWidth: '420px',
+                                                opacity: 0.75,
+                                                fontWeight: 400,
+                                                color: '#FFFFFF'
+                                            }}
+                                        >
+                                            {displayBlock.id === "free-session" ? "Unscheduled Focus" : `${displayBlock.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${displayBlock.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                            <span className="mx-2 opacity-30">•</span>
+                                            {BLOCK_LABELS[displayBlock.type] || "Focus"}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        </>
-                    );
+                            </>
+                        );
                     })()}
                 </div>
 

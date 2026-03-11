@@ -17,7 +17,7 @@ export default function Home() {
   const calendarRef = useRef<HTMLElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const { fetchBlocks, isLoaded: blocksLoaded } = useBlocksStore();
-  
+
   // Performance Detection
   const { isLowEnd } = usePerformancePreference();
 
@@ -29,11 +29,11 @@ export default function Home() {
 
   // Immediately resolve loading state if we are dropping the heavy 3D background
   useEffect(() => {
-     if (isLowEnd) {
-         // Tiny delay just for a smooth fade-in sensation
-         const t = setTimeout(() => setIsLoaded(true), 150);
-         return () => clearTimeout(t);
-     }
+    if (isLowEnd) {
+      // Tiny delay just for a smooth fade-in sensation
+      const t = setTimeout(() => setIsLoaded(true), 150);
+      return () => clearTimeout(t);
+    }
   }, [isLowEnd]);
 
   const scrollToSection = (ref: React.RefObject<HTMLElement | null>) => {
@@ -55,26 +55,27 @@ export default function Home() {
       </div>
 
       <div className={`relative w-full h-[100dvh] overflow-hidden bg-[#020205] text-neutral-100 selection:bg-indigo-500/30 font-sans ${isLoaded ? 'animate-fade-blur' : 'opacity-0'}`}>
-        
-        <UserMenu />
 
         {/* --- BACKGROUND LAYERS (Fixed) --- */}
         {!isLowEnd ? (
-             <BackgroundEclipse onLoaded={() => setIsLoaded(true)} />
+          <BackgroundEclipse onLoaded={() => setIsLoaded(true)} />
         ) : (
-             // Lightweight CSS Fallback for low-end devices or ?lite=true
-             <div className="fixed inset-0 z-[-1] pointer-events-none bg-[#020205]">
-                 <div
-                    className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[80vw] h-[80vh] rounded-full opacity-30 pointer-events-none"
-                    style={{
-                        background: `radial-gradient(circle, rgba(124, 58, 237, 0.4) 0%, transparent 70%)`,
-                        filter: "blur(120px)"
-                    }}
-                />
-             </div>
+          // Lightweight CSS Fallback for low-end devices or ?lite=true
+          <div className="fixed inset-0 z-[-1] pointer-events-none bg-[#020205]">
+            <div
+              className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[80vw] h-[80vh] rounded-full opacity-30 pointer-events-none"
+              style={{
+                background: `radial-gradient(circle, rgba(124, 58, 237, 0.4) 0%, transparent 70%)`,
+                filter: "blur(120px)"
+              }}
+            />
+          </div>
         )}
 
         <main id="main-scroll-container" className="relative w-full h-full overflow-y-auto snap-y snap-mandatory scroll-smooth">
+
+          <UserMenu />
+
           {/* --- 1. INTRO (AGENDO Wordmark) --- */}
           <div className="relative z-10 w-full snap-start">
             <SectionIntro onNext={() => scrollToSection(contextRef)} />

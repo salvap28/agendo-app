@@ -9,7 +9,7 @@ interface BlocksState {
 
     // Actions
     fetchBlocks: () => Promise<void>;
-    createBlock: (partial: Partial<Block> & Pick<Block, "startAt" | "endAt">) => Promise<Block | null>;
+    createBlock: (partial: Partial<Block> & Pick<Block, "startAt" | "endAt">) => Block | null;
     updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
     deleteBlock: (id: string) => Promise<void>;
     deleteBlockSeries: (recurrenceId: string) => Promise<void>;
@@ -54,10 +54,10 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         set({ blocks: formattedBlocks, isLoaded: true });
     },
 
-    createBlock: async (partial) => {
+    createBlock: (partial) => {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return null;
+        // Fire DB insert in background without awaiting user session upfront in the UI thread
+
 
         const now = new Date();
         const recurrenceId = partial.recurrencePattern ? crypto.randomUUID() : undefined;
@@ -128,30 +128,34 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             blocks: [...state.blocks, ...newBlocks]
         }));
 
-        // DB Insert
-        const blocksToInsert = newBlocks.map(b => {
-            const payload: any = {
-                id: b.id,
-                user_id: user.id,
-                title: b.title,
-                type: b.type,
-                status: b.status,
-                start_at: b.startAt.toISOString(),
-                end_at: b.endAt.toISOString(),
-            };
-            if (b.notes) payload.notes = b.notes;
-            if (b.tag) payload.tag = b.tag;
-            if (b.color) payload.color = b.color;
-            if (b.recurrenceId) payload.recurrence_id = b.recurrenceId;
-            if (b.recurrencePattern) payload.recurrence_pattern = b.recurrencePattern;
-            return payload;
-        });
+        // DB Insert (Fire and forget to keep UI snappy)
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (!user) return;
+            const blocksToInsert = newBlocks.map(b => {
+                const payload: any = {
+                    id: b.id,
+                    user_id: user.id,
+                    title: b.title,
+                    type: b.type,
+                    status: b.status,
+                    start_at: b.startAt.toISOString(),
+                    end_at: b.endAt.toISOString(),
+                };
+                if (b.notes) payload.notes = b.notes;
+                if (b.tag) payload.tag = b.tag;
+                if (b.color) payload.color = b.color;
+                if (b.recurrenceId) payload.recurrence_id = b.recurrenceId;
+                if (b.recurrencePattern) payload.recurrence_pattern = b.recurrencePattern;
+                return payload;
+            });
 
-        const { error } = await supabase.from('blocks').insert(blocksToInsert);
-        if (error) {
-            console.error('Error inserting blocks:', JSON.stringify(error, null, 2));
-            // Revert optimistic update ideally here
-        }
+            supabase.from('blocks').insert(blocksToInsert).then(({ error }) => {
+                if (error) {
+                    console.error('Error inserting blocks:', JSON.stringify(error, null, 2));
+                    // Optionally handle rollback of optimistic update here
+                }
+            });
+        });
 
         return baseBlock;
     },

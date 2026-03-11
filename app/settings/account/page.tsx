@@ -9,12 +9,7 @@ import { useRouter } from "next/navigation";
 
 export default function AccountTab() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [mounted, setMounted] = useState(false);
     const router = useRouter();
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -32,10 +27,8 @@ export default function AccountTab() {
         alert("La eliminación de cuenta debe ser confirmada. Por favor, contacta con soporte para este proceso por ahora.");
     };
 
-    if (!mounted) return null;
-
     return (
-        <div className="flex flex-col gap-8 w-full max-w-2xl">
+        <div suppressHydrationWarning className="flex flex-col gap-8 w-full max-w-2xl">
             <div>
                 <h1 className="text-3xl font-semibold mb-3">Cuenta</h1>
                 <p className="text-foreground/60 text-base">Gestiona la seguridad y el acceso a tu cuenta.</p>
