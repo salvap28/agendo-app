@@ -49,6 +49,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             color: b.color,
             recurrenceId: b.recurrence_id,
             recurrencePattern: b.recurrence_pattern,
+            notifications: b.notifications || [5],
         }));
 
         set({ blocks: formattedBlocks, isLoaded: true });
@@ -76,6 +77,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             color: partial.color,
             recurrenceId,
             recurrencePattern: partial.recurrencePattern,
+            notifications: partial.notifications || [5],
         };
 
         newBlocks.push(baseBlock);
@@ -146,6 +148,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 if (b.color) payload.color = b.color;
                 if (b.recurrenceId) payload.recurrence_id = b.recurrenceId;
                 if (b.recurrencePattern) payload.recurrence_pattern = b.recurrencePattern;
+                if (b.notifications) payload.notifications = b.notifications;
                 return payload;
             });
 
@@ -177,6 +180,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         if (patch.notes !== undefined) updateData.notes = patch.notes;
         if (patch.tag !== undefined) updateData.tag = patch.tag;
         if (patch.color !== undefined) updateData.color = patch.color;
+        if (patch.notifications !== undefined) updateData.notifications = patch.notifications;
 
         const { error } = await supabase.from('blocks').update(updateData).eq('id', id);
         if (error) console.error('Error updating block:', error);
@@ -217,7 +221,8 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             title: `${original.title} (copy)`,
             status: "planned", // Reset status on duplicate? Usually safe.
             recurrenceId: undefined, // Do not copy the series ID, it's a new independent block
-            recurrencePattern: undefined // Strip pattern to avoid generating 100s of copies
+            recurrencePattern: undefined, // Strip pattern to avoid generating 100s of copies
+            notifications: original.notifications || [5]
         };
 
         // Optimistic update
@@ -239,7 +244,8 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 end_at: copy.endAt.toISOString(),
                 notes: copy.notes,
                 tag: copy.tag,
-                color: copy.color
+                color: copy.color,
+                notifications: copy.notifications
             });
             if (error) console.error('Error duplicating block:', error);
         }
@@ -357,7 +363,8 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 tag: b.tag,
                 color: b.color,
                 recurrence_id: b.recurrenceId,
-                recurrence_pattern: b.recurrencePattern
+                recurrence_pattern: b.recurrencePattern,
+                notifications: b.notifications
             }));
             const { error } = await supabase.from('blocks').insert(blocksToInsert);
             if (error) console.error('Error inserting recurrenced blocks', error);

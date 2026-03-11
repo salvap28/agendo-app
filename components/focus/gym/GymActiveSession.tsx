@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
+import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { GymLayerConfig, GymExerciseLog } from '@/lib/types/focus';
 import { ChevronLeft, Zap, Check, Play, Settings } from 'lucide-react';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
@@ -10,6 +11,7 @@ import { cn } from '@/lib/cn';
 import { sendNotification } from '@/lib/utils/notifications';
 
 function RestOverlay({ config }: { config: GymLayerConfig }) {
+    const { settings } = useSettingsStore();
     const { cancelGymRest, finishGymRest } = useFocusStore();
     const [left, setLeft] = useState(config.rest.selectedSec || 0);
     const workoutColor = config.workoutColor || '#10b981';
@@ -22,10 +24,12 @@ function RestOverlay({ config }: { config: GymLayerConfig }) {
             const remaining = Math.max(0, (config.rest.selectedSec || 0) - elapsed);
             setLeft(Math.ceil(remaining));
             if (remaining <= 0) {
-                sendNotification("¡Descanso terminado!", { 
-                    body: "Preparado para la siguiente serie.",
-                    icon: "/favicon.ico" 
-                });
+                if (settings.notify_gym_rest) {
+                    sendNotification("¡Descanso terminado!", {
+                        body: "Preparado para la siguiente serie.",
+                        icon: "/favicon.ico"
+                    });
+                }
                 finishGymRest();
             }
         }, 250);

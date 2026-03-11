@@ -2,15 +2,17 @@
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block, BlockStatus } from "@/lib/types/blocks";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ArrowDown, Calendar, Play } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
+import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { getBlockColors } from "@/lib/utils/blockColors";
+import { sendNotification } from "@/lib/utils/notifications";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -36,6 +38,65 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+    const { settings } = useSettingsStore();
+
+    const sentNotificationsRef = useRef<Set<string>>(new Set());
+
+    // Check for block reminders
+    useEffect(() => {
+        if (!settings.notify_block_reminders) return;
+
+        const nowMs = currentTime.getTime();
+
+        blocks.forEach(block => {
+            if (block.status === "completed") return;
+            const diffMin = (block.startAt.getTime() - nowMs) / 60000;
+            // By default backwards compatibility: 5 min
+            const notificationTimes = block.notifications || [5];
+
+            notificationTimes.forEach(offset => {
+                const notifId = `${block.id}-${offset}`;
+                // We are within the minute that triggers this offset
+                if (diffMin > offset - 0.5 && diffMin <= offset + 0.5) {
+                    if (!sentNotificationsRef.current.has(notifId)) {
+                        sentNotificationsRef.current.add(notifId);
+
+                        let bodyMsg = `Empezando en ${offset} minutos.`;
+                        if (offset === 0) bodyMsg = "¡Tu bloque empieza ahora!";
+                        else if (offset === 60) bodyMsg = "Tu bloque empieza en 1 hora.";
+
+                        sendNotification(block.title || "Recordatorio de bloque", {
+                            body: bodyMsg,
+                            icon: "/favicon.ico"
+                        });
+                    }
+                }
+            });
+        });
+    }, [currentTime, blocks, settings.notify_block_reminders]);
+
+    // Daily Briefing Logic
+    useEffect(() => {
+        if (!settings.notify_daily_briefing) return;
+
+        const todayStr = new Date().toDateString();
+        const lastBriefing = localStorage.getItem('agendo:lastBriefing');
+
+        if (lastBriefing !== todayStr) {
+            const hour = new Date().getHours();
+            // Show briefing in the morning
+            if (hour >= 6 && hour < 12 && blocks.length > 0) {
+                const todayBlocks = blocks.filter(b => isSameDay(b.startAt, new Date()));
+                if (todayBlocks.length > 0) {
+                    sendNotification("☀️ Daily Briefing", {
+                        body: `Buen día Salva, tenés ${todayBlocks.length} bloques programados para hoy. ¡A darle con todo!`,
+                        icon: "/favicon.ico"
+                    });
+                    localStorage.setItem('agendo:lastBriefing', todayStr);
+                }
+            }
+        }
+    }, [blocks, settings.notify_daily_briefing]);
 
     useEffect(() => {
         const fetchUser = async () => {

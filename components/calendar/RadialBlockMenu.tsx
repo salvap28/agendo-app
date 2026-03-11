@@ -21,6 +21,7 @@ import {
     Tag,
     Clock,
     X,
+    Bell,
     Type,
     ArrowLeft,
     Repeat,
@@ -62,8 +63,8 @@ const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string
 ];
 
 // Nodos primarios que orbitan el bloque
-type PrimaryNode = "type" | "status" | "time" | "delete" | "focus" | "center";
-const PRIMARY_NODE_ORDER: Array<Exclude<PrimaryNode, "center">> = ["type", "focus", "time", "status", "delete"];
+type PrimaryNode = "type" | "status" | "time" | "delete" | "focus" | "notifications" | "center";
+const PRIMARY_NODE_ORDER: Array<Exclude<PrimaryNode, "center">> = ["type", "focus", "time", "status", "notifications", "delete"];
 
 // ─── ORBITAL MATH UTILS ─────────────────────────────────────────────────────
 
@@ -308,7 +309,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 physics.speed = 0;
                 const activeIndex = PRIMARY_NODE_ORDER.indexOf(activePrimaryNode);
                 if (activeIndex !== -1) {
-                    targetAnchor = calculateNodePosition(activeIndex, 5, currentObjPrimary, physics.angle);
+                    targetAnchor = calculateNodePosition(activeIndex, PRIMARY_NODE_ORDER.length, currentObjPrimary, physics.angle);
                 }
             } else {
                 // Return camera to center smoothly
@@ -321,7 +322,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
             planetRefs.current.forEach((el, i) => {
                 if (el) {
-                    const pos = calculateNodePosition(i, 5, currentObjPrimary, physics.angle); // 5 planets
+                    const pos = calculateNodePosition(i, PRIMARY_NODE_ORDER.length, currentObjPrimary, physics.angle);
                     // The planet stays exactly in its expected orbital pos.
                     // The 'camera/offset' subtraction simulates panning the entire system.
                     const x = pos.x - physics.offset.x;
@@ -478,12 +479,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const activeType = BLOCK_TYPES_UI.find(t => t.value === block?.type) || BLOCK_TYPES_UI[6];
     const activeStatus = STATUS_OPTS.find(s => s.value === block?.status) || STATUS_OPTS[0];
 
-    // Array de primary nodes
     const primaryNodes = [
         { id: "type" as const, label: "Categoría", icon: activeType.icon, color: activeType.color, bg: activeType.bg },
         { id: "focus" as const, label: "Focus", icon: Zap, color: "text-purple-500", bg: "bg-purple-500/20" },
         { id: "time" as const, label: "Horario", icon: Clock, color: "text-white/70", bg: "bg-white/10" },
         { id: "status" as const, label: "Estado", icon: activeStatus.icon, color: activeStatus.color, bg: activeStatus.bg },
+        { id: "notifications" as const, label: "Avisos", icon: Bell, color: "text-amber-400", bg: "bg-amber-500/20" },
         { id: "delete" as const, label: "Eliminar", icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
     ];
 
@@ -576,11 +577,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 <div
                     className={cn(
                         "group absolute pointer-events-auto flex flex-col items-center justify-center rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl transition-all duration-500 shadow-[0_0_80px_rgba(255,255,255,0.1)]",
-                        activePrimaryNode && activePrimaryNode !== "center" ? "z-10 opacity-30 scale-95 blur-sm cursor-pointer" : "z-[100] opacity-100",
-                        activePrimaryNode === "center" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default` : "p-6 w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30 hover:border-indigo-400/30 hover:shadow-[0_0_40px_rgba(129,140,248,0.2)]"
+                        activePrimaryNode && activePrimaryNode !== "center" && activePrimaryNode !== "notifications" ? "z-10 opacity-30 scale-95 blur-sm cursor-pointer" : "z-[100] opacity-100",
+                        activePrimaryNode === "center" || activePrimaryNode === "notifications" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default` : "p-6 w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30 hover:border-indigo-400/30 hover:shadow-[0_0_40px_rgba(129,140,248,0.2)]"
                     )}
                     onClick={() => {
-                        if (activePrimaryNode === "center") return;
+                        if (activePrimaryNode === "center" || activePrimaryNode === "notifications") return;
                         if (activePrimaryNode) setActivePrimaryNode(null);
                         else setActivePrimaryNode("center");
                     }}
@@ -748,6 +749,46 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 >
                                     {guidedStep === "center" ? "Siguiente" : "Guardar"}
                                 </button>
+                            </div>
+                        </div>
+                    ) : activePrimaryNode === "notifications" ? (
+                        <div className="flex flex-col w-full gap-3 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 text-center mb-1">Avisos de inicio</span>
+                            <div className="grid grid-cols-2 gap-2 w-full">
+                                {[
+                                    { value: 0, label: "En el momento" },
+                                    { value: 5, label: "5 min antes" },
+                                    { value: 10, label: "10 min antes" },
+                                    { value: 15, label: "15 min antes" },
+                                    { value: 30, label: "30 min antes" },
+                                    { value: 60, label: "1 hora antes" },
+                                ].map(opt => {
+                                    const isActive = block.notifications?.includes(opt.value) || (opt.value === 5 && !block.notifications && block.notifications !== null);
+                                    return (
+                                        <button
+                                            key={opt.value}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                let current = block.notifications || [5];
+                                                if (current.includes(opt.value)) {
+                                                    current = current.filter(v => v !== opt.value);
+                                                } else {
+                                                    current = [...current, opt.value].sort((a, b) => a - b);
+                                                }
+                                                updateBlock(block.id, { notifications: current });
+                                            }}
+                                            className={cn(
+                                                "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-300 text-[10.5px] font-semibold border backdrop-blur-md",
+                                                isActive
+                                                    ? "bg-amber-500/20 text-amber-100 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                                                    : "bg-black/40 text-white/50 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white/90"
+                                            )}
+                                        >
+                                            <span className="leading-tight">{opt.label}</span>
+                                            {isActive && <CheckCircle2 className="w-[14px] h-[14px] text-amber-400 shrink-0 ml-1" />}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     ) : (

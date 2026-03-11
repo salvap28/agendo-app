@@ -31,6 +31,7 @@ export interface Block {
     notes?: string;
     tag?: string; // or colorTag
     color?: string; // Hex or token
+    notifications?: number[]; // Minutes before start (e.g., [5, 15, 60])
 
     // Recurrence
     recurrenceId?: string;

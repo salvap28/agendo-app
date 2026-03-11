@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
+import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { StudyTechniqueState } from '@/lib/engines/layersEngine';
 import { sendNotification } from '@/lib/utils/notifications';
 
 export function useStudyCountdown() {
+    const { settings } = useSettingsStore();
     const { session, setLayer } = useFocusStore();
     const [countdownFormatted, setCountdownFormatted] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<"focus" | "break" | null>(null);
@@ -52,15 +54,17 @@ export function useStudyCountdown() {
                 const nextPhase = state.phase === "focus" ? "break" : "focus";
                 const currentCount = state.cycleCount;
 
-                sendNotification(
-                    state.phase === "focus" ? "¡Tiempo de descanso!" : "¡De vuelta al enfoque!",
-                    {
-                        body: state.phase === "focus" 
-                            ? "Tómate un respiro, te lo has ganado." 
-                            : "Es hora de volver a concentrarte.",
-                        icon: "/favicon.ico"
-                    }
-                );
+                if (settings.notify_focus_timer) {
+                    sendNotification(
+                        state.phase === "focus" ? "¡Tiempo de descanso!" : "¡De vuelta al enfoque!",
+                        {
+                            body: state.phase === "focus"
+                                ? "Tómate un respiro, te lo has ganado."
+                                : "Es hora de volver a concentrarte.",
+                            icon: "/favicon.ico"
+                        }
+                    );
+                }
                 useFocusStore.setState((state) => {
                     const currentLayer = state.session?.activeLayer;
                     if (!currentLayer || !state.session) return state;
