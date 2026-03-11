@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { createClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
+import { BellRing, Check } from "lucide-react";
 
 const supabase = createClient();
 
 export default function NotificationsTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
+    const [testStatus, setTestStatus] = useState<"idle" | "waiting" | "sent">("idle");
 
     useEffect(() => {
         async function init() {
@@ -22,11 +24,60 @@ export default function NotificationsTab() {
         init();
     }, [isInitialized, fetchSettings]);
 
+    const handleTestNotification = async () => {
+        if (!("Notification" in window)) {
+            alert("Este navegador no soporta notificaciones de escritorio.");
+            return;
+        }
+
+        let permission = Notification.permission;
+        if (permission === "default") {
+            permission = await Notification.requestPermission();
+        }
+
+        if (permission === "granted") {
+            setTestStatus("waiting");
+            setTimeout(() => {
+                new Notification("¡Prueba Exitosa! 🚀", {
+                    body: "Las notificaciones locales desde Agendo están funcionando perfecto.",
+                    icon: "/icon.png" // Opcional si tenés un ícono en public
+                });
+                setTestStatus("sent");
+
+                // Reset status after a few seconds
+                setTimeout(() => setTestStatus("idle"), 4000);
+            }, 10000);
+        } else {
+            alert("Permiso denegado. Por favor habilitá las notificaciones para este sitio en los ajustes de tu navegador/celular.");
+        }
+    };
+
     return (
         <div suppressHydrationWarning className="flex flex-col gap-8 w-full">
-            <div>
-                <h1 className="text-3xl font-semibold mb-3">Notificaciones</h1>
-                <p className="text-foreground/60 text-base">Decidí cómo y cuándo querés que Agendo te avise.</p>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-semibold mb-3">Notificaciones</h1>
+                    <p className="text-foreground/60 text-base">Decidí cómo y cuándo querés que Agendo te avise.</p>
+                </div>
+
+                <button
+                    onClick={handleTestNotification}
+                    disabled={testStatus === "waiting"}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg ${testStatus === "sent"
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+                            : testStatus === "waiting"
+                                ? "bg-indigo-500/50 text-white cursor-wait animate-pulse border border-indigo-400/50"
+                                : "bg-primary border border-white/20 text-white hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(currentColor,0.4)]"
+                        }`}
+                >
+                    {testStatus === "sent" ? (
+                        <><Check size={18} /> Enviado</>
+                    ) : testStatus === "waiting" ? (
+                        <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span> Esperando 10s...</>
+                    ) : (
+                        <><BellRing size={18} /> Enviar Prueba (10s)</>
+                    )}
+                </button>
             </div>
 
             <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-8 flex flex-col gap-10">
