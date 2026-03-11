@@ -38,7 +38,7 @@ export function UserMenu() {
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        
+
         // Track scrolling to optionally blur background if the menu stays fixed
         const scrollContainer = document.getElementById("main-scroll-container");
         const handleScroll = () => {
@@ -67,14 +67,11 @@ export function UserMenu() {
 
     const handleSettings = () => {
         setIsOpen(false);
-        // We'll navigate to settings or open a modal. 
-        // For now: 
-        console.log("Settings clicked - implement navigation/modal");
-        // router.push("/settings");
+        router.push("/settings");
     };
 
     return (
-        <div 
+        <div
             ref={menuRef}
             className={cn(
                 "fixed top-[max(env(safe-area-inset-top),1.5rem)] inset-x-0 w-full flex justify-center z-[100] transition-all duration-300",
@@ -89,7 +86,7 @@ export function UserMenu() {
                     <span className="text-white/90 text-sm font-medium tracking-wide">
                         {userName}
                     </span>
-                    <span 
+                    <span
                         className={cn(
                             "text-white/50 text-[10px] sm:text-xs font-mono transition-transform duration-300",
                             isOpen ? "rotate-0 text-white/90" : "rotate-180"
@@ -115,9 +112,9 @@ export function UserMenu() {
                             <Settings className="w-4 h-4 opacity-70" />
                             <span className="text-sm font-medium">Configuración</span>
                         </button>
-                        
+
                         <div className="h-[1px] w-full bg-white/5 my-1" />
-                        
+
                         <button
                             onClick={handleLogout}
                             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-[14px] hover:bg-rose-500/10 transition-colors text-left text-rose-400 hover:text-rose-300"
