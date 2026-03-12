@@ -1,4 +1,4 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/client";
 
 function urlB64ToUint8Array(base64String: string) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -41,7 +41,7 @@ export async function requestNotificationPermission() {
 
                 if (subscription) {
                     const subData = JSON.parse(JSON.stringify(subscription));
-                    const supabase = createClientComponentClient();
+                    const supabase = createClient();
                     const { data: { user } } = await supabase.auth.getUser();
 
                     if (user) {
