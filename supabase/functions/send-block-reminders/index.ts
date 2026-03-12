@@ -58,8 +58,9 @@ serve(async (req) => {
 
   for (const block of blocks) {
     const startAt = new Date(block.start_at);
-    const diffMs = startAt.getTime() - now.getTime();
-    const diffMinutes = Math.round(diffMs / 60000);
+    const startAtMin = Math.floor(startAt.getTime() / 60000);
+    const nowMin = Math.floor(now.getTime() / 60000);
+    const diffMinutes = startAtMin - nowMin;
 
     const offsets: number[] = block.notifications || [5]; // default 5 mins
 

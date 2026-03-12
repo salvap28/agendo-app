@@ -53,9 +53,15 @@ export async function requestNotificationPermission() {
                         }, { onConflict: 'endpoint' });
                     }
                 }
+            } else {
+                console.error("NEXT_PUBLIC_VAPID_PUBLIC_KEY no está configurada.");
+                alert("Error de configuración: Faltan las llaves VAPID para notificaciones.");
+                return false;
             }
         } catch (error) {
             console.error('Error during push subscription:', error);
+            alert(`Error al suscribirse a notificaciones: ${error}`);
+            return false;
         }
     }
 
