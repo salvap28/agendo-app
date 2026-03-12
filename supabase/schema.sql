@@ -58,6 +58,15 @@ create table public.focus_sessions (
   pause_count integer default 0,
   exit_count integer default 0,
   intention text,
+  energy_before smallint,
+  mood_before smallint,
+  mood_after smallint,
+  progress_feeling_after smallint,
+  difficulty smallint,
+  clarity smallint,
+  start_delay_ms integer,
+  previous_context text,
+  session_quality_score numeric,
   active_layer jsonb,
   history jsonb default '[]'::jsonb,
   created_at timestamp with time zone default now(),
@@ -70,6 +79,32 @@ create policy "Users can view their own sessions" on public.focus_sessions for s
 create policy "Users can create their own sessions" on public.focus_sessions for insert with check (auth.uid() = user_id);
 create policy "Users can update their own sessions" on public.focus_sessions for update using (auth.uid() = user_id);
 create policy "Users can delete their own sessions" on public.focus_sessions for delete using (auth.uid() = user_id);
+
+-- Create daily_metrics table
+create table public.daily_metrics (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  date date not null,
+  progress_score numeric,
+  friction_score numeric,
+  consistency_score numeric,
+  emotion_score numeric,
+  momentum_day numeric,
+  momentum_total numeric,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  UNIQUE(user_id, date)
+);
+
+-- Enable RLS for daily_metrics
+alter table public.daily_metrics enable row level security;
+create policy "Users can view their own daily metrics" on public.daily_metrics for select using (auth.uid() = user_id);
+create policy "Users can create their own daily metrics" on public.daily_metrics for insert with check (auth.uid() = user_id);
+create policy "Users can update their own daily metrics" on public.daily_metrics for update using (auth.uid() = user_id);
+create policy "Users can delete their own daily metrics" on public.daily_metrics for delete using (auth.uid() = user_id);
+
+-- Create indexes for frequent queries
+create index idx_daily_metrics_user_date on public.daily_metrics (user_id, date);
 
 create or replace function public.handle_new_user()
 returns trigger as $$

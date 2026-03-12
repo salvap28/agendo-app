@@ -38,6 +38,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+    const [summaryData, setSummaryData] = useState<any>(null);
     const { settings } = useSettingsStore();
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
@@ -117,6 +118,19 @@ export function SectionContext({ onNext }: SectionContextProps) {
             }
         };
         fetchUser();
+
+        const fetchSummary = async () => {
+            try {
+                const res = await fetch('/api/home/summary');
+                if (res.ok) {
+                    const data = await res.json();
+                    setSummaryData(data);
+                }
+            } catch (e) {
+                console.error("Failed to fetch summary", e);
+            }
+        };
+        fetchSummary();
 
         // Dynamic greeting
         const hour = new Date().getHours();
@@ -323,6 +337,28 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         );
                     })()}
                 </div>
+
+                {/* V1 Insight Summary Card */}
+                {summaryData && (
+                    <div className="mt-8 w-full max-w-[420px] rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5 backdrop-blur-md flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                        <div className="flex justify-between items-center text-white/50 text-[10px] uppercase tracking-[0.15em] font-semibold mb-1">
+                            <span>
+                                {summaryData.progress_signal === 'positive' ? 'Flowing' : summaryData.progress_signal === 'quiet' ? 'Resting' : 'Building'}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                MOMENTUM <span className="text-white/80">{summaryData.momentum_current}</span>
+                                {summaryData.momentum_delta_week > 0 && <span className="text-emerald-400">+{summaryData.momentum_delta_week}</span>}
+                                {summaryData.momentum_delta_week < 0 && <span className="text-rose-400">{summaryData.momentum_delta_week}</span>}
+                            </span>
+                        </div>
+                        <p className="text-white/80 text-sm leading-relaxed font-medium">
+                            {summaryData.main_insight}
+                        </p>
+                        <p className="text-white/40 text-xs">
+                            {summaryData.soft_recommendation}
+                        </p>
+                    </div>
+                )}
 
                 {/* Actions Group */}
                 <div className="flex flex-col sm:flex-row items-center gap-4 mt-7">

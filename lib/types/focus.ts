@@ -99,6 +99,17 @@ export interface FocusSession {
 
     intention?: string;
 
+    // V1 Tracking metrics
+    energyBefore?: number;
+    moodBefore?: number;
+    moodAfter?: number;
+    progressFeelingAfter?: number;
+    difficulty?: number;
+    clarity?: number;
+    startDelayMs?: number;
+    previousContext?: string;
+    sessionQualityScore?: number;
+
     activeLayer?: FocusLayer | null;
     history?: string[];
 }
