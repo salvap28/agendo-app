@@ -4,19 +4,22 @@ import { FocusSession } from "@/lib/types/focus";
 export function calculateEmotionScore(session: FocusSession): number {
     const moodBefore = session.moodBefore || 3;
     const moodAfter = session.moodAfter || 3;
-    const energyBefore = session.energyBefore || 3;
 
-    // Mood resulting from the session dictates the bulk of our emotional imprint
-    let score = (moodAfter / 5) * 50; 
+    // The baseline is the resulting mood (up to 60 points)
+    let score = (moodAfter / 5) * 60; 
     
-    // Entering with energy provides the remaining baseline
-    score += (energyBefore / 5) * 25;
+    // The "Delta": How the session changed your emotional state (up to 40 points)
+    const moodDelta = moodAfter - moodBefore; // Range: -4 to +4
     
-    // The "Delta Boost": Feeling better after working than before is highly rewarding emotionally
-    if (moodAfter > moodBefore) {
-        score += 25;
-    } else if (moodAfter === moodBefore && moodAfter > 3) {
-        score += 15; // Sustaining a good mood is also highly valuable
+    if (moodDelta > 0) {
+        // Feeling better after working is highly rewarding
+        score += (moodDelta * 10); // +10 to +40
+    } else if (moodDelta === 0 && moodAfter >= 4) {
+        // Sustaining a great mood
+        score += 20;
+    } else if (moodDelta < 0) {
+        // Feeling worse after working drains the score
+        score -= (Math.abs(moodDelta) * 10);
     }
 
     return Math.min(100, Math.max(0, Math.round(score)));

@@ -11,21 +11,23 @@ import {
 } from "./index";
 import { endOfDay, startOfDay, subDays } from "date-fns";
 
-export async function syncDailyMetrics(userId: string) {
+// Recalculates and upserts the daily_metrics row for a specific user and date.
+// If no date is passed, defaults to today.
+export async function recomputeDailyMetricsForUser(userId: string, targetDate: Date = new Date()) {
     try {
         const supabase = createClient();
-        const now = new Date();
         
-        const todayStart = startOfDay(now).toISOString();
-        const todayEnd = endOfDay(now).toISOString();
+        const targetStart = startOfDay(targetDate).toISOString();
+        const targetEnd = endOfDay(targetDate).toISOString();
+        const targetDateStr = targetDate.toISOString().split('T')[0];
     
     // 1. Fetch today's completed sessions
-    const { data: todaySessionsData, error: sessionsErr } = await supabase
+    const { data: targetSessionsData, error: sessionsErr } = await supabase
         .from('focus_sessions')
         .select('*')
         .eq('user_id', userId)
-        .gte('started_at', todayStart)
-        .lte('started_at', todayEnd)
+        .gte('started_at', targetStart)
+        .lte('started_at', targetEnd)
         .eq('is_active', false);
         
     if (sessionsErr) {
@@ -34,7 +36,7 @@ export async function syncDailyMetrics(userId: string) {
     }
     
     // Map snake_case to camelCase conceptually for our functions
-    const todaySessions: FocusSession[] = (todaySessionsData || []).map(s => ({
+    const targetSessions: FocusSession[] = (targetSessionsData || []).map(s => ({
         id: s.id,
         mode: s.mode as any,
         startedAt: s.started_at,
@@ -55,12 +57,13 @@ export async function syncDailyMetrics(userId: string) {
     }));
 
     // 2. Fetch past 30 days of sessions to calculate consistency
-    const thirtyDaysAgo = subDays(now, 30).toISOString();
+    const thirtyDaysAgo = subDays(targetDate, 30).toISOString();
     const { data: recentSessionsData } = await supabase
         .from('focus_sessions')
         .select('id, started_at, ended_at, is_active')
         .eq('user_id', userId)
         .gte('started_at', thirtyDaysAgo)
+        .lte('started_at', targetEnd) // Make sure we don't look into the future
         .eq('is_active', false);
         
     const recentSessions: FocusSession[] = (recentSessionsData || []).map(s => ({
@@ -73,17 +76,17 @@ export async function syncDailyMetrics(userId: string) {
         totalPausedMs: 0, pauseCount: 0, exitCount: 0
     }));
 
-    // 3. Calculate scores for TODAY based on average of all sessions
+    // 3. Calculate scores for TARGET DATE based on average of all sessions
     let progressScore = 0, frictionScore = 0, emotionScore = 0;
     
-    if (todaySessions.length > 0) {
-        const sumProgress = todaySessions.reduce((acc, s) => acc + calculateProgressScore(s), 0);
-        const sumFriction = todaySessions.reduce((acc, s) => acc + calculateFrictionScore(s), 0);
-        const sumEmotion = todaySessions.reduce((acc, s) => acc + calculateEmotionScore(s), 0);
+    if (targetSessions.length > 0) {
+        const sumProgress = targetSessions.reduce((acc, s) => acc + calculateProgressScore(s), 0);
+        const sumFriction = targetSessions.reduce((acc, s) => acc + calculateFrictionScore(s), 0);
+        const sumEmotion = targetSessions.reduce((acc, s) => acc + calculateEmotionScore(s), 0);
         
-        progressScore = Math.round(sumProgress / todaySessions.length);
-        frictionScore = Math.round(sumFriction / todaySessions.length);
-        emotionScore = Math.round(sumEmotion / todaySessions.length);
+        progressScore = Math.round(sumProgress / targetSessions.length);
+        frictionScore = Math.round(sumFriction / targetSessions.length);
+        emotionScore = Math.round(sumEmotion / targetSessions.length);
     }
 
     const consistencyScore = calculateConsistencyScore(recentSessions);
@@ -101,23 +104,22 @@ export async function syncDailyMetrics(userId: string) {
         .select('date, momentum_day')
         .eq('user_id', userId)
         .gte('date', thirtyDaysAgo)
+        .lte('date', targetDateStr) // Only up to target date
         .order('date', { ascending: false });
         
-    // Insert our new "today" as if it was already in history to get accurate total
-    const todayDateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    
+    // Insert our new computed target day as if it was already in history to get accurate total
     const pastMetricsList = (pastMetricsData || [])
-        .filter(m => m.date !== todayDateStr) // Remove previous calculation for today if present
+        .filter(m => m.date !== targetDateStr) // Remove previous calculation for target if present
         .map(m => ({ date: m.date, momentum_day: m.momentum_day || 0 }));
         
-    pastMetricsList.unshift({ date: todayDateStr, momentum_day: momentumDay });
+    pastMetricsList.unshift({ date: targetDateStr, momentum_day: momentumDay });
 
     const momentumTotal = calculateMomentumTotal(pastMetricsList);
     
     // 5. UPSERT the daily_metrics row
     const upsertData = {
         user_id: userId,
-        date: todayDateStr,
+        date: targetDateStr,
         progress_score: progressScore,
         friction_score: frictionScore,
         consistency_score: consistencyScore,
@@ -135,6 +137,9 @@ export async function syncDailyMetrics(userId: string) {
             console.error("Failed to upsert daily_metrics:", upsertErr);
         }
     } catch (error) {
-        console.error("Critical error in syncDailyMetrics:", error);
+        console.error("Critical error in recomputeDailyMetricsForUser:", error);
     }
 }
+
+// Backward compatibility alias
+export const syncDailyMetrics = (userId: string) => recomputeDailyMetricsForUser(userId);

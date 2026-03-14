@@ -48,14 +48,6 @@ interface FocusState {
     setLayer: (layer: FocusLayer | null) => void;
     setSessionIntention: (intention: string) => void;
     addToHistory: (event: string) => void;
-    saveReflection: (metrics: {
-        energyBefore?: number;
-        clarity?: number;
-        difficulty?: number;
-        progressFeelingAfter?: number;
-        moodAfter?: number;
-        notes?: string;
-    }) => Promise<void>;
 
     // Gym tracker
     activateGymTracker: () => void;
@@ -279,33 +271,6 @@ export const useFocusStore = create<FocusState>()(
                     });
                     if (error) {
                         console.error('Error saving focus session:', JSON.stringify(error, null, 2));
-                    }
-                }
-            },
-
-            saveReflection: async (metrics) => {
-                const { session } = get();
-                if (!session) return;
-                
-                // Intention override if user wrote reflection
-                const newIntention = metrics.notes ? `${session.intention ? session.intention + ' | ' : ''}${metrics.notes}` : session.intention;
-
-                const supabase = createClient();
-                const { error } = await supabase.from('focus_sessions').update({
-                    energy_before: metrics.energyBefore,
-                    clarity: metrics.clarity,
-                    difficulty: metrics.difficulty,
-                    progress_feeling_after: metrics.progressFeelingAfter,
-                    mood_after: metrics.moodAfter,
-                    intention: newIntention,
-                }).eq('id', session.id);
-
-                if (error) {
-                    console.error('Error saving reflection:', JSON.stringify(error, null, 2));
-                } else {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        await syncDailyMetrics(user.id).catch(e => console.error("Error running daily metrics sync in background:", e));
                     }
                 }
             },

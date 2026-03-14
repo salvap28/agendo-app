@@ -3,7 +3,7 @@
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block, BlockStatus } from "@/lib/types/blocks";
 import { useEffect, useState, useRef } from "react";
-import { ArrowDown, Calendar, Play } from "lucide-react";
+import { ArrowDown, Calendar, Play, Flame, Activity, Clock } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -357,6 +357,26 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         <p className="text-white/40 text-xs">
                             {summaryData.soft_recommendation}
                         </p>
+
+                        {/* Extra Context Row */}
+                        <div className="flex items-center gap-4 mt-2 pt-3 border-t border-white/[0.05] text-white/40 text-[11px] font-medium tracking-wide uppercase">
+                            {(summaryData.focus_streak || 0) > 0 && (
+                                <div className="flex items-center gap-1.5 text-orange-400/80">
+                                    <Flame className="w-3.5 h-3.5" />
+                                    <span>{summaryData.focus_streak} DÍAS</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-indigo-400/80">
+                                <Activity className="w-3.5 h-3.5" />
+                                <span>{summaryData.weekly_sessions_count || 0} SEMANA</span>
+                            </div>
+                            {summaryData.best_focus_window && (
+                                <div className="flex items-center gap-1.5 ml-auto text-white/50">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>{summaryData.best_focus_window === "morning" ? "Mañana" : summaryData.best_focus_window === "afternoon" ? "Tarde" : summaryData.best_focus_window === "evening" ? "Tardecita" : "Noche"}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
