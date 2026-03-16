@@ -1,104 +1,185 @@
 "use client";
 
-import React, { useState } from 'react';
-import { useFocusStore } from '@/lib/stores/focusStore';
-import { useBlocksStore } from '@/lib/stores/blocksStore';
-import { saveSessionReflection } from '@/lib/services/focusService';
-import { CheckCircle, Sparkles, X, Mountain, Battery, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning, Eye, TrendingUp, Frown, Meh, Smile } from 'lucide-react';
-import { GlassButton } from '@/components/ui/glass-button';
-import { GlowingEffect } from '@/components/ui/glowing-effect';
+import { useMemo, useState } from "react";
+import {
+    CheckCircle2,
+    Feather,
+    Footprints,
+    Frown,
+    Gauge,
+    LucideIcon,
+    Meh,
+    Mountain,
+    Rocket,
+    Smile,
+    Sparkles,
+    Turtle,
+    X,
+} from "lucide-react";
+import { cn } from "@/lib/cn";
+import { saveSessionReflection } from "@/lib/services/focusService";
+import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { useFocusStore } from "@/lib/stores/focusStore";
 
 const REFLECTION_QUESTIONS = [
-    "¿Qué fue lo más valioso de este bloque?",
-    "¿Hubo alguna distracción recurrente?",
-    "¿Cómo te sentís después de esta sesión?"
+    "Que fue lo mas valioso de este bloque?",
+    "Que te gustaria repetir de esta sesion?",
+    "Como cerras este bloque mentalmente?",
 ];
 
-// Reutilizable Scale Selector (1-5) con píldora horizontal unificada
-function MetricScale({ label, icon: Icon, value, onChange, dynamicIcon }: { label: string, icon: any, value: number, onChange: (v: number) => void, dynamicIcon?: (v: number) => any }) {
-    const DisplayIcon = dynamicIcon && value > 0 ? dynamicIcon(value) : Icon;
+type ReflectionMetrics = {
+    difficulty: number;
+    progressFeelingAfter: number;
+    moodAfter: number;
+};
+
+type MetricOption = {
+    value: number;
+    label: string;
+    hint: string;
+    icon: LucideIcon;
+};
+
+const PROGRESS_OPTIONS: MetricOption[] = [
+    { value: 1, label: "Minimo", hint: "Apenas salio", icon: Turtle },
+    { value: 3, label: "Solido", hint: "Se movio bien", icon: Footprints },
+    { value: 5, label: "Potente", hint: "Despego fuerte", icon: Rocket },
+];
+
+const DIFFICULTY_OPTIONS: MetricOption[] = [
+    { value: 1, label: "Ligero", hint: "Fluyo facil", icon: Feather },
+    { value: 3, label: "Tenso", hint: "Pidio foco", icon: Gauge },
+    { value: 5, label: "Pesado", hint: "Costo sostener", icon: Mountain },
+];
+
+const FINAL_MOOD_OPTIONS: MetricOption[] = [
+    { value: 1, label: "Bajo", hint: "Quede drenado", icon: Frown },
+    { value: 3, label: "Sereno", hint: "Estoy neutro", icon: Meh },
+    { value: 4, label: "Bien", hint: "Quede conforme", icon: Smile },
+    { value: 5, label: "Arriba", hint: "Quede encendido", icon: Sparkles },
+];
+
+interface MetricChoiceGroupProps {
+    label: string;
+    description: string;
+    value: number;
+    options: MetricOption[];
+    onChange: (value: number) => void;
+    emphasized?: boolean;
+}
+
+function MetricChoiceGroup({
+    label,
+    description,
+    value,
+    options,
+    onChange,
+    emphasized = false,
+}: MetricChoiceGroupProps) {
+    const gridClassName = options.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
 
     return (
-        <div className="flex flex-col gap-3 w-full mt-1">
-            <div className={`flex items-center gap-2 text-sm font-medium transition-colors duration-300 ${value > 0 ? 'text-[#7C3AED]' : 'text-white/60'}`}>
-                <DisplayIcon className={`w-4 h-4 transition-all duration-300 ${value > 0 ? 'opacity-100 drop-shadow-[0_0_8px_rgba(124,58,237,0.5)]' : 'opacity-70'}`} strokeWidth={value > 0 ? 2 : 1.5} />
-                <span>{label}</span>
+        <div className="space-y-3 sm:space-y-3.5">
+            <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold tracking-tight text-white/90">{label}</h3>
+                    {emphasized && (
+                        <span className="rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c4b5fd]">
+                            Principal
+                        </span>
+                    )}
+                </div>
+                <p className="text-sm text-white/45">{description}</p>
             </div>
-            {/* Píldora de 5 segmentos */}
-            <div className="flex w-full bg-black/20 border border-white/5 rounded-full overflow-hidden h-10 p-[3px] gap-1 shadow-[inset_0_2px_10px_rgba(0,0,0,0.2)]">
-                {[1, 2, 3, 4, 5].map(v => (
-                    <button
-                        key={v}
-                        onClick={() => onChange(v)}
-                        className={`flex-1 flex items-center justify-center rounded-full transition-all duration-300 text-sm font-semibold
-                            ${value === v
-                                ? 'bg-gradient-to-r from-[#7C3AED]/60 to-[#4F46E5]/60 border border-[#7C3AED]/80 text-white shadow-[0_0_15px_rgba(124,58,237,0.4)]'
-                                : 'border border-transparent text-white/30 hover:bg-white/10 hover:text-white/70'
-                            }`}
-                    >
-                        {v}
-                    </button>
-                ))}
+
+            <div className={cn("grid gap-2.5", gridClassName)}>
+                {options.map((option) => {
+                    const isSelected = value === option.value;
+                    const Icon = option.icon;
+
+                    return (
+                        <button
+                            key={`${label}-${option.value}`}
+                            type="button"
+                            onClick={() => onChange(option.value)}
+                            className={cn(
+                                "group flex min-h-[84px] flex-col items-start justify-between rounded-2xl border px-3 py-3 text-left transition-all duration-300 motion-reduce:transition-none sm:min-h-[92px] sm:px-3.5 sm:py-3.5",
+                                isSelected
+                                    ? "border-transparent bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] text-white shadow-[0_14px_30px_rgba(109,40,217,0.28)]"
+                                    : "border-white/10 bg-white/5 text-white/65 hover:border-white/15 hover:bg-white/[0.08]"
+                            )}
+                            aria-pressed={isSelected}
+                        >
+                            <span
+                                className={cn(
+                                    "flex h-10 w-10 items-center justify-center rounded-2xl border transition-all duration-300 motion-reduce:transition-none",
+                                    isSelected
+                                        ? "border-white/15 bg-white/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                                        : "border-white/10 bg-black/20"
+                                )}
+                            >
+                                <Icon className={cn("h-[18px] w-[18px]", isSelected ? "text-white" : "text-white/70")} />
+                            </span>
+
+                            <div className="space-y-0.5">
+                                <p className={cn("text-[13px] font-semibold tracking-tight sm:text-sm", isSelected ? "text-white" : "text-white/80")}>
+                                    {option.label}
+                                </p>
+                                <p className={cn("text-[11px]", isSelected ? "text-white/75" : "text-white/40")}>
+                                    {option.hint}
+                                </p>
+                            </div>
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );
 }
 
-// Helpers semánticos para variar los íconos de Ánimo según el valor seleccionado (escala 1-5, sin emojis)
-const getMoodIcon = (val: number) => {
-    if (val === 0) return Meh;
-    if (val <= 2) return Frown;
-    if (val === 3) return Meh;
-    return Smile;
-};
-
-// Helper dinámico para Batería
-const getBatteryIcon = (val: number) => {
-    if (val === 0) return Battery;
-    if (val === 1) return BatteryWarning; // Casi vacía / Alerta
-    if (val === 2) return BatteryLow;
-    if (val === 3) return BatteryMedium;
-    if (val === 4) return BatteryMedium; // Alternativa: BatteryMedium con más carga visual si existiera
-    return BatteryFull;
-};
-
 export function ReflectionSheet() {
     const { session } = useFocusStore();
     const { createBlock } = useBlocksStore();
 
-    // Metrics 1-5 scale (0 means no selection)
-    const [metrics, setMetrics] = useState({
-        energyBefore: 0,
-        moodBefore: 0,
-        clarity: 0,
+    const [metrics, setMetrics] = useState<ReflectionMetrics>({
         difficulty: 0,
         progressFeelingAfter: 0,
         moodAfter: 0,
     });
-
     const [reflection, setReflection] = useState("");
-    const [blockTitle, setBlockTitle] = useState("Focus Block");
     const [isSaving, setIsSaving] = useState(false);
 
-    const question = REFLECTION_QUESTIONS[Math.floor(Math.random() * REFLECTION_QUESTIONS.length)];
+    const question = useMemo(
+        () => REFLECTION_QUESTIONS[Math.floor(Math.random() * REFLECTION_QUESTIONS.length)],
+        []
+    );
+
+    const canFinish = metrics.progressFeelingAfter > 0 && !isSaving;
+    const isFree = session?.mode === "free";
+    const blockTitle = "Focus Block";
+    const closureHint = session?.closureNote?.text?.trim() || null;
+
+    const setMetric = (metric: keyof ReflectionMetrics, value: number) => {
+        setMetrics((current) => ({
+            ...current,
+            [metric]: value,
+        }));
+    };
 
     const handleClose = () => {
         useFocusStore.setState({ session: null });
     };
 
     const handleFinish = async () => {
-        if (!session || !session.endedAt || isSaving) return;
+        if (!session || !session.endedAt || !canFinish) return;
         setIsSaving(true);
 
         try {
             await saveSessionReflection(session.id, session.intention, {
-                energyBefore: metrics.energyBefore > 0 ? metrics.energyBefore : undefined,
-                moodBefore: metrics.moodBefore > 0 ? metrics.moodBefore : undefined,
-                clarity: metrics.clarity > 0 ? metrics.clarity : undefined,
                 difficulty: metrics.difficulty > 0 ? metrics.difficulty : undefined,
                 progressFeelingAfter: metrics.progressFeelingAfter > 0 ? metrics.progressFeelingAfter : undefined,
                 moodAfter: metrics.moodAfter > 0 ? metrics.moodAfter : undefined,
-                notes: reflection,
+                notes: reflection.trim() || undefined,
             });
 
             if (session.mode === "free") {
@@ -108,7 +189,7 @@ export function ReflectionSheet() {
                     startAt: new Date(session.startedAt),
                     endAt: new Date(session.endedAt),
                     status: "completed",
-                    notes: reflection,
+                    notes: reflection.trim() || undefined,
                 });
             }
         } catch (error) {
@@ -119,96 +200,110 @@ export function ReflectionSheet() {
         }
     };
 
-    if (!session || !session.endedAt) return null;
-
-    const isFree = session.mode === "free";
+    if (!session || !session.endedAt || session.persistenceStatus !== "persisted") return null;
 
     return (
-        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center px-6 text-white animate-in fade-in duration-500">
-            {/* Intensive backdrop-blur para el Dark Glass */}
-            <div className="absolute inset-0 bg-[#0B0F1A]/50 backdrop-blur-2xl" />
+        <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto px-4 py-4 text-white animate-in fade-in duration-400 sm:items-center sm:px-6 sm:py-6">
+            <div className="absolute inset-0 bg-black/55 backdrop-blur-2xl" />
 
-            {/* Panel Principal Flotante Premium Dark Glass */}
-            <div className="relative z-10 w-full max-w-md flex flex-col gap-6 p-8 rounded-3xl bg-[#0B0F1A]/60 border border-white/[0.08] shadow-[0_32px_80px_rgba(0,0,0,0.8),_0_0_60px_rgba(124,58,237,0.15)] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-500 max-h-[95vh] overflow-y-auto no-scrollbar">
+            <div className="relative z-10 my-auto w-full max-w-[460px] overflow-hidden rounded-[24px] border border-white/10 bg-[#0a0b12]/92 font-sans shadow-[0_28px_80px_rgba(0,0,0,0.72)] backdrop-blur-3xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-400 sm:max-w-[620px]">
+                <div className="pointer-events-none absolute inset-x-10 top-0 h-20 rounded-full bg-emerald-400/20 blur-3xl" />
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/45 to-transparent" />
+                <div className="pointer-events-none absolute inset-0 rounded-[24px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" />
 
-                {/* Iluminación ambiental sutil de Violeta en bordes internos */}
-                <div className="absolute inset-0 rounded-3xl shadow-[inset_0_0_40px_rgba(124,58,237,0.1)] pointer-events-none" />
-
-                <GlowingEffect spread={40} proximity={80} inactiveZone={0.01} borderWidth={1} variant="default" />
-
-                {/* Close button */}
-                <button
-                    onClick={handleClose}
-                    className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-white/90 transition-all z-20"
-                >
-                    <X className="w-4 h-4" />
-                </button>
-
-                {/* Header */}
-                <div className="flex flex-col items-center gap-2 text-center mt-2 relative z-10">
-                    <div className="w-14 h-14 rounded-full bg-[#0B0F1A]/80 border border-white/10 flex items-center justify-center shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]">
-                        {isFree
-                            ? <Sparkles className="w-6 h-6 text-[#7C3AED]" />
-                            : <CheckCircle className="w-6 h-6 text-green-400" />
-                        }
-                    </div>
-                    <h2 className="text-xl font-medium tracking-tight mt-2 text-white/90">
-                        {isFree ? "Sesión completada" : "Bloque completado"}
-                    </h2>
-                    <p className="text-white/50 text-sm tracking-wide mt-1">
-                        {question}
-                    </p>
-                </div>
-
-                {/* Grilla 3x2 con diseño más limpio y separado */}
-                <div className="flex flex-col gap-6 w-full relative z-10">
-                    {/* Fila 1: Antes */}
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                        <MetricScale label="Energía Inicial" icon={Battery} dynamicIcon={getBatteryIcon} value={metrics.energyBefore} onChange={v => setMetrics({ ...metrics, energyBefore: v })} />
-                        <MetricScale label="Ánimo Inicial" icon={Meh} dynamicIcon={getMoodIcon} value={metrics.moodBefore} onChange={v => setMetrics({ ...metrics, moodBefore: v })} />
-                    </div>
-                    {/* Fila 2: Durante */}
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                        <MetricScale label="Claridad" icon={Eye} value={metrics.clarity} onChange={v => setMetrics({ ...metrics, clarity: v })} />
-                        <MetricScale label="Dificultad" icon={Mountain} value={metrics.difficulty} onChange={v => setMetrics({ ...metrics, difficulty: v })} />
-                    </div>
-                    {/* Fila 3: Después */}
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                        <MetricScale label="Avance Logrado" icon={TrendingUp} value={metrics.progressFeelingAfter} onChange={v => setMetrics({ ...metrics, progressFeelingAfter: v })} />
-                        <MetricScale label="Ánimo Final" icon={Meh} dynamicIcon={getMoodIcon} value={metrics.moodAfter} onChange={v => setMetrics({ ...metrics, moodAfter: v })} />
-                    </div>
-                </div>
-
-                {/* Textarea Flotante (Glass style) */}
-                <textarea
-                    rows={2}
-                    placeholder="Breve nota mental (opcional)..."
-                    value={reflection}
-                    onChange={e => setReflection(e.target.value)}
-                    className="relative z-10 w-full bg-black/30 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-[#7C3AED]/50 focus:shadow-[0_0_20px_rgba(124,58,237,0.1)] transition-all resize-none leading-relaxed"
-                />
-
-                {/* Actions: Botón Premium Glass Violeta */}
-                <div className="flex flex-col gap-3 mt-2 relative z-10">
+                <div className="relative z-10 flex max-h-[calc(100dvh-2rem)] flex-col sm:max-h-[min(90dvh,860px)]">
                     <button
-                        onClick={handleFinish}
-                        disabled={isSaving}
-                        className="relative w-full h-12 flex items-center justify-center rounded-2xl bg-[#0B0F1A]/80 border border-[#7C3AED]/40 overflow-hidden group transition-all hover:border-[#7C3AED]/80 active:scale-[0.98]"
+                        type="button"
+                        onClick={handleClose}
+                        className="absolute right-5 top-5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/45 transition-all duration-200 hover:bg-white/10 hover:text-white/90 motion-reduce:transition-none"
                     >
-                        {/* Efecto de degradado HOVER */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#7C3AED]/30 to-[#4F46E5]/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        {/* Brillo interno constante */}
-                        <div className="absolute inset-0 shadow-[inset_0_0_15px_rgba(124,58,237,0.3)]" />
-                        {/* Texto */}
-                        <span className="relative z-10 text-white font-medium text-sm tracking-wide">
-                            {isSaving ? "Guardando..." : "Guardar y finalizar"}
-                        </span>
+                        <X className="h-4 w-4" />
                     </button>
-                    {isFree && (
-                        <p className="text-xs text-center text-white/30 hidden">
-                            Se creará un bloque para esta sesión.
-                        </p>
-                    )}
+
+                    <div className="overflow-y-auto px-5 py-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-7 sm:py-7">
+                        <div className="space-y-5 pr-10 sm:space-y-6">
+                            <div className="space-y-3">
+                                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.16)]">
+                                    {isFree ? <Sparkles className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/70">
+                                        Cierre
+                                    </p>
+                                    <h2 className="text-[1.75rem] font-semibold tracking-tight text-white/90 sm:text-2xl">
+                                        {isFree ? "Sesion completada" : "Bloque completado"}
+                                    </h2>
+                                    <p className="max-w-[36ch] text-sm leading-relaxed text-white/45">{question}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 sm:space-y-5">
+                                <MetricChoiceGroup
+                                    label="Avance Logrado"
+                                    description="Marca el nivel de progreso real. Esta es la metrica principal."
+                                    value={metrics.progressFeelingAfter}
+                                    options={PROGRESS_OPTIONS}
+                                    onChange={(value) => setMetric("progressFeelingAfter", value)}
+                                    emphasized
+                                />
+
+                                <MetricChoiceGroup
+                                    label="Dificultad"
+                                    description="Que tan costoso fue sostener el bloque?"
+                                    value={metrics.difficulty}
+                                    options={DIFFICULTY_OPTIONS}
+                                    onChange={(value) => setMetric("difficulty", value)}
+                                />
+
+                                <MetricChoiceGroup
+                                    label="Animo Final"
+                                    description="Elegi como terminaste esta sesion."
+                                    value={metrics.moodAfter}
+                                    options={FINAL_MOOD_OPTIONS}
+                                    onChange={(value) => setMetric("moodAfter", value)}
+                                />
+                            </div>
+
+                            {closureHint && (
+                                <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/75">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                                        Antes anotaste
+                                    </p>
+                                    <p className="mt-1 leading-relaxed text-white/72">
+                                        &ldquo;{closureHint}&rdquo;
+                                    </p>
+                                    <p className="mt-2 text-xs text-white/40">
+                                        Si queres, suma algo mas sobre como termino la sesion.
+                                    </p>
+                                </div>
+                            )}
+
+                            <textarea
+                                rows={3}
+                                placeholder="Nota mental opcional..."
+                                value={reflection}
+                                onChange={(event) => setReflection(event.target.value)}
+                                className="min-h-[88px] w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-relaxed text-white/85 placeholder:text-white/28 outline-none transition-all duration-200 focus:border-white/20 focus:bg-black/25 motion-reduce:transition-none sm:min-h-[92px]"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 border-t border-white/10 bg-[linear-gradient(180deg,rgba(10,11,18,0.94),rgba(10,11,18,1))] px-5 py-4 backdrop-blur-2xl sm:px-7 sm:py-5">
+                        <button
+                            type="button"
+                            onClick={handleFinish}
+                            disabled={!canFinish}
+                            className={cn(
+                                "inline-flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold tracking-tight transition-all duration-300 motion-reduce:transition-none",
+                                canFinish
+                                    ? "bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] text-white shadow-[0_16px_34px_rgba(109,40,217,0.32)] hover:from-[#5b21b6] hover:to-[#7c3aed] active:scale-[0.985]"
+                                    : "cursor-not-allowed bg-white/8 text-white/55 opacity-50"
+                            )}
+                        >
+                            {isSaving ? "Guardando..." : "Guardar y finalizar"}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

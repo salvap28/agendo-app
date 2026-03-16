@@ -13,10 +13,10 @@ import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 // export const dynamic = "force-dynamic";
 
 export default function Home() {
-  const contextRef = useRef<HTMLElement>(null);
-  const calendarRef = useRef<HTMLElement>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { fetchBlocks, isLoaded: blocksLoaded } = useBlocksStore();
+  const { fetchBlocks, isLoaded: blocksLoaded, syncStatusesWithCurrentTime } = useBlocksStore();
 
   // Performance Detection
   const { isLowEnd } = usePerformancePreference();
@@ -26,6 +26,18 @@ export default function Home() {
       fetchBlocks();
     }
   }, [blocksLoaded, fetchBlocks]);
+
+  useEffect(() => {
+    if (!blocksLoaded) return;
+
+    syncStatusesWithCurrentTime();
+
+    const interval = window.setInterval(() => {
+      syncStatusesWithCurrentTime();
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [blocksLoaded, syncStatusesWithCurrentTime]);
 
   // Immediately resolve loading state if we are dropping the heavy 3D background
   useEffect(() => {
@@ -82,12 +94,12 @@ export default function Home() {
           </div>
 
           {/* --- 2. CONTEXT (Greeting & Next Block) --- */}
-          <div ref={contextRef as any} className="relative z-10 w-full snap-start">
+          <div ref={contextRef} className="relative z-10 w-full snap-start">
             <SectionContext onNext={() => scrollToSection(calendarRef)} />
           </div>
 
           {/* --- 3. CALENDAR (Full integration) --- */}
-          <div ref={calendarRef as any} className="relative z-10 w-full snap-start">
+          <div ref={calendarRef} className="relative z-10 w-full snap-start">
             <SectionCalendar />
           </div>
 

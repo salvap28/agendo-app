@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, getClientUser } from '@/lib/supabase/client';
 import { WorkoutRoutine } from '@/lib/types/focus';
 
 interface GymState {
@@ -20,7 +20,7 @@ export const useGymStore = create<GymState>((set, get) => ({
     fetchRoutines: async () => {
         set({ isLoading: true });
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getClientUser(supabase);
         if (!user) { set({ isLoading: false }); return; }
 
         const { data, error } = await supabase
@@ -37,7 +37,7 @@ export const useGymStore = create<GymState>((set, get) => ({
 
     addRoutine: async (routine) => {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getClientUser(supabase);
         if (!user) return;
 
         const newRoutine = {

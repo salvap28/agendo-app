@@ -3,14 +3,13 @@
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block } from "@/lib/types/blocks";
 import { BlockItem } from "./BlockItem";
-import { GlowingEffect } from "@/components/ui/glowing-effect";
-import { BlockDrawer } from "./BlockDrawer"; // Keep it around just in case for now, or we can fully delete later
 import { RadialBlockMenu } from "./RadialBlockMenu";
 import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/cn";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Grid, ListTodo, Clock, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Grid } from "lucide-react";
 import { FocusPlannerModal } from "../focus/FocusPlannerModal";
+import { sortBlocksByStart } from "@/lib/utils/blockState";
 
 // Constants
 const PIXELS_PER_HOUR = 80;
@@ -66,9 +65,18 @@ export function WeekView() {
 
     // State
     const [currentDate, setCurrentDate] = useState(new Date()); // Week reference
+    const [currentTime, setCurrentTime] = useState(() => new Date());
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            setCurrentTime(new Date());
+        }, 30000);
+
+        return () => window.clearInterval(interval);
+    }, []);
 
     const handlePrevWeek = () => {
         setCurrentDate(prev => {
@@ -84,10 +92,6 @@ export function WeekView() {
             d.setDate(d.getDate() + 7);
             return d;
         });
-    };
-
-    const handleToday = () => {
-        setCurrentDate(new Date());
     };
 
     // Interaction State
@@ -129,8 +133,10 @@ export function WeekView() {
         const endOfWeek = new Date(weekStart);
         endOfWeek.setDate(endOfWeek.getDate() + 7);
 
-        return blocks.filter(b =>
-            b.startAt >= weekStart && b.startAt < endOfWeek
+        return sortBlocksByStart(
+            blocks.filter((block) =>
+                block.startAt >= weekStart && block.startAt < endOfWeek && block.status !== "canceled"
+            )
         );
     }, [blocks, weekStart]);
 
@@ -250,7 +256,7 @@ export function WeekView() {
 
         if (interaction.type === "create") {
             // Fixed Start, Dynamic End
-            let end = currentTime;
+            const end = currentTime;
             const endFull = new Date(interaction.startTime);
             endFull.setHours(end.getHours(), end.getMinutes());
 
@@ -264,7 +270,7 @@ export function WeekView() {
         else if (interaction.type === "resize" && interaction.initialBlock) {
             // ... (Same resize logic)
             const start = interaction.initialBlock.startAt;
-            let end = currentTime;
+            const end = currentTime;
             const endFull = new Date(start);
             endFull.setHours(end.getHours(), end.getMinutes());
 
@@ -334,7 +340,12 @@ export function WeekView() {
             const finalEndSnapped = new Date(finalStartSnapped.getTime() + durationSnapped * 60000);
 
             const excludeId = interaction.type !== "create" ? interaction.initialBlock?.id : undefined;
-            const smartSlot = findNextFreeSlot(blocks, finalStartSnapped, durationSnapped, excludeId);
+            const smartSlot = findNextFreeSlot(
+                blocks.filter((block) => block.status !== "canceled"),
+                finalStartSnapped,
+                durationSnapped,
+                excludeId
+            );
 
             const startToUse = smartSlot ? smartSlot.startAt : finalStartSnapped;
             const endToUse = smartSlot ? smartSlot.endAt : finalEndSnapped;
@@ -495,6 +506,7 @@ export function WeekView() {
                                         block={block}
                                         top={0}
                                         height={height}
+                                        now={currentTime}
                                         onPointerDown={(e, action) => handleBlockPointerDown(e, block, action)}
                                     />
                                 </div>

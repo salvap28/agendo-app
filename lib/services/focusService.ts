@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getClientUser } from "@/lib/supabase/client";
 import { recomputeDailyMetricsForUser } from "@/lib/engines/patternEngine/metricsSync";
 
 /**
@@ -39,7 +39,7 @@ export async function saveSessionReflection(sessionId: string, oldIntention: str
     }
 
     // Immediately background sync daily metrics assuming the session belongs to them
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getClientUser(supabase);
     if (user) {
         // Fire and forget, decoupled from UI flow
         recomputeDailyMetricsForUser(user.id).catch(e => {

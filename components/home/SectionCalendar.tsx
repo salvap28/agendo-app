@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { DailyAgendaView } from "@/components/calendar/DailyAgendaView";
-import { WeekView } from "@/components/calendar/WeekView";
+import { GlassCalendarDashboard } from "@/components/calendar/GlassCalendarDashboard";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
@@ -34,7 +34,7 @@ export function SectionCalendar() {
                 desiredStart.setHours(9, 0, 0, 0);
             }
 
-            const dayBlocks = blocks.filter((block) => isSameDay(block.startAt, selectedDay));
+            const dayBlocks = blocks.filter((block) => isSameDay(block.startAt, selectedDay) && block.status !== "canceled");
             const nextSlot = findNextFreeSlot(dayBlocks, desiredStart, durationMinutes);
             const startAt = nextSlot?.startAt ?? desiredStart;
             const endAt = nextSlot?.endAt ?? new Date(startAt.getTime() + durationMinutes * 60000);
@@ -52,6 +52,11 @@ export function SectionCalendar() {
         } finally {
             setIsCreatingFromFab(false);
         }
+    };
+
+    const openDesktopBlockEditor = (blockId: string, shouldGuideCreation = false) => {
+        setSelectedBlockId(blockId);
+        setIsNewBlock(shouldGuideCreation);
     };
 
     return (
@@ -97,7 +102,7 @@ export function SectionCalendar() {
                 </div>
             </div>
 
-            {/* Desktop View: Week Grid */}
+            {/* Desktop View: Glass calendar dashboard */}
             <div className={cn(
                 "hidden md:block w-full max-w-[1400px] h-[85vh] overflow-hidden relative z-10",
                 "rounded-[2rem] md:rounded-[3rem]",
@@ -108,7 +113,7 @@ export function SectionCalendar() {
                 {/* Subtle Top Gradient Highlight (Simulated overhead light) */}
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none z-0" />
                 <div className="relative w-full h-full z-10">
-                    <WeekView />
+                    <GlassCalendarDashboard onOpenBlock={openDesktopBlockEditor} />
                 </div>
             </div>
 

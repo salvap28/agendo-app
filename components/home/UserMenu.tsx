@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getClientUser } from "@/lib/supabase/client";
 import { LogOut, Settings, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -9,14 +9,13 @@ import { cn } from "@/lib/cn";
 export function UserMenu() {
     const [userName, setUserName] = useState<string>("Usuario");
     const [isOpen, setIsOpen] = useState(false);
-    const [isScrolled, setIsScrolled] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
     useEffect(() => {
         const fetchUser = async () => {
             const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getClientUser(supabase);
             if (user) {
                 const username = user.user_metadata?.username;
                 const fullName = user.user_metadata?.full_name || user.user_metadata?.name;
@@ -39,22 +38,8 @@ export function UserMenu() {
         };
         document.addEventListener("mousedown", handleClickOutside);
 
-        // Track scrolling to optionally blur background if the menu stays fixed
-        const scrollContainer = document.getElementById("main-scroll-container");
-        const handleScroll = () => {
-            if (scrollContainer) {
-                setIsScrolled(scrollContainer.scrollTop > 50);
-            }
-        };
-        if (scrollContainer) {
-            scrollContainer.addEventListener("scroll", handleScroll);
-        }
-
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
-            if (scrollContainer) {
-                scrollContainer.removeEventListener("scroll", handleScroll);
-            }
         };
     }, []);
 

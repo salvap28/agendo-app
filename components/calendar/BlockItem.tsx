@@ -1,17 +1,18 @@
 import { Block } from "@/lib/types/blocks";
 import { cn } from "@/lib/cn";
 import { useMemo, useState } from "react";
-import { isSameDay } from "date-fns";
 import { getBlockColors } from "@/lib/utils/blockColors";
+import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
 
 interface BlockItemProps {
     block: Block;
     top: number;
     height: number;
+    now: Date;
     onPointerDown: (e: React.PointerEvent, action: "move" | "resize") => void;
 }
 
-export function BlockItem({ block, top, height, onPointerDown }: BlockItemProps) {
+export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemProps) {
 
     const [isHovered, setIsHovered] = useState(false);
 
@@ -28,9 +29,8 @@ export function BlockItem({ block, top, height, onPointerDown }: BlockItemProps)
     }, [block.type]);
 
     const isCurrentlyActive = useMemo(() => {
-        const now = new Date();
-        return isSameDay(block.startAt, now) && block.startAt <= now && block.endAt > now;
-    }, [block.startAt, block.endAt]);
+        return getBlockEffectiveStatus(block, now) === "active";
+    }, [block, now]);
 
     const colors = useMemo(() => getBlockColors(block.type), [block.type]);
 

@@ -1,7 +1,51 @@
 import { create } from 'zustand';
-import { Block, BlockStatus, BlockType } from '@/lib/types/blocks';
+import { Block, BlockStatus } from '@/lib/types/blocks';
 import { roundTo15 } from '@/lib/utils/blockUtils';
-import { createClient } from '@/lib/supabase/client';
+import { getBlockEffectiveStatus } from '@/lib/utils/blockState';
+import { createClient, getClientUser } from '@/lib/supabase/client';
+
+interface BlockRow {
+    id: string;
+    title: string;
+    type: Block["type"];
+    status: BlockStatus;
+    start_at: string;
+    end_at: string;
+    notes: string | null;
+    tag: string | null;
+    color: string | null;
+    recurrence_id: string | null;
+    recurrence_pattern: Block["recurrencePattern"] | null;
+    notifications: number[] | null;
+}
+
+type BlockInsertPayload = {
+    id: string;
+    user_id: string;
+    title: string;
+    type: Block["type"];
+    status: BlockStatus;
+    start_at: string;
+    end_at: string;
+    notes?: string;
+    tag?: string;
+    color?: string;
+    recurrence_id?: string;
+    recurrence_pattern?: Block["recurrencePattern"];
+    notifications?: number[];
+};
+
+type BlockUpdatePayload = Partial<{
+    title: string;
+    type: Block["type"];
+    status: BlockStatus;
+    start_at: string;
+    end_at: string;
+    notes: string | null;
+    tag: string | null;
+    color: string | null;
+    notifications: number[] | null;
+}>;
 
 interface BlocksState {
     blocks: Block[];
@@ -9,6 +53,7 @@ interface BlocksState {
 
     // Actions
     fetchBlocks: () => Promise<void>;
+    syncStatusesWithCurrentTime: () => Promise<void>;
     createBlock: (partial: Partial<Block> & Pick<Block, "startAt" | "endAt">) => Block | null;
     updateBlock: (id: string, patch: Partial<Block>) => Promise<void>;
     deleteBlock: (id: string) => Promise<void>;
@@ -24,7 +69,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
 
     fetchBlocks: async () => {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getClientUser(supabase);
         if (!user) return;
 
         const { data, error } = await supabase
@@ -37,22 +82,77 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             return;
         }
 
-        const formattedBlocks: Block[] = (data || []).map((b: any) => ({
+        const formattedBlocks: Block[] = ((data || []) as BlockRow[]).map((b) => ({
             id: b.id,
             title: b.title,
             type: b.type,
             status: b.status,
             startAt: new Date(b.start_at),
             endAt: new Date(b.end_at),
-            notes: b.notes,
-            tag: b.tag,
-            color: b.color,
-            recurrenceId: b.recurrence_id,
-            recurrencePattern: b.recurrence_pattern,
+            notes: b.notes ?? undefined,
+            tag: b.tag ?? undefined,
+            color: b.color ?? undefined,
+            recurrenceId: b.recurrence_id ?? undefined,
+            recurrencePattern: b.recurrence_pattern ?? undefined,
             notifications: b.notifications || [5],
         }));
 
         set({ blocks: formattedBlocks, isLoaded: true });
+    },
+
+    syncStatusesWithCurrentTime: async () => {
+        const { blocks } = get();
+        const now = new Date();
+        const statusUpdates = blocks
+            .filter((block) => block.status !== "canceled")
+            .map((block) => {
+                const nextStatus = getBlockEffectiveStatus(block, now);
+
+                return {
+                    id: block.id,
+                    nextStatus,
+                    changed: block.status !== nextStatus,
+                };
+            })
+            .filter((entry) => entry.changed);
+
+        if (statusUpdates.length === 0) return;
+
+        const updatesById = new Map(statusUpdates.map((entry) => [entry.id, entry.nextStatus]));
+
+        set((state) => ({
+            blocks: state.blocks.map((block) => {
+                const nextStatus = updatesById.get(block.id);
+                return nextStatus ? { ...block, status: nextStatus } : block;
+            })
+        }));
+
+        const supabase = createClient();
+        const groupedUpdates: Record<Exclude<BlockStatus, "canceled">, string[]> = {
+            planned: [],
+            active: [],
+            completed: [],
+        };
+
+        statusUpdates.forEach(({ id, nextStatus }) => {
+            if (nextStatus === "canceled") return;
+            groupedUpdates[nextStatus].push(id);
+        });
+
+        await Promise.all(
+            (Object.entries(groupedUpdates) as Array<[Exclude<BlockStatus, "canceled">, string[]]>)
+                .filter(([, ids]) => ids.length > 0)
+                .map(async ([status, ids]) => {
+                    const { error } = await supabase
+                        .from('blocks')
+                        .update({ status })
+                        .in('id', ids);
+
+                    if (error) {
+                        console.error(`Error syncing ${status} block statuses:`, error);
+                    }
+                })
+        );
     },
 
     createBlock: (partial) => {
@@ -86,7 +186,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         if (partial.recurrencePattern) {
             const { type, days, endDate } = partial.recurrencePattern;
             const limitDate = endDate || new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days max default
-            let currentDate = new Date(baseBlock.startAt);
+            const currentDate = new Date(baseBlock.startAt);
 
             // Advance to next occurrence
             currentDate.setDate(currentDate.getDate() + 1);
@@ -131,10 +231,10 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         }));
 
         // DB Insert (Fire and forget to keep UI snappy)
-        supabase.auth.getUser().then(({ data: { user } }) => {
+        getClientUser(supabase).then((user) => {
             if (!user) return;
-            const blocksToInsert = newBlocks.map(b => {
-                const payload: any = {
+            const blocksToInsert: BlockInsertPayload[] = newBlocks.map((b) => {
+                const payload: BlockInsertPayload = {
                     id: b.id,
                     user_id: user.id,
                     title: b.title,
@@ -171,16 +271,16 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
 
         // DB Update
         const supabase = createClient();
-        const updateData: any = {};
+        const updateData: BlockUpdatePayload = {};
         if (patch.title !== undefined) updateData.title = patch.title;
         if (patch.type !== undefined) updateData.type = patch.type;
         if (patch.status !== undefined) updateData.status = patch.status;
         if (patch.startAt !== undefined) updateData.start_at = patch.startAt.toISOString();
         if (patch.endAt !== undefined) updateData.end_at = patch.endAt.toISOString();
-        if (patch.notes !== undefined) updateData.notes = patch.notes;
-        if (patch.tag !== undefined) updateData.tag = patch.tag;
-        if (patch.color !== undefined) updateData.color = patch.color;
-        if (patch.notifications !== undefined) updateData.notifications = patch.notifications;
+        if (patch.notes !== undefined) updateData.notes = patch.notes ?? null;
+        if (patch.tag !== undefined) updateData.tag = patch.tag ?? null;
+        if (patch.color !== undefined) updateData.color = patch.color ?? null;
+        if (patch.notifications !== undefined) updateData.notifications = patch.notifications ?? null;
 
         const { error } = await supabase.from('blocks').update(updateData).eq('id', id);
         if (error) console.error('Error updating block:', error);
@@ -232,7 +332,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
 
         // DB Insert
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getClientUser(supabase);
         if (user) {
             const { error } = await supabase.from('blocks').insert({
                 id: copy.id,
@@ -289,7 +389,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         const { type, days, endDate } = pattern;
         const limitDate = endDate || new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days max
 
-        let currentDate = new Date(updatedSource.startAt);
+        const currentDate = new Date(updatedSource.startAt);
         currentDate.setDate(currentDate.getDate() + 1); // Start checking from tomorrow
 
         while (currentDate <= limitDate) {
@@ -333,7 +433,7 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
 
         // DB Operations
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getClientUser(supabase);
         if (!user) return;
 
         // Delete old series first (excluding current block)

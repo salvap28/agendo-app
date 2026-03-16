@@ -12,6 +12,7 @@ const supabase = createClient();
 export default function NotificationsTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
     const [testStatus, setTestStatus] = useState<"idle" | "waiting" | "sent">("idle");
+    const [pushStatus, setPushStatus] = useState<"checking" | "configured" | "missing">("checking");
 
     useEffect(() => {
         async function init() {
@@ -24,6 +25,38 @@ export default function NotificationsTab() {
         }
         init();
     }, [isInitialized, fetchSettings]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadPushStatus() {
+            try {
+                const response = await fetch("/api/notifications/vapid-public-key", {
+                    cache: "no-store"
+                });
+
+                if (!cancelled) {
+                    if (!response.ok) {
+                        setPushStatus("missing");
+                        return;
+                    }
+
+                    const data = await response.json();
+                    setPushStatus(data.configured ? "configured" : "missing");
+                }
+            } catch {
+                if (!cancelled) {
+                    setPushStatus("missing");
+                }
+            }
+        }
+
+        loadPushStatus();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const handleTestNotification = async () => {
         if (!("Notification" in window)) {
@@ -80,6 +113,13 @@ export default function NotificationsTab() {
                     )}
                 </button>
             </div>
+
+            {pushStatus === "missing" && (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+                    Las notificaciones locales siguen funcionando, pero los push en segundo plano necesitan una VAPID public key.
+                    Si ya la agregaste en <code className="mx-1">.env.local</code>, reinicia <code className="mx-1">npm run dev</code>.
+                </div>
+            )}
 
             <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-8 flex flex-col gap-10">
 

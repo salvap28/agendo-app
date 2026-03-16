@@ -1,6 +1,14 @@
 import { BlockType } from "./blocks";
 
 export type FocusMode = "block" | "free";
+export type FocusPauseReason = "manual_pause" | "manual_rest" | "overlay_exit";
+export type FocusEntryStartMode = "normal" | "study_technique" | "gym" | "micro_commit";
+export type FocusInterventionKind =
+    | "reduce_scope"
+    | "reset_clarity"
+    | "refocus_prompt"
+    | "progress_check"
+    | "closure_bridge";
 
 // ── Gym Tracker Types ──────────────────────────────────────────────────────
 
@@ -49,12 +57,18 @@ export type GymLayerConfig = {
     };
 };
 
+export type AttentionAidConfig = {
+    startedAt?: string | null;
+    durationSec?: number;
+    compact?: boolean;
+};
+
 // ── FocusLayer ─────────────────────────────────────────────────────────────
 
 export interface FocusLayer {
     id: string;
-    kind: "studyTechnique" | "gymMode" | "none";
-    config?: GymLayerConfig | Record<string, unknown>; // Typed per kind
+    kind: "studyTechnique" | "gymMode" | "attentionAid" | "none";
+    config?: GymLayerConfig | AttentionAidConfig | Record<string, unknown>; // Typed per kind
 }
 
 // ── FocusCard ─────────────────────────────────────────────────────────────
@@ -78,6 +92,35 @@ export interface FocusCard {
     isToast?: boolean;
 }
 
+export interface FocusCardMemory {
+    cardId: string;
+    shownAt: number;
+    lastShownAt: number;
+    dismissedAt?: number | null;
+    acceptedAt?: number | null;
+    rejectedAt?: number | null;
+    cooldownUntil?: number | null;
+    timesShown: number;
+}
+
+export interface ClosureNote {
+    text: string;
+    timestamp: number;
+}
+
+export interface FocusEntryRitualState {
+    isActive: boolean;
+    completed: boolean;
+    skipped: boolean;
+    objective: string | null;
+    nextStep: string | null;
+    minimumViable: string | null;
+    suggestedStartMode: FocusEntryStartMode | null;
+    selectedStartMode: FocusEntryStartMode | null;
+    startedAt: number | null;
+    completedAt: number | null;
+}
+
 // ── FocusSession ──────────────────────────────────────────────────────────
 
 export interface FocusSession {
@@ -96,8 +139,16 @@ export interface FocusSession {
 
     pauseCount: number;
     exitCount: number;
+    restCount?: number;
+    lastPauseReason?: FocusPauseReason | null;
+    pauseEvents?: number[];
+    exitEvents?: number[];
+    firstInteractionAt?: string;
+    lastInteractionAt?: string;
 
     intention?: string;
+    nextStep?: string;
+    minimumViable?: string;
 
     // V1 Tracking metrics
     energyBefore?: number;
@@ -112,6 +163,45 @@ export interface FocusSession {
 
     activeLayer?: FocusLayer | null;
     history?: string[];
+    cardMemory?: Record<string, FocusCardMemory>;
+    closureBridgeShown?: boolean;
+    closureNote?: ClosureNote | null;
+    entryRitual?: FocusEntryRitualState;
+    persistenceStatus?: "draft" | "pending" | "persisted" | "failed";
+}
+
+export interface FocusSessionSummary {
+    id: string;
+    blockType?: BlockType;
+    intention?: string | null;
+    nextStep?: string | null;
+    minimumViable?: string | null;
+    selectedStartMode?: FocusEntryStartMode | null;
+    endedAt: string;
+    age?: number;
+}
+
+export interface FocusIntervention {
+    id: string;
+    kind: FocusInterventionKind;
+    timestamp: number;
+    payload?: Record<string, unknown>;
+    sourceCard?: string | null;
+    sourceToast?: string | null;
+    trigger?: string | null;
+}
+
+export interface FocusInterventionRecord {
+    id: string;
+    sessionId: string;
+    timestamp: number;
+    type: string;
+    sourceCard?: string | null;
+    sourceToast?: string | null;
+    trigger?: string | null;
+    actionTaken?: string | null;
+    result?: string | null;
+    payload?: Record<string, unknown>;
 }
 
 // ── FocusContext ──────────────────────────────────────────────────────────
@@ -119,11 +209,28 @@ export interface FocusSession {
 export interface FocusContext {
     mode: FocusMode;
     blockType?: BlockType;
-    timeElapsedSec: number;
-    pauseCount: number;
-    exitCount: number;
-    totalPausedSec: number;
-    nearEndAt: boolean;
-    timeOfDay: "morning" | "afternoon" | "evening" | "night";
+    startTime: number;
+    now: number;
+    plannedDurationMs: number;
+    elapsedMs: number;
+    totalPausedMs: number;
+    sessionProgress: number;
+    pauses: number;
+    overlayExits: number;
+    restPauses: number;
+    lastPauseReason?: FocusPauseReason | null;
+    recentPauseCount: number;
+    recentExitCount: number;
+    recentInteractionWindowMs: number;
+    recentStabilityMs: number;
+    startDelayMs: number;
+    intention?: string | null;
+    nextStep?: string | null;
+    minimumViable?: string | null;
     history: string[];
+    cardMemory: Record<string, FocusCardMemory>;
+    closureBridgeShown: boolean;
+    lastSession?: FocusSessionSummary | null;
+    activeLayerId?: string | null;
+    activeLayerKind?: FocusLayer["kind"] | null;
 }

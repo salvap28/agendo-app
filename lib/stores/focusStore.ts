@@ -1,10 +1,246 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { FocusSession, FocusLayer, GymLayerConfig, GymExerciseLog, GymSet } from '@/lib/types/focus';
+import {
+    AttentionAidConfig,
+    ClosureNote,
+    FocusCardMemory,
+    FocusEntryRitualState,
+    FocusIntervention,
+    FocusInterventionKind,
+    FocusInterventionRecord,
+    FocusEntryStartMode,
+    FocusLayer,
+    FocusPauseReason,
+    FocusSession,
+    FocusSessionSummary,
+    GymExerciseLog,
+    GymLayerConfig,
+    GymSet,
+    WorkoutRoutine
+} from '@/lib/types/focus';
 import { createGymLayer } from '@/lib/engines/layersEngine';
+import {
+    createEntryRitualState,
+    createLegacyEntryRitualState,
+    resolveEntryStartLayer,
+} from '@/lib/engines/focusEntryRitual';
+import { useBlocksStore } from '@/lib/stores/blocksStore';
 import { BlockType } from '@/lib/types/blocks';
-import { createClient } from '@/lib/supabase/client';
-import { syncDailyMetrics } from '@/lib/engines/patternEngine/metricsSync';
+import { createClient, getClientUser } from '@/lib/supabase/client';
+import { focusCardCooldowns } from '@/lib/engines/cardsEngine';
+
+type StudyTechniqueLayerConfig = {
+    state?: {
+        phaseStartedAt?: string | null;
+    };
+} & Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function normalizeGymConfig(config: unknown): GymLayerConfig {
+    const rawConfig = isRecord(config) ? config : {};
+    const rawRest = isRecord(rawConfig.rest) ? rawConfig.rest : {};
+
+    return {
+        workoutName: typeof rawConfig.workoutName === 'string' ? rawConfig.workoutName : null,
+        workoutColor: typeof rawConfig.workoutColor === 'string' ? rawConfig.workoutColor : null,
+        activeRoutineId: typeof rawConfig.activeRoutineId === 'string' ? rawConfig.activeRoutineId : null,
+        exercises: Array.isArray(rawConfig.exercises) ? (rawConfig.exercises as GymExerciseLog[]) : [],
+        activeExerciseId: typeof rawConfig.activeExerciseId === 'string' ? rawConfig.activeExerciseId : null,
+        rest: {
+            isResting: rawRest.isResting === true,
+            selectedSec: typeof rawRest.selectedSec === 'number' ? rawRest.selectedSec : undefined,
+            restStartedAt: typeof rawRest.restStartedAt === 'string' ? rawRest.restStartedAt : null,
+        }
+    };
+}
+
+function normalizeStudyTechniqueConfig(config: unknown): StudyTechniqueLayerConfig {
+    if (!isRecord(config)) return {};
+    const rawState = isRecord(config.state) ? config.state : undefined;
+
+    return {
+        ...config,
+        state: rawState
+            ? {
+                ...rawState,
+                phaseStartedAt: typeof rawState.phaseStartedAt === 'string' ? rawState.phaseStartedAt : null,
+            }
+            : undefined,
+    };
+}
+
+function normalizeAttentionAidConfig(config: unknown): AttentionAidConfig {
+    if (!isRecord(config)) return {};
+
+    return {
+        ...config,
+        startedAt: typeof config.startedAt === 'string' ? config.startedAt : null,
+        durationSec: typeof config.durationSec === 'number' ? config.durationSec : undefined,
+        compact: typeof config.compact === 'boolean' ? config.compact : undefined,
+    };
+}
+
+function normalizeEntryRitualState(
+    entryRitual: unknown,
+    session: Pick<FocusSession, "intention" | "nextStep" | "minimumViable">
+): FocusEntryRitualState {
+    if (!isRecord(entryRitual)) {
+        return createLegacyEntryRitualState(session);
+    }
+
+    return {
+        isActive: entryRitual.isActive === true,
+        completed: entryRitual.completed === true,
+        skipped: entryRitual.skipped === true,
+        objective: typeof entryRitual.objective === 'string' ? entryRitual.objective : session.intention ?? null,
+        nextStep: typeof entryRitual.nextStep === 'string' ? entryRitual.nextStep : session.nextStep ?? null,
+        minimumViable: typeof entryRitual.minimumViable === 'string' ? entryRitual.minimumViable : session.minimumViable ?? null,
+        suggestedStartMode: typeof entryRitual.suggestedStartMode === 'string'
+            ? entryRitual.suggestedStartMode as FocusEntryStartMode
+            : null,
+        selectedStartMode: typeof entryRitual.selectedStartMode === 'string'
+            ? entryRitual.selectedStartMode as FocusEntryStartMode
+            : null,
+        startedAt: typeof entryRitual.startedAt === 'number' ? entryRitual.startedAt : null,
+        completedAt: typeof entryRitual.completedAt === 'number' ? entryRitual.completedAt : null,
+    };
+}
+
+function normalizeFocusSession(session: unknown): FocusSession | null {
+    if (!isRecord(session)) return null;
+
+    const rawSession = session as Partial<FocusSession>;
+    let activeLayer = rawSession.activeLayer;
+
+    if (activeLayer?.kind === "gymMode") {
+        activeLayer = {
+            ...activeLayer,
+            config: normalizeGymConfig(activeLayer.config),
+        };
+    } else if (activeLayer?.kind === "studyTechnique") {
+        activeLayer = {
+            ...activeLayer,
+            config: normalizeStudyTechniqueConfig(activeLayer.config),
+        };
+    } else if (activeLayer?.kind === "attentionAid") {
+        activeLayer = {
+            ...activeLayer,
+            config: normalizeAttentionAidConfig(activeLayer.config),
+        };
+    }
+
+    const normalizedSession: FocusSession = {
+        id: typeof rawSession.id === 'string' ? rawSession.id : crypto.randomUUID(),
+        mode: rawSession.mode === "free" ? "free" : "block",
+        blockId: typeof rawSession.blockId === 'string' ? rawSession.blockId : undefined,
+        blockType: rawSession.blockType,
+        startedAt: typeof rawSession.startedAt === 'string' ? rawSession.startedAt : new Date().toISOString(),
+        endedAt: typeof rawSession.endedAt === 'string' ? rawSession.endedAt : undefined,
+        isActive: rawSession.isActive === true,
+        isPaused: rawSession.isPaused === true,
+        pausedAt: typeof rawSession.pausedAt === 'string' ? rawSession.pausedAt : undefined,
+        totalPausedMs: typeof rawSession.totalPausedMs === 'number' ? rawSession.totalPausedMs : 0,
+        pauseCount: typeof rawSession.pauseCount === 'number' ? rawSession.pauseCount : 0,
+        exitCount: typeof rawSession.exitCount === 'number' ? rawSession.exitCount : 0,
+        restCount: typeof rawSession.restCount === 'number' ? rawSession.restCount : 0,
+        lastPauseReason: rawSession.lastPauseReason ?? null,
+        pauseEvents: Array.isArray(rawSession.pauseEvents)
+            ? rawSession.pauseEvents.filter((value): value is number => typeof value === 'number')
+            : [],
+        exitEvents: Array.isArray(rawSession.exitEvents)
+            ? rawSession.exitEvents.filter((value): value is number => typeof value === 'number')
+            : [],
+        firstInteractionAt: typeof rawSession.firstInteractionAt === 'string' ? rawSession.firstInteractionAt : undefined,
+        lastInteractionAt: typeof rawSession.lastInteractionAt === 'string' ? rawSession.lastInteractionAt : undefined,
+        intention: typeof rawSession.intention === 'string' ? rawSession.intention : undefined,
+        nextStep: typeof rawSession.nextStep === 'string' ? rawSession.nextStep : undefined,
+        minimumViable: typeof rawSession.minimumViable === 'string' ? rawSession.minimumViable : undefined,
+        energyBefore: rawSession.energyBefore,
+        moodBefore: rawSession.moodBefore,
+        moodAfter: rawSession.moodAfter,
+        progressFeelingAfter: rawSession.progressFeelingAfter,
+        difficulty: rawSession.difficulty,
+        clarity: rawSession.clarity,
+        startDelayMs: rawSession.startDelayMs,
+        previousContext: rawSession.previousContext,
+        sessionQualityScore: rawSession.sessionQualityScore,
+        activeLayer: activeLayer ?? null,
+        history: Array.isArray(rawSession.history) ? rawSession.history : [],
+        cardMemory: isRecord(rawSession.cardMemory) ? rawSession.cardMemory as Record<string, FocusCardMemory> : {},
+        closureBridgeShown: rawSession.closureBridgeShown === true,
+        closureNote: isRecord(rawSession.closureNote) && typeof rawSession.closureNote.text === 'string' && typeof rawSession.closureNote.timestamp === 'number'
+            ? rawSession.closureNote as ClosureNote
+            : null,
+        persistenceStatus: rawSession.persistenceStatus ?? "draft",
+        entryRitual: normalizeEntryRitualState(rawSession.entryRitual, {
+            intention: typeof rawSession.intention === 'string' ? rawSession.intention : undefined,
+            nextStep: typeof rawSession.nextStep === 'string' ? rawSession.nextStep : undefined,
+            minimumViable: typeof rawSession.minimumViable === 'string' ? rawSession.minimumViable : undefined,
+        }),
+    };
+
+    return normalizedSession;
+}
+
+function getCardMemoryKey(cardId: string) {
+    if (cardId.startsWith('toast_active_recall_')) return 'toast_active_recall';
+    return cardId;
+}
+
+function getOutcomeCooldownMs(cardId: string, outcome: "accepted" | "dismissed" | "rejected") {
+    const policy = focusCardCooldowns[getCardMemoryKey(cardId) as keyof typeof focusCardCooldowns];
+    if (!policy) return null;
+    return policy[outcome] ?? null;
+}
+
+function updateCardMemoryEntry(
+    existingMemory: Record<string, FocusCardMemory> | undefined,
+    cardId: string,
+    updater: (current: FocusCardMemory | null) => FocusCardMemory
+) {
+    const key = getCardMemoryKey(cardId);
+    const current = existingMemory?.[key] ?? null;
+
+    return {
+        ...(existingMemory || {}),
+        [key]: updater(current),
+    };
+}
+
+function createRuntimeStartedAt(previousStartedAt?: string) {
+    const now = Date.now();
+    const previousMs = previousStartedAt ? new Date(previousStartedAt).getTime() : 0;
+    return new Date(Math.max(now, previousMs + 1)).toISOString();
+}
+
+const MAX_SESSION_EVENT_HISTORY = 20;
+
+function appendSessionEvent(events: number[] | undefined, timestamp: number) {
+    return [...(events ?? []), timestamp].slice(-MAX_SESSION_EVENT_HISTORY);
+}
+
+function noteSessionInteraction(session: FocusSession, timestamp = Date.now()) {
+    const isoTimestamp = new Date(timestamp).toISOString();
+
+    return {
+        firstInteractionAt: session.firstInteractionAt ?? isoTimestamp,
+        lastInteractionAt: isoTimestamp,
+        startDelayMs: session.startDelayMs ?? Math.max(0, timestamp - new Date(session.startedAt).getTime()),
+    };
+}
+
+function resetRuntimeInteractionState() {
+    return {
+        pauseEvents: [] as number[],
+        exitEvents: [] as number[],
+        firstInteractionAt: undefined,
+        lastInteractionAt: undefined,
+        startDelayMs: undefined,
+    };
+}
 
 // ── Local storage helpers ──────────────────────────────────────────────────
 
@@ -35,23 +271,61 @@ function addGymRecentExercise(name: string) {
 
 interface FocusState {
     session: FocusSession | null;
+    lastSession: FocusSessionSummary | null;
+    intervention: FocusIntervention | null;
+    interventions: FocusInterventionRecord[];
 
     // General
     openFromBlock: (blockId: string, blockType: BlockType) => void;
     openFree: () => void;
-    pause: () => void;
+    pause: (options?: { reason?: FocusPauseReason }) => void;
     resume: () => void;
     exit: () => void;
     returnToFocus: () => void;
-    finish: () => void;
+    finish: () => Promise<void>;
     extendBlock: (additionalMinutes: number) => void;
     setLayer: (layer: FocusLayer | null) => void;
     setSessionIntention: (intention: string) => void;
+    setSessionNextStep: (nextStep: string) => void;
+    setSessionMinimumViable: (minimumViable: string) => void;
     addToHistory: (event: string) => void;
+    markClosureBridgeShown: () => void;
+    saveClosureNote: (text: string, timestamp?: number) => void;
+    markCardShown: (cardId: string, now?: number) => void;
+    recordCardOutcome: (cardId: string, outcome: "accepted" | "dismissed" | "rejected", now?: number) => void;
+    startEntryRitual: () => void;
+    updateEntryRitual: (updates: Partial<FocusEntryRitualState>) => void;
+    completeEntryRitual: () => void;
+    skipEntryRitual: () => void;
+    clearEntryRitual: () => void;
+    openIntervention: (
+        kind: FocusInterventionKind,
+        options?: {
+            payload?: Record<string, unknown>;
+            sourceCard?: string | null;
+            sourceToast?: string | null;
+            trigger?: string | null;
+        }
+    ) => void;
+    resolveIntervention: (resolution: {
+        actionTaken: string;
+        result: string;
+        payload?: Record<string, unknown>;
+    }) => void;
+    closeIntervention: (result?: string) => void;
+    recordIntervention: (record: {
+        type: string;
+        sourceCard?: string | null;
+        sourceToast?: string | null;
+        trigger?: string | null;
+        actionTaken?: string | null;
+        result?: string | null;
+        payload?: Record<string, unknown>;
+    }) => void;
 
     // Gym tracker
     activateGymTracker: () => void;
-    startGymWorkout: (routine: any) => void;
+    startGymWorkout: (routine: WorkoutRoutine) => void;
     addGymExercise: (name: string) => void;
     updateGymExercise: (exerciseId: string, updates: Partial<GymExerciseLog>) => void;
     selectGymExercise: (exerciseId: string) => void;
@@ -70,25 +344,13 @@ interface FocusState {
 
 function getGymConfig(session: FocusSession | null): GymLayerConfig | null {
     if (!session?.activeLayer || session.activeLayer.kind !== 'gymMode') return null;
-    const cfg = session.activeLayer.config as any;
-    return {
-        workoutName: cfg?.workoutName || null,
-        exercises: cfg?.exercises || [],
-        activeExerciseId: cfg?.activeExerciseId || null,
-        rest: cfg?.rest || { isResting: false }
-    } as GymLayerConfig;
+    return normalizeGymConfig(session.activeLayer.config);
 }
 
 function updateGymConfig(session: FocusSession, updater: (cfg: GymLayerConfig) => GymLayerConfig): FocusSession {
     const layer = session.activeLayer;
     if (!layer || layer.kind !== 'gymMode') return session;
-    const rawCfg = layer.config as any;
-    const safeCfg: GymLayerConfig = {
-        workoutName: rawCfg?.workoutName || null,
-        exercises: rawCfg?.exercises || [],
-        activeExerciseId: rawCfg?.activeExerciseId || null,
-        rest: rawCfg?.rest || { isResting: false }
-    };
+    const safeCfg = normalizeGymConfig(layer.config);
     return {
         ...session,
         activeLayer: {
@@ -104,8 +366,35 @@ export const useFocusStore = create<FocusState>()(
     persist(
         (set, get) => ({
             session: null,
+            lastSession: null,
+            intervention: null,
+            interventions: [],
 
             openFromBlock: (blockId, blockType) => {
+                const existingSession = get().session;
+
+                if (
+                    existingSession?.mode === "block" &&
+                    existingSession.blockId === blockId &&
+                    !existingSession.endedAt
+                ) {
+                    if (existingSession.isActive) return;
+
+                    set({
+                        session: {
+                            ...existingSession,
+                            isActive: true,
+                            history: [
+                                ...(existingSession.history || []),
+                                existingSession.entryRitual?.isActive
+                                    ? 'Returned to entry ritual via block'
+                                    : 'Returned to overlay via block'
+                            ]
+                        }
+                    });
+                    return;
+                }
+
                 const now = new Date().toISOString();
                 set({
                     session: {
@@ -119,13 +408,43 @@ export const useFocusStore = create<FocusState>()(
                         totalPausedMs: 0,
                         pauseCount: 0,
                         exitCount: 0,
+                        restCount: 0,
+                        lastPauseReason: null,
+                        pauseEvents: [],
+                        exitEvents: [],
+                        firstInteractionAt: undefined,
+                        lastInteractionAt: undefined,
                         history: ["Session started from block"],
-                        activeLayer: blockType === "gym" ? createGymLayer() : undefined
+                        activeLayer: undefined,
+                        cardMemory: {},
+                        closureBridgeShown: false,
+                        closureNote: null,
+                        persistenceStatus: "draft",
                     }
                 });
+                get().startEntryRitual();
             },
 
             openFree: () => {
+                const existingSession = get().session;
+                if (existingSession?.mode === "free" && !existingSession.endedAt) {
+                    if (existingSession.isActive) return;
+
+                    set({
+                        session: {
+                            ...existingSession,
+                            isActive: true,
+                            history: [
+                                ...(existingSession.history || []),
+                                existingSession.entryRitual?.isActive
+                                    ? 'Returned to free entry ritual'
+                                    : 'Returned to free focus',
+                            ],
+                        }
+                    });
+                    return;
+                }
+
                 const now = new Date().toISOString();
                 set({
                     session: {
@@ -137,21 +456,41 @@ export const useFocusStore = create<FocusState>()(
                         totalPausedMs: 0,
                         pauseCount: 0,
                         exitCount: 0,
-                        history: ["Free session started"]
+                        restCount: 0,
+                        lastPauseReason: null,
+                        pauseEvents: [],
+                        exitEvents: [],
+                        firstInteractionAt: undefined,
+                        lastInteractionAt: undefined,
+                        history: ["Free session started"],
+                        cardMemory: {},
+                        closureBridgeShown: false,
+                        closureNote: null,
+                        persistenceStatus: "draft",
                     }
                 });
+                get().startEntryRitual();
             },
 
-            pause: () => {
+            pause: (options) => {
                 const { session } = get();
                 if (!session || session.isPaused) return;
+                const reason = options?.reason ?? "manual_pause";
+                const timestamp = Date.now();
+                const interactionState = noteSessionInteraction(session, timestamp);
                 set({
                     session: {
                         ...session,
                         isPaused: true,
                         pausedAt: new Date().toISOString(),
-                        pauseCount: session.pauseCount + 1,
-                        history: [...(session.history || []), 'Paused']
+                        pauseCount: reason === "manual_pause" ? (session.pauseCount ?? 0) + 1 : (session.pauseCount ?? 0),
+                        restCount: reason === "manual_rest" ? (session.restCount ?? 0) + 1 : (session.restCount ?? 0),
+                        lastPauseReason: reason,
+                        pauseEvents: reason === "manual_pause"
+                            ? appendSessionEvent(session.pauseEvents, timestamp)
+                            : session.pauseEvents ?? [],
+                        ...interactionState,
+                        history: [...(session.history || []), reason === "manual_rest" ? 'Rest started' : reason === "overlay_exit" ? 'Paused via exit' : 'Paused']
                     }
                 });
             },
@@ -162,12 +501,13 @@ export const useFocusStore = create<FocusState>()(
                 const now = new Date();
                 const pausedAt = new Date(session.pausedAt);
                 const pauseDurationMs = now.getTime() - pausedAt.getTime();
+                const interactionState = noteSessionInteraction(session, now.getTime());
                 
                 let activeLayer = session.activeLayer;
-                if (activeLayer) {
-                    if (activeLayer.kind === 'studyTechnique' && activeLayer.config) {
-                        const cfg = activeLayer.config as any;
-                        if (cfg.state && cfg.state.phaseStartedAt) {
+                    if (activeLayer) {
+                        if (activeLayer.kind === 'studyTechnique' && activeLayer.config) {
+                        const cfg = normalizeStudyTechniqueConfig(activeLayer.config);
+                        if (cfg.state?.phaseStartedAt) {
                             const newPhaseStartedAt = new Date(new Date(cfg.state.phaseStartedAt).getTime() + pauseDurationMs).toISOString();
                             activeLayer = {
                                 ...activeLayer,
@@ -178,14 +518,25 @@ export const useFocusStore = create<FocusState>()(
                             };
                         }
                     } else if (activeLayer.kind === 'gymMode' && activeLayer.config) {
-                        const cfg = activeLayer.config as any;
-                        if (cfg.rest && cfg.rest.isResting && cfg.rest.restStartedAt) {
+                        const cfg = normalizeGymConfig(activeLayer.config);
+                        if (cfg.rest.isResting && cfg.rest.restStartedAt) {
                             const newRestStartedAt = new Date(new Date(cfg.rest.restStartedAt).getTime() + pauseDurationMs).toISOString();
                             activeLayer = {
                                 ...activeLayer,
                                 config: {
                                     ...cfg,
                                     rest: { ...cfg.rest, restStartedAt: newRestStartedAt }
+                                }
+                            };
+                        }
+                    } else if (activeLayer.kind === 'attentionAid' && activeLayer.config) {
+                        const cfg = normalizeAttentionAidConfig(activeLayer.config);
+                        if (cfg.startedAt) {
+                            activeLayer = {
+                                ...activeLayer,
+                                config: {
+                                    ...cfg,
+                                    startedAt: new Date(new Date(cfg.startedAt).getTime() + pauseDurationMs).toISOString()
                                 }
                             };
                         }
@@ -198,6 +549,8 @@ export const useFocusStore = create<FocusState>()(
                         isPaused: false,
                         pausedAt: undefined,
                         totalPausedMs: session.totalPausedMs + pauseDurationMs,
+                        lastPauseReason: null,
+                        ...interactionState,
                         activeLayer,
                         history: [...(session.history || []), 'Resumed']
                     }
@@ -207,14 +560,28 @@ export const useFocusStore = create<FocusState>()(
             exit: () => {
                 const { session, pause } = get();
                 if (!session) return;
-                if (!session.isPaused) pause();
+                if (session.entryRitual?.isActive) {
+                    set({
+                        session: {
+                            ...session,
+                            isActive: false,
+                            history: [...(session.history || []), 'Exited during entry ritual']
+                        }
+                    });
+                    return;
+                }
+                if (!session.isPaused) pause({ reason: "overlay_exit" });
                 const currentSession = get().session;
                 if (currentSession) {
+                    const timestamp = Date.now();
+                    const interactionState = noteSessionInteraction(currentSession, timestamp);
                     set({
                         session: {
                             ...currentSession,
                             isActive: false,
-                            exitCount: currentSession.exitCount + 1,
+                            exitCount: (currentSession.exitCount ?? 0) + 1,
+                            exitEvents: appendSessionEvent(currentSession.exitEvents, timestamp),
+                            ...interactionState,
                             history: [...(currentSession.history || []), 'Exited overlay']
                         }
                     });
@@ -236,20 +603,34 @@ export const useFocusStore = create<FocusState>()(
                     finalTotalPausedMs += new Date().getTime() - new Date(session.pausedAt).getTime();
                 }
 
-                const finishedSession = {
+                const finishedSession: FocusSession = {
                     ...session,
                     isPaused: false,
                     isActive: false, // Marked as false so it's completed
                     endedAt: now,
                     totalPausedMs: finalTotalPausedMs,
+                    lastPauseReason: null,
+                    persistenceStatus: "pending",
                     history: [...(session.history || []), 'Finished']
                 };
 
-                set({ session: finishedSession });
+                set({
+                    session: finishedSession,
+                    lastSession: {
+                        id: finishedSession.id,
+                        blockType: finishedSession.blockType,
+                        intention: finishedSession.intention ?? null,
+                        nextStep: finishedSession.nextStep ?? null,
+                        minimumViable: finishedSession.minimumViable ?? null,
+                        selectedStartMode: finishedSession.entryRitual?.selectedStartMode ?? null,
+                        endedAt: now
+                    },
+                    intervention: null
+                });
 
                 // Sync to Supabase
                 const supabase = createClient();
-                const { data: { user } } = await supabase.auth.getUser();
+                const user = await getClientUser(supabase);
                 if (user) {
                     const { error } = await supabase.from('focus_sessions').insert({
                         id: finishedSession.id,
@@ -271,7 +652,30 @@ export const useFocusStore = create<FocusState>()(
                     });
                     if (error) {
                         console.error('Error saving focus session:', JSON.stringify(error, null, 2));
+                        set((state) => ({
+                            session: state.session?.id === finishedSession.id
+                                ? { ...state.session, persistenceStatus: "failed" }
+                                : state.session,
+                        }));
+                    } else {
+                        set((state) => ({
+                            session: state.session?.id === finishedSession.id
+                                ? { ...state.session, persistenceStatus: "persisted" }
+                                : state.session,
+                        }));
                     }
+                } else {
+                    set((state) => ({
+                        session: state.session?.id === finishedSession.id
+                            ? { ...state.session, persistenceStatus: "persisted" }
+                            : state.session,
+                    }));
+                }
+
+                if (finishedSession.mode === "block" && finishedSession.blockId) {
+                    await useBlocksStore.getState().updateBlock(finishedSession.blockId, {
+                        status: "completed"
+                    });
                 }
             },
 
@@ -284,10 +688,12 @@ export const useFocusStore = create<FocusState>()(
             setLayer: (layer) => {
                 const { session } = get();
                 if (!session) return;
+                const interactionState = noteSessionInteraction(session);
                 set({
                     session: {
                         ...session,
                         activeLayer: layer,
+                        ...interactionState,
                         history: [...(session.history || []), layer ? `Activated layer ${layer.kind}` : 'Layer cleared']
                     }
                 });
@@ -296,13 +702,389 @@ export const useFocusStore = create<FocusState>()(
             setSessionIntention: (intention) => {
                 const { session } = get();
                 if (!session) return;
-                set({ session: { ...session, intention } });
+                set({ session: { ...session, intention, ...noteSessionInteraction(session) } });
+            },
+
+            setSessionNextStep: (nextStep) => {
+                const { session } = get();
+                if (!session) return;
+                set({ session: { ...session, nextStep, ...noteSessionInteraction(session) } });
+            },
+
+            setSessionMinimumViable: (minimumViable) => {
+                const { session } = get();
+                if (!session) return;
+                set({ session: { ...session, minimumViable, ...noteSessionInteraction(session) } });
+            },
+
+            startEntryRitual: () => {
+                const { session, lastSession, interventions } = get();
+                if (!session) return;
+                if (session.entryRitual?.completed || session.entryRitual?.skipped) return;
+                if (session.entryRitual?.isActive) return;
+
+                const now = Date.now();
+                const entryRitual = createEntryRitualState({
+                    session,
+                    blocks: useBlocksStore.getState().blocks,
+                    lastSession,
+                    now,
+                });
+
+                set({
+                    session: {
+                        ...session,
+                        entryRitual,
+                        history: [...(session.history || []), 'Entry ritual started'],
+                    },
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "entry_ritual_shown",
+                            actionTaken: "shown",
+                            result: "started",
+                            payload: { suggestedStartMode: entryRitual.suggestedStartMode },
+                        },
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "suggested_start_mode",
+                            actionTaken: "suggest",
+                            result: entryRitual.suggestedStartMode,
+                            payload: { suggestedStartMode: entryRitual.suggestedStartMode },
+                        }
+                    ]
+                });
+            },
+
+            updateEntryRitual: (updates) => {
+                const { session } = get();
+                if (!session?.entryRitual) return;
+
+                set({
+                    session: {
+                        ...session,
+                        entryRitual: {
+                            ...session.entryRitual,
+                            ...updates,
+                        },
+                    }
+                });
+            },
+
+            completeEntryRitual: () => {
+                const { session, interventions } = get();
+                if (!session?.entryRitual) return;
+
+                const now = Date.now();
+                const nextStartedAt = createRuntimeStartedAt(session.startedAt);
+                const entryRitual = {
+                    ...session.entryRitual,
+                    isActive: false,
+                    completed: true,
+                    skipped: false,
+                    completedAt: now,
+                };
+                const selectedStartMode = entryRitual.selectedStartMode ?? entryRitual.suggestedStartMode ?? "normal";
+                const appliedLayer = resolveEntryStartLayer(
+                    session,
+                    useBlocksStore.getState().blocks,
+                    selectedStartMode
+                );
+
+                set({
+                    session: {
+                        ...session,
+                        isActive: true,
+                        isPaused: false,
+                        pausedAt: undefined,
+                        totalPausedMs: 0,
+                        lastPauseReason: null,
+                        startedAt: nextStartedAt,
+                        ...resetRuntimeInteractionState(),
+                        intention: entryRitual.objective?.trim() || session.intention,
+                        nextStep: entryRitual.nextStep?.trim() || session.nextStep,
+                        minimumViable: entryRitual.minimumViable?.trim() || session.minimumViable,
+                        activeLayer: appliedLayer,
+                        entryRitual,
+                        history: [
+                            ...(session.history || []),
+                            `Entry ritual completed (${selectedStartMode})`
+                        ],
+                    },
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "entry_ritual_completed",
+                            actionTaken: "complete",
+                            result: "completed",
+                            payload: {
+                                suggestedStartMode: entryRitual.suggestedStartMode,
+                                selectedStartMode,
+                            },
+                        },
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "selected_start_mode",
+                            actionTaken: "select",
+                            result: selectedStartMode,
+                            payload: {
+                                suggestedStartMode: entryRitual.suggestedStartMode,
+                                selectedStartMode,
+                            },
+                        }
+                    ]
+                });
+            },
+
+            skipEntryRitual: () => {
+                const { session, interventions } = get();
+                if (!session?.entryRitual) return;
+
+                const now = Date.now();
+                const selectedStartMode = session.entryRitual.selectedStartMode ?? session.entryRitual.suggestedStartMode ?? null;
+
+                set({
+                    session: {
+                        ...session,
+                        isActive: true,
+                        isPaused: false,
+                        pausedAt: undefined,
+                        totalPausedMs: 0,
+                        lastPauseReason: null,
+                        startedAt: createRuntimeStartedAt(session.startedAt),
+                        ...resetRuntimeInteractionState(),
+                        activeLayer: null,
+                        entryRitual: {
+                            ...session.entryRitual,
+                            isActive: false,
+                            completed: false,
+                            skipped: true,
+                            completedAt: now,
+                        },
+                        history: [...(session.history || []), 'Entry ritual skipped'],
+                    },
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "entry_ritual_skipped",
+                            actionTaken: "skip",
+                            result: "skipped",
+                            payload: {
+                                suggestedStartMode: session.entryRitual.suggestedStartMode,
+                                selectedStartMode,
+                            },
+                        },
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: now,
+                            type: "selected_start_mode",
+                            actionTaken: "skip",
+                            result: selectedStartMode,
+                            payload: {
+                                suggestedStartMode: session.entryRitual.suggestedStartMode,
+                                selectedStartMode,
+                            },
+                        }
+                    ]
+                });
+            },
+
+            clearEntryRitual: () => {
+                const { session } = get();
+                if (!session) return;
+                set({
+                    session: {
+                        ...session,
+                        entryRitual: createLegacyEntryRitualState(session),
+                    }
+                });
             },
 
             addToHistory: (event) => {
                 const { session } = get();
                 if (!session) return;
                 set({ session: { ...session, history: [...(session.history || []), event] } });
+            },
+
+            markClosureBridgeShown: () => {
+                const { session } = get();
+                if (!session || session.closureBridgeShown) return;
+
+                set({
+                    session: {
+                        ...session,
+                        closureBridgeShown: true,
+                    }
+                });
+            },
+
+            saveClosureNote: (text, timestamp = Date.now()) => {
+                const { session } = get();
+                if (!session) return;
+
+                const trimmed = text.trim().slice(0, 120);
+                if (!trimmed) return;
+
+                set({
+                    session: {
+                        ...session,
+                        closureNote: {
+                            text: trimmed,
+                            timestamp,
+                        },
+                    }
+                });
+            },
+
+            markCardShown: (cardId, now = Date.now()) => {
+                const { session } = get();
+                if (!session) return;
+
+                set({
+                    session: {
+                        ...session,
+                        closureBridgeShown: cardId === "card_closure_bridge" ? true : session.closureBridgeShown,
+                        cardMemory: updateCardMemoryEntry(session.cardMemory, cardId, (current) => ({
+                            cardId: getCardMemoryKey(cardId),
+                            shownAt: current?.shownAt ?? now,
+                            lastShownAt: now,
+                            dismissedAt: current?.dismissedAt ?? null,
+                            acceptedAt: current?.acceptedAt ?? null,
+                            rejectedAt: current?.rejectedAt ?? null,
+                            cooldownUntil: current?.cooldownUntil ?? null,
+                            timesShown: (current?.timesShown ?? 0) + 1,
+                        })),
+                    }
+                });
+            },
+
+            recordCardOutcome: (cardId, outcome, now = Date.now()) => {
+                const { session } = get();
+                if (!session) return;
+                const cooldownMs = getOutcomeCooldownMs(cardId, outcome);
+                const interactionState = noteSessionInteraction(session, now);
+
+                set({
+                    session: {
+                        ...session,
+                        ...interactionState,
+                        cardMemory: updateCardMemoryEntry(session.cardMemory, cardId, (current) => ({
+                            cardId: getCardMemoryKey(cardId),
+                            shownAt: current?.shownAt ?? now,
+                            lastShownAt: now,
+                            dismissedAt: outcome === "dismissed" ? now : current?.dismissedAt ?? null,
+                            acceptedAt: outcome === "accepted" ? now : current?.acceptedAt ?? null,
+                            rejectedAt: outcome === "rejected" ? now : current?.rejectedAt ?? null,
+                            cooldownUntil: cooldownMs ? now + cooldownMs : current?.cooldownUntil ?? null,
+                            timesShown: current?.timesShown ?? 1,
+                        })),
+                    }
+                });
+            },
+
+            openIntervention: (kind, options) => {
+                const { session } = get();
+                if (!session) return;
+
+                set({
+                    intervention: {
+                        id: crypto.randomUUID(),
+                        kind,
+                        timestamp: Date.now(),
+                        payload: options?.payload,
+                        sourceCard: options?.sourceCard ?? null,
+                        sourceToast: options?.sourceToast ?? null,
+                        trigger: options?.trigger ?? null,
+                    }
+                });
+            },
+
+            resolveIntervention: ({ actionTaken, result, payload }) => {
+                const { intervention, session, interventions } = get();
+                if (!intervention || !session) return;
+
+                set({
+                    intervention: null,
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: intervention.id,
+                            sessionId: session.id,
+                            timestamp: intervention.timestamp,
+                            type: intervention.kind,
+                            sourceCard: intervention.sourceCard ?? null,
+                            sourceToast: intervention.sourceToast ?? null,
+                            trigger: intervention.trigger ?? null,
+                            actionTaken,
+                            result,
+                            payload: payload ?? intervention.payload,
+                        }
+                    ]
+                });
+            },
+
+            closeIntervention: (result = "dismissed") => {
+                const { intervention, session, interventions } = get();
+                if (!intervention || !session) {
+                    set({ intervention: null });
+                    return;
+                }
+
+                set({
+                    intervention: null,
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: intervention.id,
+                            sessionId: session.id,
+                            timestamp: intervention.timestamp,
+                            type: intervention.kind,
+                            sourceCard: intervention.sourceCard ?? null,
+                            sourceToast: intervention.sourceToast ?? null,
+                            trigger: intervention.trigger ?? null,
+                            actionTaken: "close",
+                            result,
+                            payload: intervention.payload,
+                        }
+                    ]
+                });
+            },
+
+            recordIntervention: (record) => {
+                const { session, interventions } = get();
+                if (!session) return;
+
+                set({
+                    interventions: [
+                        ...interventions,
+                        {
+                            id: crypto.randomUUID(),
+                            sessionId: session.id,
+                            timestamp: Date.now(),
+                            type: record.type,
+                            sourceCard: record.sourceCard ?? null,
+                            sourceToast: record.sourceToast ?? null,
+                            trigger: record.trigger ?? null,
+                            actionTaken: record.actionTaken ?? null,
+                            result: record.result ?? null,
+                            payload: record.payload,
+                        }
+                    ]
+                });
             },
 
             // ── GYM ACTIONS ────────────────────────────────────────────────
@@ -313,12 +1095,12 @@ export const useFocusStore = create<FocusState>()(
                 setLayer(createGymLayer());
             },
 
-            startGymWorkout: (routine: any) => {
+            startGymWorkout: (routine: WorkoutRoutine) => {
                 const { session } = get();
                 if (!session) return;
 
                 // Initialize exercises from the routine
-                const loadedExercises: GymExerciseLog[] = routine.exercises.map((ex: any) => ({
+                const loadedExercises: GymExerciseLog[] = routine.exercises.map((ex) => ({
                     id: crypto.randomUUID(),
                     name: ex.name,
                     programmedRest: routine.rest_timer_sec || 180,
@@ -514,7 +1296,30 @@ export const useFocusStore = create<FocusState>()(
         }),
         {
             name: 'focus-storage',
-            partialize: (state) => ({ session: state.session }),
+            partialize: (state) => ({
+                session: state.session,
+                lastSession: state.lastSession,
+                intervention: state.intervention,
+                interventions: state.interventions,
+            }),
+            merge: (persistedState, currentState) => {
+                const persisted = persistedState as Partial<FocusState>;
+
+                return {
+                    ...currentState,
+                    ...persisted,
+                    session: normalizeFocusSession(persisted.session),
+                    lastSession: persisted.lastSession
+                        ? {
+                            ...persisted.lastSession,
+                            nextStep: persisted.lastSession.nextStep ?? null,
+                            minimumViable: persisted.lastSession.minimumViable ?? null,
+                            selectedStartMode: persisted.lastSession.selectedStartMode ?? null,
+                        }
+                        : currentState.lastSession,
+                    interventions: Array.isArray(persisted.interventions) ? persisted.interventions : currentState.interventions,
+                };
+            },
         }
     )
 );

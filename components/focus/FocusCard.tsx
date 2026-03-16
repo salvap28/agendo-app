@@ -3,31 +3,26 @@
 import React from "react";
 import { cn } from "@/lib/cn";
 import { FocusCard as FocusCardType } from "@/lib/types/focus";
-import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { GlassButton } from "@/components/ui/glass-button";
 import {
-    Music,
     Target,
-    Zap,
     Brain,
     Dumbbell,
     Lightbulb,
-    ChevronRight,
     Lock,
-    RefreshCw,
     AlertTriangle,
+    type LucideIcon,
 } from "lucide-react";
 
 interface FocusCardProps {
     card: FocusCardType;
     isForeground?: boolean;
     onAction: (card: FocusCardType, action: NonNullable<FocusCardType["action"]>) => void;
-    onDismiss: (cardId: string) => void;
 }
 
 // === Card icon per type ===
-const CARD_ICONS: Record<string, React.ComponentType<any>> = {
+const CARD_ICONS: Record<string, LucideIcon> = {
     universal: Lightbulb,
     study: Brain,
     gym: Dumbbell,
@@ -64,14 +59,9 @@ const CARD_PALETTES: Record<string, CardPalette> = {
     },
 };
 
-export function FocusCard({ card, isForeground = true, onAction, onDismiss }: FocusCardProps) {
+export function FocusCard({ card, isForeground = true, onAction }: FocusCardProps) {
     const palette = CARD_PALETTES[card.type] ?? CARD_PALETTES["universal"];
     const Icon = CARD_ICONS[card.type] ?? CARD_ICONS["default"];
-
-    const handleAction = (act?: FocusCardType["action"]) => {
-        if (!act) return;
-        onAction(card, act);
-    };
 
     const isGym = card.type === "gym";
 
@@ -119,17 +109,30 @@ export function FocusCard({ card, isForeground = true, onAction, onDismiss }: Fo
 
             {/* Action row — bottom (Only primary action if exists) */}
             <div className={cn("relative z-10 px-6 pb-6 mt-auto transition-opacity duration-300", !isForeground && "opacity-0 pointer-events-none")}>
-                {(card.action || card.secondaryAction) && (
-                    <GlassButton
-                        variant={isGym ? "gym" : "default"}
-                        size="sm"
-                        onPointerDown={(e) => e.stopPropagation()} // Prevent carousel drag from swallowing the click
-                        onClick={() => handleAction((card.action || card.secondaryAction)!)}
-                        className="w-full"
-                    >
-                        {(card.action || card.secondaryAction)!.label}
-                    </GlassButton>
-                )}
+                <div className={cn("flex gap-2", card.secondaryAction ? "flex-col" : "flex-row")}>
+                    {card.action && (
+                        <GlassButton
+                            variant={isGym ? "gym" : "default"}
+                            size="sm"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => onAction(card, card.action!)}
+                            className="w-full"
+                        >
+                            {card.action.label}
+                        </GlassButton>
+                    )}
+                    {card.secondaryAction && (
+                        <GlassButton
+                            variant="ghost"
+                            size="sm"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => onAction(card, card.secondaryAction!)}
+                            className="w-full"
+                        >
+                            {card.secondaryAction.label}
+                        </GlassButton>
+                    )}
+                </div>
             </div>
         </div>
     );

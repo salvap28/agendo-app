@@ -1,9 +1,9 @@
 "use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
-import { Block, BlockStatus } from "@/lib/types/blocks";
-import { useEffect, useState, useRef } from "react";
-import { ArrowDown, Calendar, Play, Flame, Activity, Clock } from "lucide-react";
+import { Block } from "@/lib/types/blocks";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Play, Flame, Activity, Clock } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -12,9 +12,10 @@ import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { getBlockColors } from "@/lib/utils/blockColors";
+import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
 import { sendNotification } from "@/lib/utils/notifications";
 
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getClientUser } from "@/lib/supabase/client";
 
 const BLOCK_LABELS: Record<string, string> = {
     deep_work: "Deep Work",
@@ -30,18 +31,50 @@ interface SectionContextProps {
     onNext: () => void;
 }
 
+interface HomeSummaryData {
+    momentum_current: number;
+    momentum_delta_week: number;
+    main_insight: string;
+    progress_signal: "positive" | "quiet" | "neutral";
+    soft_recommendation: string;
+    focus_streak: number;
+    weekly_sessions_count: number;
+    best_focus_window: "morning" | "afternoon" | "evening" | "night" | null;
+}
+
 export function SectionContext({ onNext }: SectionContextProps) {
     const { blocks } = useBlocksStore();
     const { session, returnToFocus, openFree } = useFocusStore();
-    const [greeting, setGreeting] = useState("Hello");
-    const [nextBlock, setNextBlock] = useState<Block | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-    const [summaryData, setSummaryData] = useState<any>(null);
+    const [summaryData, setSummaryData] = useState<HomeSummaryData | null>(null);
     const { settings } = useSettingsStore();
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
+    const greeting = useMemo(() => {
+        const hour = currentTime.getHours();
+        if (hour < 12) return "Good morning";
+        if (hour < 18) return "Good afternoon";
+        return "Good evening";
+    }, [currentTime]);
+
+    const nextBlock = useMemo(() => {
+        const todayBlocks = blocks.filter((block) => isSameDay(block.startAt, currentTime));
+        const activeBlock = todayBlocks.find((block) => getBlockEffectiveStatus(block, currentTime) === "active");
+
+        if (activeBlock) return activeBlock;
+
+        const upcomingBlocks = todayBlocks
+            .filter((block) => {
+                const effectiveStatus = getBlockEffectiveStatus(block, currentTime);
+                return effectiveStatus === "planned" || effectiveStatus === "active";
+            })
+            .filter((block) => isAfter(block.startAt, currentTime) || (isBefore(block.startAt, currentTime) && isAfter(block.endAt, currentTime)))
+            .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+
+        return upcomingBlocks[0] || null;
+    }, [blocks, currentTime]);
 
     // Check for block reminders
     useEffect(() => {
@@ -50,7 +83,8 @@ export function SectionContext({ onNext }: SectionContextProps) {
         const nowMs = currentTime.getTime();
 
         blocks.forEach(block => {
-            if (block.status === "completed") return;
+            const effectiveStatus = getBlockEffectiveStatus(block, currentTime);
+            if (effectiveStatus === "completed" || effectiveStatus === "canceled") return;
             const diffMin = (block.startAt.getTime() - nowMs) / 60000;
             // By default backwards compatibility: 5 min
             const notificationTimes = block.notifications || [5];
@@ -102,7 +136,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     useEffect(() => {
         const fetchUser = async () => {
             const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getClientUser(supabase);
             if (user) {
                 // Try to get username, then first name, fallback to email
                 const username = user.user_metadata?.username;
@@ -123,7 +157,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
             try {
                 const res = await fetch('/api/home/summary');
                 if (res.ok) {
-                    const data = await res.json();
+                    const data: HomeSummaryData = await res.json();
                     setSummaryData(data);
                 }
             } catch (e) {
@@ -132,35 +166,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
         };
         fetchSummary();
 
-        // Dynamic greeting
-        const hour = new Date().getHours();
-        if (hour < 12) setGreeting("Good morning");
-        else if (hour < 18) setGreeting("Good afternoon");
-        else setGreeting("Good evening");
-
         // Keep current time updated for block checking (every minute)
         const interval = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(interval);
     }, []);
-
-    useEffect(() => {
-        // Find next or active block for today
-        const todayBlocks = blocks.filter(b => isSameDay(b.startAt, currentTime));
-
-        // Prioritize active, then closest planned future block
-        const activeBlock = todayBlocks.find(b => b.status === "active");
-        if (activeBlock) {
-            setNextBlock(activeBlock);
-            return;
-        }
-
-        const upcomingBlocks = todayBlocks
-            .filter(b => b.status === "planned" || b.status === "active")
-            .filter(b => isAfter(b.startAt, currentTime) || (isBefore(b.startAt, currentTime) && isAfter(b.endAt, currentTime)))
-            .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-
-        setNextBlock(upcomingBlocks[0] || null);
-    }, [blocks, currentTime]);
 
     return (
         <section
@@ -188,6 +197,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         let displayBlock = nextBlock;
                         let isSessionPaused = false;
                         let isSessionActive = false;
+                        let displayStatus = displayBlock ? getBlockEffectiveStatus(displayBlock, currentTime) : null;
 
                         if (session) {
                             if (session.mode === "free") {
@@ -195,18 +205,20 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     id: "free-session",
                                     type: "other",
                                     title: "Free Focus Session",
-                                    startAt: new Date(session.startedAt || Date.now()),
-                                    endAt: new Date(),
+                                    startAt: new Date(session.startedAt ?? currentTime.toISOString()),
+                                    endAt: currentTime,
                                     status: "active"
                                 } as Block;
                                 isSessionPaused = !session.isActive;
                                 isSessionActive = session.isActive;
+                                displayStatus = "active";
                             } else if (session.blockId) {
                                 const sessionBlock = blocks.find(b => b.id === session.blockId);
                                 if (sessionBlock) {
                                     displayBlock = sessionBlock;
                                     isSessionPaused = !session.isActive;
                                     isSessionActive = session.isActive;
+                                    displayStatus = getBlockEffectiveStatus(sessionBlock, currentTime);
                                 }
                             }
                         }
@@ -241,6 +253,8 @@ export function SectionContext({ onNext }: SectionContextProps) {
                             );
                         }
 
+                        const isFocusCardActive = isSessionActive || displayStatus === "active";
+
                         return (
                             <>
                                 {/* Label */}
@@ -256,7 +270,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     }}
                                     className={isSessionPaused ? "animate-pulse" : ""}
                                 >
-                                    {isSessionPaused ? "SESIÓN PAUSADA - CLICK PARA CONTINUAR" : (isSessionActive || displayBlock.status === "active") ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
+                                    {isSessionPaused ? "SESIÓN PAUSADA - CLICK PARA CONTINUAR" : isFocusCardActive ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
                                 </span>
 
                                 {/* Glass Pill for Block */}
@@ -270,7 +284,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     }}
                                     className={cn(
                                         "relative flex flex-col items-center text-center justify-center w-full cursor-pointer hover:scale-[1.02] transition-transform rounded-[16px]",
-                                        (isSessionActive || displayBlock.status === "active") && !isSessionPaused ? "overflow-hidden" : "",
+                                        isFocusCardActive && !isSessionPaused ? "overflow-hidden" : "",
                                         isSessionPaused ? "animate-pulse shadow-[0_0_30px_rgba(124,58,237,0.3)] ring-1 ring-[#a78bfa]/50" : ""
                                     )}
                                     style={{
@@ -278,7 +292,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                         background: isSessionPaused ? 'rgba(124,58,237,0.1)' : 'transparent'
                                     }}
                                 >
-                                    {(isSessionActive || displayBlock.status === "active") && !isSessionPaused ? (() => {
+                                    {isFocusCardActive && !isSessionPaused ? (() => {
                                         const colors = getBlockColors(displayBlock.type);
                                         return (
                                             <>

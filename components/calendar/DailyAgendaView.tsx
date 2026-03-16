@@ -3,11 +3,12 @@
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { Block } from "@/lib/types/blocks";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay } from "date-fns";
 import { getBlockColors } from "@/lib/utils/blockColors";
+import { getBlockRuntimeState, sortBlocksByStart } from "@/lib/utils/blockState";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -61,7 +62,7 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
                     ? `0 0 20px 4px ${colors.glow1}, 0 0 40px 8px ${colors.glow2}`
                     : "none",
                 "--tw-ring-color": isSessionPaused ? colors.primary : undefined,
-            } as any}
+            } as CSSProperties}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -129,12 +130,21 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
     const [internalSelectedDate, setInternalSelectedDate] = useState(startOfDay(new Date()));
+    const [currentTime, setCurrentTime] = useState(() => new Date());
     const effectiveSelectedDate = selectedDate ? startOfDay(selectedDate) : internalSelectedDate;
 
     // --- Animation Key ---
     // Change this key every time selectedDate changes to force re-render the timeline
     // for the 180ms ease-out fade transition.
     const [animKey, setAnimKey] = useState(0);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            setCurrentTime(new Date());
+        }, 30000);
+
+        return () => window.clearInterval(interval);
+    }, []);
 
     const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
     const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
@@ -168,9 +178,9 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
 
     // --- Timeline Logic ---
     const dailyBlocks = useMemo(() => {
-        return blocks
-            .filter(b => isSameDay(b.startAt, effectiveSelectedDate))
-            .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+        return sortBlocksByStart(
+            blocks.filter((block) => isSameDay(block.startAt, effectiveSelectedDate) && block.status !== "canceled")
+        );
     }, [blocks, effectiveSelectedDate]);
 
     return (
@@ -235,7 +245,7 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                                     {format(day, "d")}
                                 </button>
                                 {/* Indicator Dot for events? (Optional) */}
-                                {!isSelected && blocks.some(b => isSameDay(b.startAt, day)) && (
+                                {!isSelected && blocks.some((block) => isSameDay(block.startAt, day) && block.status !== "canceled") && (
                                     <div className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-500/50" />
                                 )}
                             </div>
@@ -281,11 +291,11 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                             dailyBlocks.map((block) => {
                                 const ui = BLOCK_TYPES_UI[block.type] || BLOCK_TYPES_UI.other;
                                 const isDeepWork = block.type === "deep_work";
-                                const now = new Date();
-                                const isCurrentlyActive = isSameDay(block.startAt, now) && block.startAt <= now && block.endAt > now;
-                                const isSessionForThisBlock = session?.blockId === block.id;
-                                const isSessionPaused = isSessionForThisBlock && !session.isActive;
-                                const isSessionRunning = isSessionForThisBlock && session.isActive;
+                                const runtimeState = getBlockRuntimeState(block, session, currentTime);
+                                const isCurrentlyActive = runtimeState.isActiveNow;
+                                const isSessionForThisBlock = runtimeState.isSessionBlock;
+                                const isSessionPaused = runtimeState.hasPausedFocus;
+                                const isSessionRunning = runtimeState.isFocusRunning;
                                 const colors = getBlockColors(block.type);
 
                                 return (

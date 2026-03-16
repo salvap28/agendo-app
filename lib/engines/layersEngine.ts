@@ -1,4 +1,4 @@
-import { FocusLayer, GymLayerConfig } from '@/lib/types/focus';
+import { FocusLayer, GymLayerConfig, AttentionAidConfig } from '@/lib/types/focus';
 
 export type StudyTechniqueState = {
     phase: "focus" | "break";
@@ -45,5 +45,23 @@ export function createGymLayer(): FocusLayer {
         id: "gym_set_tracker",
         kind: "gymMode",
         config
+    };
+}
+
+export function createAttentionAidLayer(id: "micro_commit_layer" | "focus_protection_layer"): FocusLayer {
+    const config: AttentionAidConfig = id === "micro_commit_layer"
+        ? {
+            startedAt: new Date().toISOString(),
+            durationSec: 5 * 60,
+            compact: true,
+        }
+        : {
+            compact: true,
+        };
+
+    return {
+        id,
+        kind: "attentionAid",
+        config,
     };
 }
