@@ -357,10 +357,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     <div className="mt-8 w-full max-w-[420px] rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5 backdrop-blur-md flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-1000">
                         <div className="flex justify-between items-center text-white/50 text-[10px] uppercase tracking-[0.15em] font-semibold mb-1">
                             <span>
-                                {summaryData.progress_signal === 'positive' ? 'Flowing' : summaryData.progress_signal === 'quiet' ? 'Resting' : 'Building'}
+                                {summaryData.progress_signal === 'positive' ? 'Fluyendo' : summaryData.progress_signal === 'quiet' ? 'En pausa' : 'Construyendo'}
                             </span>
                             <span className="flex items-center gap-1.5">
-                                MOMENTUM <span className="text-white/80">{summaryData.momentum_current}</span>
+                                IMPULSO <span className="text-white/80">{summaryData.momentum_current}</span>
                                 {summaryData.momentum_delta_week > 0 && <span className="text-emerald-400">+{summaryData.momentum_delta_week}</span>}
                                 {summaryData.momentum_delta_week < 0 && <span className="text-rose-400">{summaryData.momentum_delta_week}</span>}
                             </span>

@@ -32,7 +32,7 @@ function formatWarmup(stage: WarmupStage) {
 function formatWindow(window?: string | null) {
     switch (window) {
         case "morning":
-            return "Manana";
+            return "Mañana";
         case "afternoon":
             return "Tarde";
         case "evening":
@@ -85,7 +85,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                         className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
                     >
                         <ArrowLeft className="h-4 w-4" />
-                        Volver Home
+                        Volver al inicio
                     </Link>
                 </div>
 
@@ -105,10 +105,10 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                         <div className="mt-5 max-w-3xl space-y-4">
                             <h1 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-5xl">
-                                Lo que Agendo ya entiende de tu forma de trabajar.
+                                Lo que Agendo va aprendiendo sobre tu manera de enfocarte.
                             </h1>
                             <p className="max-w-2xl text-sm leading-7 text-white/60 sm:text-base">
-                                Esta capa no genera respuestas libres ni diagnosticos. Consolida patrones medibles de tu historial y los devuelve como hallazgos personales, con evidencia y memoria persistente.
+                                Esta capa no intenta diagnosticarte ni adivinarte. Observa tu historial, cuida la evidencia y te devuelve hallazgos personales para acompañarte con más cercanía, memoria persistente y señales trazables.
                             </p>
                         </div>
 
@@ -124,14 +124,14 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 <p className="mt-1 text-sm text-white/40">
                                     {profile.bestFocusWindow
                                         ? `${profile.bestFocusWindow.sampleSize} sesiones con evidencia suficiente`
-                                        : "Todavia no hay evidencia minima"}
+                                        : "Todavía no hay evidencia mínima"}
                                 </p>
                             </div>
 
                             <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-2 text-white/40">
                                     <Gauge className="h-4 w-4" />
-                                    <span className="text-[11px] uppercase tracking-[0.18em]">Duracion</span>
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Duración</span>
                                 </div>
                                 <p className="mt-3 text-xl font-semibold text-white">
                                     {profile.optimalSessionLength
@@ -148,15 +148,15 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                             <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-2 text-white/40">
                                     <ShieldAlert className="h-4 w-4" />
-                                    <span className="text-[11px] uppercase tracking-[0.18em]">Friccion</span>
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Fricción</span>
                                 </div>
                                 <p className="mt-3 text-xl font-semibold text-white">
                                     {topFriction ? topFriction.data.label : "Sin fuente dominante"}
                                 </p>
                                 <p className="mt-1 text-sm text-white/40">
                                     {topFriction
-                                        ? `${topFriction.data.averageFrictionScore} pts de friccion media`
-                                        : "Todavia no hay patron estable"}
+                                        ? `${topFriction.data.averageFrictionScore} pts de fricción media`
+                                        : "Todavía no hay un patrón estable"}
                                 </p>
                             </div>
                         </div>
@@ -186,7 +186,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                         <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-6 backdrop-blur-3xl">
                             <div className="flex items-center justify-between text-white/40">
-                                <span className="text-[11px] uppercase tracking-[0.18em]">Momentum</span>
+                                <span className="text-[11px] uppercase tracking-[0.18em]">Pulso reciente</span>
                                 <TrendingUp className="h-4 w-4 text-emerald-300" />
                             </div>
                             <div className="mt-5 flex items-end gap-3">
@@ -196,7 +196,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 </span>
                             </div>
                             <p className="mt-3 text-sm leading-6 text-white/45">
-                                La lectura combina progreso, consistencia, friccion y estado conductual. No es una promesa de productividad: es una senal compuesta de tu propio historial.
+                                La lectura combina progreso, consistencia, fricción y estado conductual. No busca exigirte más: intenta darte una señal compuesta y amable de tu propio historial.
                             </p>
                         </div>
                     </section>
@@ -206,10 +206,10 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
-                                Hallazgos activos
+                                Señales activas
                             </p>
                             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                                Insights personales validados
+                                Lo que hoy ya se deja ver con claridad
                             </h2>
                         </div>
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/45">
@@ -219,7 +219,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                     {cards.length === 0 ? (
                         <div className="mt-6 rounded-[24px] border border-dashed border-white/12 bg-black/20 p-6 text-sm leading-7 text-white/50">
-                            Agendo ya esta registrando datos, pero todavia no alcanza la evidencia minima para mostrar patrones persistentes. En esta fase se muestra menos a proposito.
+                            Agendo ya está registrando datos, pero todavía necesita un poco más de evidencia antes de devolverte patrones persistentes. En esta etapa prefiere acompañarte con prudencia antes que llenarte de conclusiones flojas.
                         </div>
                     ) : (
                         <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -236,7 +236,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                                     ? "border border-amber-300/25 bg-amber-400/10 text-amber-200"
                                                     : "border border-violet-300/25 bg-violet-400/10 text-violet-200"
                                         }`}>
-                                            {card.tone === "positive" ? "Mejora" : card.tone === "caution" ? "Friccion" : "Patron"}
+                                            {card.tone === "positive" ? "Mejora" : card.tone === "caution" ? "Fricción" : "Patrón"}
                                         </span>
                                         <span className="text-xs text-white/35">
                                             conf. {Math.round(card.confidence * 100)}%
@@ -262,7 +262,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                     Tendencia reciente
                                 </p>
                                 <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                                    Evolucion de la capa analitica
+                                    Evolución de la capa analítica
                                 </h2>
                             </div>
                             <Flame className="h-5 w-5 text-violet-300" />
@@ -295,13 +295,13 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                         <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-white/40">
                             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-violet-300/80" /> progreso</span>
                             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-300/70" /> estado conductual</span>
-                            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-300/70" /> friccion</span>
+                            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-300/70" /> fricción</span>
                         </div>
                     </div>
 
                     <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 backdrop-blur-3xl sm:p-8">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
-                            Evidencia y memoria
+                            Memoria y evidencia
                         </p>
                         <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
                             Perfil persistente
@@ -317,14 +317,14 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/55">
                                 {profile.warmupStage === "ready"
-                                    ? "El perfil ya esta usando patrones persistentes y no relee toda la historia cruda en cada request."
-                                    : "El perfil existe, pero Agendo sigue exigiendo mas muestra antes de hacer afirmaciones mas fuertes."}
+                                    ? "El perfil ya usa patrones persistentes y no necesita releer toda la historia cruda en cada request. La idea es acompañarte con memoria, no con ruido."
+                                    : "El perfil ya existe, pero Agendo todavía necesita un poco más de muestra antes de devolverte conclusiones más firmes."}
                             </div>
 
                             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/55">
-                                Ultima consolidacion diaria: <span className="text-white/75">{formatRelativeDate(profile.lastDailyConsolidatedAt)}</span>
+                                Última consolidación diaria: <span className="text-white/75">{formatRelativeDate(profile.lastDailyConsolidatedAt)}</span>
                                 <br />
-                                Ultima consolidacion semanal: <span className="text-white/75">{formatRelativeDate(profile.lastWeeklyConsolidatedAt)}</span>
+                                Última consolidación semanal: <span className="text-white/75">{formatRelativeDate(profile.lastWeeklyConsolidatedAt)}</span>
                             </div>
                         </div>
                     </div>

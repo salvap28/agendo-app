@@ -791,13 +791,13 @@ export async function getHomeSummaryData(supabase: SupabaseClient, userId: strin
             ? "positive"
             : "neutral";
 
-    let softRecommendation = "Segui acumulando sesiones para reforzar el perfil.";
+    let softRecommendation = "Seguí sumando sesiones para que el perfil pueda acompañarte con más claridad.";
     if (dashboard.profile.bestFocusWindow) {
-        softRecommendation = `Si podes, protege un bloque clave en la ${getFocusWindowLabel(dashboard.profile.bestFocusWindow.data.window)}.`;
+        softRecommendation = `Si podés, cuidá un bloque importante en la ${getFocusWindowLabel(dashboard.profile.bestFocusWindow.data.window)}.`;
     } else if (dashboard.profile.optimalSessionLength) {
-        softRecommendation = `Proba sostener tus bloques ${dashboard.profile.optimalSessionLength.data.bucket === "medium" ? "en sesiones medias" : "dentro del rango que hoy te viene funcionando mejor"}.`;
+        softRecommendation = `Probá sostener tus bloques ${dashboard.profile.optimalSessionLength.data.bucket === "medium" ? "en sesiones medias" : "dentro del rango que hoy te viene funcionando mejor"}.`;
     } else if (dashboard.profile.topFrictionSources[0]) {
-        softRecommendation = `Conviene entrar con un primer paso mas chico cuando aparece ${dashboard.profile.topFrictionSources[0].data.label}.`;
+        softRecommendation = `Cuando aparece ${dashboard.profile.topFrictionSources[0].data.label}, puede ayudarte entrar con un primer paso más chico.`;
     }
 
     return {

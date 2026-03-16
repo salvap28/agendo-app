@@ -42,7 +42,7 @@ function mapHourToFocusWindow(hour: number): FocusWindow {
 export function getFocusWindowLabel(window: FocusWindow) {
     switch (window) {
         case "morning":
-            return "manana";
+            return "mañana";
         case "afternoon":
             return "tarde";
         case "evening":
@@ -50,7 +50,7 @@ export function getFocusWindowLabel(window: FocusWindow) {
         case "night":
             return "noche";
         default:
-            return "dia";
+            return "día";
     }
 }
 
