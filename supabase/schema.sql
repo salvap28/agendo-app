@@ -106,6 +106,201 @@ create policy "Users can delete their own daily metrics" on public.daily_metrics
 -- Create indexes for frequent queries
 create index idx_daily_metrics_user_date on public.daily_metrics (user_id, date);
 
+-- V2 Personal Intelligence
+alter table public.focus_sessions
+  add column if not exists initiated_at timestamp with time zone,
+  add column if not exists consolidated_at timestamp with time zone,
+  add column if not exists planned_duration_ms bigint,
+  add column if not exists rest_count integer default 0,
+  add column if not exists last_pause_reason text,
+  add column if not exists pause_events jsonb default '[]'::jsonb,
+  add column if not exists exit_events jsonb default '[]'::jsonb,
+  add column if not exists first_interaction_at timestamp with time zone,
+  add column if not exists last_interaction_at timestamp with time zone,
+  add column if not exists next_step text,
+  add column if not exists minimum_viable text,
+  add column if not exists card_memory jsonb default '{}'::jsonb,
+  add column if not exists closure_bridge_shown boolean default false,
+  add column if not exists closure_note jsonb,
+  add column if not exists entry_ritual jsonb;
+
+create index if not exists idx_focus_sessions_user_started_at on public.focus_sessions (user_id, started_at desc);
+
+alter table public.daily_metrics
+  add column if not exists session_count integer default 0,
+  add column if not exists completed_sessions integer default 0,
+  add column if not exists abandoned_sessions integer default 0,
+  add column if not exists active_duration_ms bigint default 0,
+  add column if not exists pause_duration_ms bigint default 0,
+  add column if not exists inactivity_duration_ms bigint default 0,
+  add column if not exists behavior_score numeric;
+
+create table if not exists public.focus_session_events (
+  id text primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  session_id text references public.focus_sessions(id) on delete cascade not null,
+  event_type text not null,
+  runtime_state text not null,
+  occurred_at timestamp with time zone not null,
+  relative_ms integer not null default 0,
+  payload jsonb default '{}'::jsonb,
+  created_at timestamp with time zone default now()
+);
+
+alter table public.focus_session_events enable row level security;
+drop policy if exists "Users can view their own focus session events" on public.focus_session_events;
+drop policy if exists "Users can create their own focus session events" on public.focus_session_events;
+drop policy if exists "Users can update their own focus session events" on public.focus_session_events;
+drop policy if exists "Users can delete their own focus session events" on public.focus_session_events;
+create policy "Users can view their own focus session events" on public.focus_session_events for select using (auth.uid() = user_id);
+create policy "Users can create their own focus session events" on public.focus_session_events for insert with check (auth.uid() = user_id);
+create policy "Users can update their own focus session events" on public.focus_session_events for update using (auth.uid() = user_id);
+create policy "Users can delete their own focus session events" on public.focus_session_events for delete using (auth.uid() = user_id);
+
+create index if not exists idx_focus_session_events_user_session_at
+  on public.focus_session_events (user_id, session_id, occurred_at desc);
+
+create table if not exists public.focus_session_interventions (
+  id text primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  session_id text references public.focus_sessions(id) on delete cascade not null,
+  occurred_at timestamp with time zone not null,
+  type text not null,
+  source_card text,
+  source_toast text,
+  trigger text,
+  action_taken text,
+  result text,
+  payload jsonb default '{}'::jsonb,
+  created_at timestamp with time zone default now()
+);
+
+alter table public.focus_session_interventions enable row level security;
+drop policy if exists "Users can view their own focus interventions" on public.focus_session_interventions;
+drop policy if exists "Users can create their own focus interventions" on public.focus_session_interventions;
+drop policy if exists "Users can update their own focus interventions" on public.focus_session_interventions;
+drop policy if exists "Users can delete their own focus interventions" on public.focus_session_interventions;
+create policy "Users can view their own focus interventions" on public.focus_session_interventions for select using (auth.uid() = user_id);
+create policy "Users can create their own focus interventions" on public.focus_session_interventions for insert with check (auth.uid() = user_id);
+create policy "Users can update their own focus interventions" on public.focus_session_interventions for update using (auth.uid() = user_id);
+create policy "Users can delete their own focus interventions" on public.focus_session_interventions for delete using (auth.uid() = user_id);
+
+create index if not exists idx_focus_session_interventions_user_session_at
+  on public.focus_session_interventions (user_id, session_id, occurred_at desc);
+
+create table if not exists public.focus_session_analytics (
+  session_id text primary key references public.focus_sessions(id) on delete cascade,
+  user_id uuid references auth.users on delete cascade not null,
+  mode text not null,
+  block_type public.block_type,
+  time_window text not null,
+  duration_bucket text not null,
+  initiated_at timestamp with time zone not null,
+  started_at timestamp with time zone not null,
+  ended_at timestamp with time zone not null,
+  entry_duration_ms bigint not null default 0,
+  planned_duration_ms bigint not null default 0,
+  actual_duration_ms bigint not null default 0,
+  active_duration_ms bigint not null default 0,
+  pause_duration_ms bigint not null default 0,
+  inactivity_duration_ms bigint not null default 0,
+  pause_count integer not null default 0,
+  exit_count integer not null default 0,
+  task_change_count integer not null default 0,
+  intervention_count integer not null default 0,
+  intervention_accept_count integer not null default 0,
+  intervention_ignore_count integer not null default 0,
+  inactivity_count integer not null default 0,
+  stability_recovery_count integer not null default 0,
+  closure_type text not null,
+  completion_ratio numeric,
+  stability_ratio numeric,
+  continuity_ratio numeric,
+  recovery_ratio numeric,
+  start_delay_ms integer not null default 0,
+  progress_score numeric,
+  friction_score numeric,
+  consistency_score numeric,
+  behavior_score numeric,
+  diagnostics jsonb default '{}'::jsonb,
+  computed_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+alter table public.focus_session_analytics enable row level security;
+drop policy if exists "Users can view their own focus session analytics" on public.focus_session_analytics;
+drop policy if exists "Users can create their own focus session analytics" on public.focus_session_analytics;
+drop policy if exists "Users can update their own focus session analytics" on public.focus_session_analytics;
+drop policy if exists "Users can delete their own focus session analytics" on public.focus_session_analytics;
+create policy "Users can view their own focus session analytics" on public.focus_session_analytics for select using (auth.uid() = user_id);
+create policy "Users can create their own focus session analytics" on public.focus_session_analytics for insert with check (auth.uid() = user_id);
+create policy "Users can update their own focus session analytics" on public.focus_session_analytics for update using (auth.uid() = user_id);
+create policy "Users can delete their own focus session analytics" on public.focus_session_analytics for delete using (auth.uid() = user_id);
+
+create index if not exists idx_focus_session_analytics_user_ended_at
+  on public.focus_session_analytics (user_id, ended_at desc);
+create index if not exists idx_focus_session_analytics_user_time_window
+  on public.focus_session_analytics (user_id, time_window);
+create index if not exists idx_focus_session_analytics_user_duration_bucket
+  on public.focus_session_analytics (user_id, duration_bucket);
+
+create table if not exists public.user_behavior_profile (
+  user_id uuid primary key references auth.users on delete cascade,
+  warmup_stage text not null default 'cold',
+  best_focus_window jsonb,
+  optimal_session_length jsonb,
+  top_friction_sources jsonb default '[]'::jsonb,
+  consistency_trend jsonb,
+  recent_improvements jsonb default '[]'::jsonb,
+  active_patterns jsonb default '[]'::jsonb,
+  confidence_overview jsonb default '{}'::jsonb,
+  last_session_analytics_at timestamp with time zone,
+  last_daily_consolidated_at timestamp with time zone,
+  last_weekly_consolidated_at timestamp with time zone,
+  last_updated_at timestamp with time zone default now(),
+  profile_version text not null default 'v2'
+);
+
+alter table public.user_behavior_profile enable row level security;
+drop policy if exists "Users can view their own behavior profile" on public.user_behavior_profile;
+drop policy if exists "Users can create their own behavior profile" on public.user_behavior_profile;
+drop policy if exists "Users can update their own behavior profile" on public.user_behavior_profile;
+drop policy if exists "Users can delete their own behavior profile" on public.user_behavior_profile;
+create policy "Users can view their own behavior profile" on public.user_behavior_profile for select using (auth.uid() = user_id);
+create policy "Users can create their own behavior profile" on public.user_behavior_profile for insert with check (auth.uid() = user_id);
+create policy "Users can update their own behavior profile" on public.user_behavior_profile for update using (auth.uid() = user_id);
+create policy "Users can delete their own behavior profile" on public.user_behavior_profile for delete using (auth.uid() = user_id);
+
+create table if not exists public.behavior_pattern_history (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  pattern_key text not null,
+  pattern_type text not null,
+  status text not null default 'active',
+  window_kind text not null,
+  confidence numeric,
+  sample_size integer not null default 0,
+  pattern_data jsonb default '{}'::jsonb,
+  evidence jsonb default '{}'::jsonb,
+  first_detected_at timestamp with time zone default now(),
+  last_confirmed_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(user_id, pattern_key)
+);
+
+alter table public.behavior_pattern_history enable row level security;
+drop policy if exists "Users can view their own behavior pattern history" on public.behavior_pattern_history;
+drop policy if exists "Users can create their own behavior pattern history" on public.behavior_pattern_history;
+drop policy if exists "Users can update their own behavior pattern history" on public.behavior_pattern_history;
+drop policy if exists "Users can delete their own behavior pattern history" on public.behavior_pattern_history;
+create policy "Users can view their own behavior pattern history" on public.behavior_pattern_history for select using (auth.uid() = user_id);
+create policy "Users can create their own behavior pattern history" on public.behavior_pattern_history for insert with check (auth.uid() = user_id);
+create policy "Users can update their own behavior pattern history" on public.behavior_pattern_history for update using (auth.uid() = user_id);
+create policy "Users can delete their own behavior pattern history" on public.behavior_pattern_history for delete using (auth.uid() = user_id);
+
+create index if not exists idx_behavior_pattern_history_user_status
+  on public.behavior_pattern_history (user_id, status, updated_at desc);
+
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin

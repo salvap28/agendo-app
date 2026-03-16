@@ -120,6 +120,8 @@ export function FocusOverlay() {
         extendBlock,
         openIntervention,
         recordIntervention,
+        recordInactivityDetected,
+        recordStabilityRecovered,
         markClosureBridgeShown,
         markCardShown,
         recordCardOutcome,
@@ -155,6 +157,59 @@ export function FocusOverlay() {
     React.useEffect(() => {
         requestNotificationPermission();
     }, []);
+
+    const trackedSessionId = session?.id ?? null;
+    const trackedSessionPaused = session?.isPaused ?? false;
+    const trackedSessionEndedAt = session?.endedAt ?? null;
+
+    React.useEffect(() => {
+        if (!trackedSessionId || isEntryRitualActive || trackedSessionPaused || trackedSessionEndedAt) return;
+
+        let lastActivityAt = Date.now();
+        let inactivityRaised = false;
+
+        const handleActivity = () => {
+            lastActivityAt = Date.now();
+
+            if (inactivityRaised) {
+                inactivityRaised = false;
+                recordStabilityRecovered();
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                handleActivity();
+            }
+        };
+
+        const interval = window.setInterval(() => {
+            if (!inactivityRaised && Date.now() - lastActivityAt >= 90_000) {
+                inactivityRaised = true;
+                recordInactivityDetected();
+            }
+        }, 15_000);
+
+        window.addEventListener("pointerdown", handleActivity, { passive: true });
+        window.addEventListener("keydown", handleActivity);
+        window.addEventListener("touchstart", handleActivity, { passive: true });
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            window.clearInterval(interval);
+            window.removeEventListener("pointerdown", handleActivity);
+            window.removeEventListener("keydown", handleActivity);
+            window.removeEventListener("touchstart", handleActivity);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [
+        isEntryRitualActive,
+        recordInactivityDetected,
+        recordStabilityRecovered,
+        trackedSessionEndedAt,
+        trackedSessionId,
+        trackedSessionPaused,
+    ]);
 
     const context = React.useMemo(() => {
         if (!session || isEntryRitualActive) return null;

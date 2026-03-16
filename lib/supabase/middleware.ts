@@ -7,6 +7,13 @@ export async function updateSession(request: NextRequest) {
     })
 
     try {
+        const pathname = request.nextUrl.pathname
+        const isPublicInternalEndpoint = pathname === '/api/analytics/consolidate/batch'
+
+        if (isPublicInternalEndpoint) {
+            return supabaseResponse
+        }
+
         const supabase = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -34,15 +41,15 @@ export async function updateSession(request: NextRequest) {
 
         if (
             !user &&
-            !request.nextUrl.pathname.startsWith('/login') &&
-            !request.nextUrl.pathname.startsWith('/auth')
+            !pathname.startsWith('/login') &&
+            !pathname.startsWith('/auth')
         ) {
             const url = request.nextUrl.clone()
             url.pathname = '/login'
             return NextResponse.redirect(url)
         }
 
-        if (user && request.nextUrl.pathname.startsWith('/login')) {
+        if (user && pathname.startsWith('/login')) {
             const url = request.nextUrl.clone()
             url.pathname = '/'
             return NextResponse.redirect(url)

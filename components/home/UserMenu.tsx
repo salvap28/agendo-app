@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { createClient, getClientUser } from "@/lib/supabase/client";
-import { LogOut, Settings, ChevronDown } from "lucide-react";
+import { LogOut, Settings, ChevronDown, Orbit } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 
@@ -55,6 +55,11 @@ export function UserMenu() {
         router.push("/settings");
     };
 
+    const handleInsights = () => {
+        setIsOpen(false);
+        router.push("/insights");
+    };
+
     return (
         <div
             ref={menuRef}
@@ -84,6 +89,14 @@ export function UserMenu() {
                     )}
                 >
                     <div className="flex flex-col p-1.5">
+                        <button
+                            onClick={handleInsights}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-[14px] hover:bg-white/10 transition-colors text-left text-white/80 hover:text-white"
+                        >
+                            <Orbit className="w-4 h-4 opacity-70" />
+                            <span className="text-sm font-medium">Insights</span>
+                        </button>
+
                         <button
                             onClick={handleSettings}
                             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-[14px] hover:bg-white/10 transition-colors text-left text-white/80 hover:text-white"

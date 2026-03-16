@@ -9,6 +9,34 @@ export type FocusInterventionKind =
     | "refocus_prompt"
     | "progress_check"
     | "closure_bridge";
+export type FocusRuntimeState =
+    | "inactive"
+    | "entry"
+    | "active"
+    | "friction_detected"
+    | "intervention"
+    | "stabilized"
+    | "completed"
+    | "abandoned";
+export type FocusSessionEventType =
+    | "session_started"
+    | "entry_started"
+    | "entry_completed"
+    | "entry_skipped"
+    | "session_paused"
+    | "session_resumed"
+    | "session_exit"
+    | "session_returned"
+    | "session_completed"
+    | "session_interaction"
+    | "task_changed"
+    | "inactivity_detected"
+    | "intervention_shown"
+    | "intervention_ignored"
+    | "intervention_accepted"
+    | "card_shown"
+    | "card_outcome"
+    | "stability_recovered";
 
 // ── Gym Tracker Types ──────────────────────────────────────────────────────
 
@@ -121,6 +149,16 @@ export interface FocusEntryRitualState {
     completedAt: number | null;
 }
 
+export interface FocusSessionEvent {
+    id: string;
+    sessionId: string;
+    type: FocusSessionEventType;
+    runtimeState: FocusRuntimeState;
+    timestamp: string;
+    relativeMs: number;
+    payload?: Record<string, unknown>;
+}
+
 // ── FocusSession ──────────────────────────────────────────────────────────
 
 export interface FocusSession {
@@ -129,8 +167,11 @@ export interface FocusSession {
     blockId?: string;
     blockType?: BlockType;
 
+    initiatedAt?: string;
+    consolidatedAt?: string;
     startedAt: string; // ISO string for localStorage persistence
     endedAt?: string;
+    plannedDurationMs?: number;
 
     isActive: boolean;
     isPaused: boolean;
@@ -167,6 +208,9 @@ export interface FocusSession {
     closureBridgeShown?: boolean;
     closureNote?: ClosureNote | null;
     entryRitual?: FocusEntryRitualState;
+    runtimeState?: FocusRuntimeState;
+    events?: FocusSessionEvent[];
+    inactivityStartedAt?: string | null;
     persistenceStatus?: "draft" | "pending" | "persisted" | "failed";
 }
 

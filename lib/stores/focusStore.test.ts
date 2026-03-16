@@ -28,6 +28,10 @@ describe("focusStore", () => {
     const originalUpdateBlock = useBlocksStore.getState().updateBlock;
 
     beforeEach(() => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+        } as Response));
         localStorage.clear();
         useFocusStore.setState({
             session: null,
@@ -45,7 +49,7 @@ describe("focusStore", () => {
         getClientUserMock.mockResolvedValue({ id: "user-1" });
         createClientMock.mockImplementation(() => ({
             from: () => ({
-                insert: vi.fn().mockResolvedValue({ error: null }),
+                upsert: vi.fn().mockResolvedValue({ error: null }),
                 update: vi.fn().mockReturnValue({
                     eq: vi.fn().mockResolvedValue({ error: null }),
                 }),
@@ -63,6 +67,7 @@ describe("focusStore", () => {
         useBlocksStore.setState({
             updateBlock: originalUpdateBlock,
         });
+        vi.unstubAllGlobals();
     });
 
     it("reuses a paused block session instead of reactivating the entry ritual", () => {
@@ -237,11 +242,11 @@ describe("focusStore", () => {
     });
 
     it("keeps reflection locked until finish persistence resolves", async () => {
-        const deferredInsert = createDeferred<{ error: null }>();
+        const deferredUpsert = createDeferred<{ error: null }>();
         getClientUserMock.mockResolvedValue({ id: "user-1" });
         createClientMock.mockImplementation(() => ({
             from: () => ({
-                insert: vi.fn().mockReturnValue(deferredInsert.promise),
+                upsert: vi.fn().mockReturnValue(deferredUpsert.promise),
                 update: vi.fn().mockReturnValue({
                     eq: vi.fn().mockResolvedValue({ error: null }),
                 }),
@@ -273,7 +278,7 @@ describe("focusStore", () => {
         expect(useFocusStore.getState().session?.endedAt).toBeTruthy();
         expect(useFocusStore.getState().session?.persistenceStatus).toBe("pending");
 
-        deferredInsert.resolve({ error: null });
+        deferredUpsert.resolve({ error: null });
         await finishPromise;
 
         expect(useFocusStore.getState().session?.persistenceStatus).toBe("persisted");
