@@ -1,6 +1,7 @@
 "use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { Block } from "@/lib/types/blocks";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
@@ -126,6 +127,7 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
 
 export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelectedBlockId, setIsNewBlock }: DailyAgendaViewProps) {
     const { blocks } = useBlocksStore();
+    const { fetchDayExperiences } = useActivityExperienceStore();
     const { session, returnToFocus } = useFocusStore();
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
@@ -145,6 +147,10 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
 
         return () => window.clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        void fetchDayExperiences(effectiveSelectedDate.toISOString().slice(0, 10));
+    }, [effectiveSelectedDate, fetchDayExperiences]);
 
     const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
     const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));

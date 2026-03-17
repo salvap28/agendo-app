@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 import { useMemo, useState } from "react";
 import { getBlockColors } from "@/lib/utils/blockColors";
 import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
+import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 
 interface BlockItemProps {
     block: Block;
@@ -15,6 +16,9 @@ interface BlockItemProps {
 export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemProps) {
 
     const [isHovered, setIsHovered] = useState(false);
+    const activityExperience = useActivityExperienceStore((state) => (
+        state.experiences.find((experience) => experience.sourceBlockId === block.id) ?? null
+    ));
 
     const accentClass = useMemo(() => {
         switch (block.type) {
@@ -42,9 +46,25 @@ export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemP
                     {block.title}
                 </span>
                 {height >= 45 && (
-                    <span className="text-[11px] text-[#9ca3af] truncate tracking-wide mt-1">
-                        {block.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {block.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <div className="mt-1 flex items-center gap-2">
+                        <span className="text-[11px] text-[#9ca3af] truncate tracking-wide">
+                            {block.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {block.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        {activityExperience && (
+                            <>
+                                <span className={`h-2 w-2 rounded-full ${
+                                    activityExperience.energyImpact === "draining"
+                                        ? "bg-rose-400"
+                                        : activityExperience.energyImpact === "restorative" || activityExperience.energyImpact === "energizing"
+                                            ? "bg-emerald-400"
+                                            : "bg-cyan-300/70"
+                                }`} />
+                                <span className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+                                    {activityExperience.wasUserConfirmed ? "confirmed" : "inferred"}
+                                </span>
+                            </>
+                        )}
+                    </div>
                 )}
             </div>
 

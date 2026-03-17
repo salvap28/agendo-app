@@ -31,6 +31,11 @@ import { CircularTimePicker } from "@/components/focus/CircularTimePicker";
 import { Input } from "@/components/ui/input";
 import { PlanningRecommendation } from "@/lib/types/planning";
 import {
+    ActivityOutcome,
+    EnergyImpact,
+    PerceivedValue,
+} from "@/lib/types/activity";
+import {
     acceptPlanningRecommendation,
     applyPlanningRecommendation,
     canApplyRecommendation,
@@ -38,6 +43,7 @@ import {
     fetchBlockPlanning,
 } from "@/lib/services/planningService";
 import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
+import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -95,6 +101,12 @@ const PRIMARY_ORBIT_RADIUS_DESKTOP = 168;
 export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { blockId: string; isNewBlock?: boolean; onClose: () => void }) {
     const { blocks, updateBlock, deleteBlock, deleteBlockSeries, setStatus, applyRecurrence, fetchBlocks } = useBlocksStore();
     const { openFromBlock } = useFocusStore();
+    const {
+        experiences,
+        refreshBlockExperience,
+        inferBlockExperience,
+        recordCheckout,
+    } = useActivityExperienceStore();
 
     const block = blocks.find(b => b.id === blockId);
 
@@ -116,6 +128,10 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
     const [planningApplyingId, setPlanningApplyingId] = useState<string | null>(null);
     const [planningLoading, setPlanningLoading] = useState(false);
+    const [activitySaving, setActivitySaving] = useState(false);
+    const [activityOutcome, setActivityOutcome] = useState<ActivityOutcome>("completed");
+    const [activityEnergyImpact, setActivityEnergyImpact] = useState<EnergyImpact>("unknown");
+    const [activityPerceivedValue, setActivityPerceivedValue] = useState<PerceivedValue>("unknown");
     const planningBlockId = block?.id ?? null;
     const planningDate = block?.startAt ? block.startAt.toISOString().slice(0, 10) : null;
     const planningSignature = React.useMemo(() => {
@@ -173,6 +189,26 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         void refreshPlanning();
     }, [planningSignature, planningBlockId, planningDate, refreshPlanning]);
 
+    const activityExperience = React.useMemo(
+        () => experiences.find((experience) => experience.sourceBlockId === block?.id) ?? null,
+        [experiences, block?.id],
+    );
+    const blockType = block?.type;
+
+    useEffect(() => {
+        if (!block?.id) return;
+        void refreshBlockExperience(block.id).then((experience) => {
+            if (!experience && block.endAt.getTime() <= Date.now() && !(block.requiresFocusMode ?? false)) {
+                void inferBlockExperience(block.id);
+            }
+        });
+    }, [block?.id, block?.status, block?.startAt, block?.endAt, block?.requiresFocusMode, refreshBlockExperience, inferBlockExperience]);
+
+    useEffect(() => {
+        if (!blockType) return;
+        setActivityOutcome(blockType === "meeting" ? "attended" : "completed");
+    }, [blockType]);
+
     const handleDismissPlanning = async (recommendation: PlanningRecommendation) => {
         await dismissPlanningRecommendation(recommendation.id);
         await refreshPlanning();
@@ -191,6 +227,36 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             await refreshPlanning();
         } finally {
             setPlanningApplyingId(null);
+        }
+    };
+
+    const shouldPromptActivityCheckout = Boolean(
+        block
+        && !(block.requiresFocusMode ?? false)
+        && (block.generatesExperienceRecord ?? true)
+        && block.endAt.getTime() <= Date.now()
+        && (
+            !activityExperience
+            || (!activityExperience.wasUserConfirmed && (activityExperience.confidence ?? 0) < 0.8)
+        )
+        && (
+            (block.estimatedDurationMinutes ?? Math.round((block.endAt.getTime() - block.startAt.getTime()) / 60000)) >= 40
+            || (block.priority ?? 0) >= 3
+            || block.status === "completed"
+        )
+    );
+
+    const handleSaveActivityCheckout = async () => {
+        if (!block) return;
+        setActivitySaving(true);
+        try {
+            await recordCheckout(block.id, {
+                outcome: activityOutcome,
+                energyImpact: activityEnergyImpact === "unknown" ? undefined : activityEnergyImpact,
+                perceivedValue: activityPerceivedValue === "unknown" ? undefined : activityPerceivedValue,
+            });
+        } finally {
+            setActivitySaving(false);
         }
     };
 
@@ -1372,6 +1438,115 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             {!isNewBlock && block && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-5 z-[410] flex justify-center px-4">
                     <div className="pointer-events-auto w-full max-w-xl rounded-[30px] border border-white/10 bg-black/55 p-3 backdrop-blur-2xl shadow-[0_20px_80px_-30px_rgba(0,0,0,0.8)]">
+                        <div className="mb-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">
+                                        Experiencia real
+                                    </p>
+                                    <p className="mt-1 text-sm text-white/58">
+                                        {activityExperience
+                                            ? "Lo que Agendo pudo registrar de este bloque mas alla del plan."
+                                            : "Todavia no hay lectura confirmada de como se vivio este bloque."}
+                                    </p>
+                                </div>
+                                {activityExperience && (
+                                    <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                                        activityExperience.wasUserConfirmed
+                                            ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"
+                                            : "border-white/10 bg-white/[0.05] text-white/50"
+                                    }`}>
+                                        {activityExperience.wasUserConfirmed ? "Confirmada" : "Inferida"}
+                                    </span>
+                                )}
+                            </div>
+
+                            {activityExperience && (
+                                <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/70">
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        outcome {activityExperience.outcome.replace(/_/g, " ")}
+                                    </span>
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        energy {activityExperience.energyImpact}
+                                    </span>
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        load {activityExperience.cognitiveLoad}
+                                    </span>
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        value {activityExperience.perceivedValue}
+                                    </span>
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        planned {block.startAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}-{block.endAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                    {activityExperience.actualDurationMin != null && (
+                                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                            actual {activityExperience.actualDurationMin} min
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {shouldPromptActivityCheckout && (
+                                <div className="mt-4 space-y-3">
+                                    <div className="grid gap-2 sm:grid-cols-4">
+                                        {(["completed", "attended", "partial", "skipped"] as ActivityOutcome[]).map((option) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => setActivityOutcome(option)}
+                                                className={cn(
+                                                    "rounded-2xl border px-3 py-2 text-xs uppercase tracking-[0.18em] transition-colors",
+                                                    activityOutcome === option
+                                                        ? "border-violet-300/30 bg-violet-400/12 text-violet-100"
+                                                        : "border-white/10 bg-black/20 text-white/50 hover:text-white/75"
+                                                )}
+                                            >
+                                                {option.replace(/_/g, " ")}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="grid gap-2 sm:grid-cols-5">
+                                        {(["unknown", "restorative", "energizing", "neutral", "draining"] as EnergyImpact[]).map((option) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => setActivityEnergyImpact(option)}
+                                                className={cn(
+                                                    "rounded-2xl border px-3 py-2 text-[11px] uppercase tracking-[0.16em] transition-colors",
+                                                    activityEnergyImpact === option
+                                                        ? "border-cyan-300/30 bg-cyan-400/12 text-cyan-100"
+                                                        : "border-white/10 bg-black/20 text-white/45"
+                                                )}
+                                            >
+                                                {option}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="grid gap-2 sm:grid-cols-4">
+                                        {(["unknown", "low", "medium", "high"] as PerceivedValue[]).map((option) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => setActivityPerceivedValue(option)}
+                                                className={cn(
+                                                    "rounded-2xl border px-3 py-2 text-[11px] uppercase tracking-[0.16em] transition-colors",
+                                                    activityPerceivedValue === option
+                                                        ? "border-emerald-300/30 bg-emerald-400/12 text-emerald-100"
+                                                        : "border-white/10 bg-black/20 text-white/45"
+                                                )}
+                                            >
+                                                {option}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => void handleSaveActivityCheckout()}
+                                        disabled={activitySaving}
+                                        className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/78 transition-colors hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {activitySaving ? "Guardando..." : "Guardar checkout"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="mb-3 flex items-center justify-between gap-3 px-1">
                             <div>
                                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">

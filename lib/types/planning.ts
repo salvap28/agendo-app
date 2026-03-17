@@ -1,5 +1,6 @@
 import { BehaviorProfile, FocusSessionAnalytics, FocusWindow } from "./behavior";
 import { Block, BlockFlexibility, BlockIntensity, BlockPriority } from "./blocks";
+import { ActivityExperience, ActivityDailyLoadSnapshot } from "./activity";
 
 export type PlanningRecommendationType =
     | "move_block"
@@ -43,6 +44,14 @@ export interface DailyLoadSnapshot {
     intenseSequences: number;
     deadlinePressureCount: number;
     breakCoverageRatio: number;
+    passiveAttendanceLoad: number;
+    logisticsLoad: number;
+    collaborativeLoad: number;
+    recoveryEffect: number;
+    transitionCost: number;
+    realDayLoad: number;
+    residualEnergyEstimate: number;
+    planRealityVariance: number;
 }
 
 export interface PlanningEvidence {
@@ -127,6 +136,7 @@ export interface PlanningEngineInput {
     userId: string;
     profile: BehaviorProfile;
     recentAnalytics: FocusSessionAnalytics[];
+    activityExperiences: ActivityExperience[];
     blocks: Block[];
     targetDate: string;
     targetBlockId?: string;
@@ -154,6 +164,7 @@ export interface PlanningGuideResult {
     recommendations: PlanningRecommendation[];
     bestFocusWindow: FocusWindow | null;
     guidedPlan: GuidedPlanningOutput | null;
+    activityLoad: ActivityDailyLoadSnapshot;
 }
 
 export interface PersistedPlanningRecommendation {

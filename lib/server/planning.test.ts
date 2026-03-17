@@ -1,6 +1,7 @@
 import {
     canAutoApplyRecommendation,
     isSuppressed,
+    parseRecommendationLocator,
     serializeRecommendation,
     summarizePlanningFeedback,
 } from "@/lib/server/planning";
@@ -109,6 +110,26 @@ function makePersistedRecommendation(overrides: Partial<PersistedPlanningRecomme
 }
 
 describe("planning lifecycle helpers", () => {
+    it("parses user-scoped recommendation ids", () => {
+        expect(parseRecommendationLocator("user-1:block:move_block:block-1:morning")).toEqual({
+            scopedUserId: "user-1",
+            scope: "block",
+            type: "move_block",
+            targetKey: "block-1",
+            variant: "morning",
+        });
+    });
+
+    it("parses legacy unscoped recommendation ids", () => {
+        expect(parseRecommendationLocator("day:insert_break:2026-03-18:default")).toEqual({
+            scopedUserId: null,
+            scope: "day",
+            type: "insert_break",
+            targetKey: "2026-03-18",
+            variant: "default",
+        });
+    });
+
     it("marks a repeatedly seen active recommendation as ignored", () => {
         const payload = serializeRecommendation(
             "user-1",

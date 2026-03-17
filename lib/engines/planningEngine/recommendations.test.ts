@@ -1,5 +1,6 @@
 import { buildEmptyBehaviorProfile } from "@/lib/engines/personalIntelligence";
 import { buildPlanningGuide } from "@/lib/engines/planningEngine";
+import { ActivityExperience } from "@/lib/types/activity";
 import { FocusSessionAnalytics } from "@/lib/types/behavior";
 import { Block } from "@/lib/types/blocks";
 
@@ -202,12 +203,50 @@ function makeProfile() {
     return profile;
 }
 
+function makeActivityExperience(overrides: Partial<ActivityExperience> = {}): ActivityExperience {
+    return {
+        id: overrides.id ?? crypto.randomUUID(),
+        experienceKey: overrides.experienceKey ?? `exp:${crypto.randomUUID()}`,
+        userId: "user-1",
+        sourceBlockId: overrides.sourceBlockId ?? null,
+        sourceFocusSessionId: overrides.sourceFocusSessionId ?? null,
+        titleSnapshot: overrides.titleSnapshot ?? "Activity",
+        blockTypeSnapshot: overrides.blockTypeSnapshot ?? "meeting",
+        tagSnapshot: overrides.tagSnapshot ?? null,
+        engagementMode: overrides.engagementMode ?? "collaborative",
+        outcome: overrides.outcome ?? "attended",
+        source: overrides.source ?? "manual",
+        scheduledStart: overrides.scheduledStart ?? "2026-03-18T09:00:00.000Z",
+        scheduledEnd: overrides.scheduledEnd ?? "2026-03-18T10:00:00.000Z",
+        actualStart: overrides.actualStart ?? "2026-03-18T09:00:00.000Z",
+        actualEnd: overrides.actualEnd ?? "2026-03-18T10:00:00.000Z",
+        actualDurationMin: overrides.actualDurationMin ?? 60,
+        energyImpact: overrides.energyImpact ?? "neutral",
+        cognitiveLoad: overrides.cognitiveLoad ?? "medium",
+        perceivedValue: overrides.perceivedValue ?? "medium",
+        socialDemand: overrides.socialDemand ?? "high",
+        outcomeReason: overrides.outcomeReason ?? "attended_as_expected",
+        locationMode: overrides.locationMode ?? "hybrid",
+        presenceMode: overrides.presenceMode ?? "required",
+        wasPlanned: overrides.wasPlanned ?? true,
+        wasCompletedAsPlanned: overrides.wasCompletedAsPlanned ?? true,
+        wasUserConfirmed: overrides.wasUserConfirmed ?? true,
+        wasSystemInferred: overrides.wasSystemInferred ?? false,
+        confidence: overrides.confidence ?? 0.82,
+        notes: overrides.notes ?? null,
+        metadataJson: overrides.metadataJson ?? {},
+        createdAt: overrides.createdAt ?? "2026-03-18T10:10:00.000Z",
+        updatedAt: overrides.updatedAt ?? "2026-03-18T10:10:00.000Z",
+    };
+}
+
 describe("buildPlanningGuide", () => {
     it("suggests moving a demanding block that sits outside the best focus window", () => {
         const guide = buildPlanningGuide({
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [
                 makeBlock("candidate"),
                 makeBlock("morning-gap", {
@@ -234,6 +273,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [makeBlock("long-block")],
             targetDate: "2026-03-18",
         });
@@ -270,6 +310,7 @@ describe("buildPlanningGuide", () => {
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`, {
                 activeDurationMs: 45 * 60 * 1000,
             })),
+            activityExperiences: [],
             blocks,
             targetDate: "2026-03-18",
             preferences: {
@@ -288,6 +329,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [
                 makeBlock("admin-risk", {
                     type: "admin",
@@ -316,6 +358,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile,
             recentAnalytics: Array.from({ length: 4 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [makeBlock("candidate")],
             targetDate: "2026-03-18",
         });
@@ -343,6 +386,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks,
             targetDate: "2026-03-18",
         });
@@ -351,6 +395,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-2",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`b-${index}`, { userId: "user-2" })),
+            activityExperiences: [],
             blocks,
             targetDate: "2026-03-18",
         });
@@ -365,6 +410,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [
                 makeBlock("admin-risk", {
                     type: "admin",
@@ -399,6 +445,7 @@ describe("buildPlanningGuide", () => {
             userId: "user-1",
             profile: makeProfile(),
             recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [],
             blocks: [
                 makeBlock("prime", {
                     startAt: new Date("2026-03-18T14:00:00.000Z"),
@@ -425,5 +472,32 @@ describe("buildPlanningGuide", () => {
         expect(guide.guidedPlan).toBeTruthy();
         expect(guide.guidedPlan?.steps.length).toBeGreaterThan(0);
         expect(guide.guidedPlan?.headline.length).toBeGreaterThan(10);
+    });
+
+    it("uses draining non-focus activity to recommend a lighter entry on the day", () => {
+        const guide = buildPlanningGuide({
+            userId: "user-1",
+            profile: makeProfile(),
+            recentAnalytics: Array.from({ length: 8 }, (_, index) => makeAnalytics(`a-${index}`)),
+            activityExperiences: [
+                makeActivityExperience({
+                    engagementMode: "collaborative",
+                    energyImpact: "draining",
+                    cognitiveLoad: "high",
+                    actualEnd: "2026-03-18T10:30:00.000Z",
+                    scheduledEnd: "2026-03-18T10:30:00.000Z",
+                }),
+            ],
+            blocks: [
+                makeBlock("deep-after-meeting", {
+                    startAt: new Date("2026-03-18T11:30:00.000Z"),
+                    endAt: new Date("2026-03-18T13:00:00.000Z"),
+                }),
+            ],
+            targetDate: "2026-03-18",
+        });
+
+        expect(guide.dailyLoad.realDayLoad).toBeGreaterThan(0);
+        expect(guide.recommendations.some((item) => item.type === "start_small")).toBe(true);
     });
 });

@@ -253,6 +253,38 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 </div>
                             </div>
                         </div>
+
+                        {data.activityOverview && data.activityOverview.totalCount > 0 && (
+                            <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-6 backdrop-blur-3xl">
+                                <div className="flex items-center justify-between text-white/40">
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Actividad no-focus</span>
+                                    <Orbit className="h-4 w-4 text-cyan-200" />
+                                </div>
+                                <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                                    <div>
+                                        <p className="text-3xl font-semibold text-white">
+                                            {Math.round(data.activityOverview.attendanceRate * 100)}%
+                                        </p>
+                                        <p className="mt-1 text-sm text-white/40">attendance rate</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-3xl font-semibold text-white">
+                                            {Math.round(data.activityOverview.nonFocusCompletionRate * 100)}%
+                                        </p>
+                                        <p className="mt-1 text-sm text-white/40">non-focus completion</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-3xl font-semibold text-white">
+                                            {Math.round(data.activityOverview.postponeRate * 100)}%
+                                        </p>
+                                        <p className="mt-1 text-sm text-white/40">postpone rate</p>
+                                    </div>
+                                </div>
+                                <p className="mt-4 text-sm leading-6 text-white/45">
+                                    Estas señales vienen de clases, meetings, recovery, logística y otras actividades que no pasan por Focus Mode.
+                                </p>
+                            </div>
+                        )}
                     </section>
                 </div>
 

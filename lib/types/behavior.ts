@@ -1,5 +1,11 @@
 import { BlockType } from "./blocks";
 import { FocusMode } from "./focus";
+import {
+    ActivityBehaviorSignals,
+    ActivityExperienceAnalytics,
+    ActivityPatternType,
+    ActivityPatternSummary,
+} from "./activity";
 
 export type FocusWindow = "morning" | "afternoon" | "evening" | "night";
 export type SessionLengthBucket = "short" | "medium" | "long" | "extended";
@@ -10,7 +16,16 @@ export type BehaviorPatternType =
     | "optimal_session_length"
     | "friction_source"
     | "consistency_trend"
-    | "recent_improvement";
+    | "recent_improvement"
+    | "post_meeting_fatigue"
+    | "post_class_residual_load"
+    | "preferred_light_execution_window"
+    | "attendance_reliability"
+    | "postpone_tendency"
+    | "energy_impact_by_engagement"
+    | "logistics_fragmentation"
+    | "recovery_boost"
+    | "collaboration_buffer_need";
 export type BehaviorPatternStatus = "warming" | "active" | "stale";
 export type FrictionSourceType =
     | "block_type"
@@ -95,13 +110,15 @@ export type OptimalSessionLengthPattern = BehaviorPatternBase<"optimal_session_l
 export type FrictionSourcePattern = BehaviorPatternBase<"friction_source", FrictionSourcePatternData>;
 export type ConsistencyTrendPattern = BehaviorPatternBase<"consistency_trend", ConsistencyTrendPatternData>;
 export type RecentImprovementPattern = BehaviorPatternBase<"recent_improvement", RecentImprovementPatternData>;
+export type ActivityDerivedPattern = BehaviorPatternBase<ActivityPatternType, Record<string, unknown>>;
 
 export type BehaviorPatternRecord =
     | BestFocusWindowPattern
     | OptimalSessionLengthPattern
     | FrictionSourcePattern
     | ConsistencyTrendPattern
-    | RecentImprovementPattern;
+    | RecentImprovementPattern
+    | ActivityDerivedPattern;
 
 export interface SessionAnalyticsDiagnostics {
     entryDurationMs: number;
@@ -179,7 +196,11 @@ export interface BehaviorProfile {
     recentImprovements: RecentImprovementPattern[];
     activePatterns: BehaviorPatternRecord[];
     confidenceOverview: ConfidenceOverview;
+    activitySignals: ActivityBehaviorSignals;
+    activityAnalytics: ActivityExperienceAnalytics | null;
+    activityPatterns: ActivityPatternSummary[];
     lastSessionAnalyticsAt: string | null;
+    lastActivityAnalyticsAt: string | null;
     lastDailyConsolidatedAt: string | null;
     lastWeeklyConsolidatedAt: string | null;
     lastUpdatedAt: string;
@@ -189,7 +210,7 @@ export interface BehaviorProfile {
 export interface InsightCardData {
     id: string;
     patternKey: string;
-    type: BehaviorPatternType;
+    type: BehaviorPatternType | "activity_signal";
     tone: "positive" | "neutral" | "caution";
     title: string;
     description: string;
@@ -210,6 +231,7 @@ export interface InsightsDashboardData {
     profile: BehaviorProfile;
     cards: InsightCardData[];
     timeline: InsightTimelinePoint[];
+    activityOverview: ActivityExperienceAnalytics | null;
     weeklySessions: number;
     completionRate: number;
     averageStability: number;

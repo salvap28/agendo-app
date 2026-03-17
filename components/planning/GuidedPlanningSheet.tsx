@@ -133,7 +133,7 @@ export function GuidedPlanningSheet({ open, onOpenChange, date }: GuidedPlanning
                             </div>
                         </div>
                         {guide && (
-                            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                            <div className="mt-4 grid gap-3 sm:grid-cols-4">
                                 <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
                                     <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Load</p>
                                     <p className="mt-1 text-lg font-semibold text-white">{guide.dailyLoad.level}</p>
@@ -148,6 +148,11 @@ export function GuidedPlanningSheet({ open, onOpenChange, date }: GuidedPlanning
                                     <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Best window</p>
                                     <p className="mt-1 text-lg font-semibold text-white">{guide.bestFocusWindow ?? "Still calibrating"}</p>
                                     <p className="text-sm text-white/55">Keep it for expensive work</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
+                                    <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Real load</p>
+                                    <p className="mt-1 text-lg font-semibold text-white">{Math.round(guide.dailyLoad.realDayLoad)}</p>
+                                    <p className="text-sm text-white/55">{Math.round(guide.dailyLoad.residualEnergyEstimate)}% residual energy</p>
                                 </div>
                             </div>
                         )}

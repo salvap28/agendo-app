@@ -3,6 +3,21 @@ import { Block, BlockStatus } from '@/lib/types/blocks';
 import { roundTo15 } from '@/lib/utils/blockUtils';
 import { getBlockEffectiveStatus } from '@/lib/utils/blockState';
 import { createClient, getClientUser } from '@/lib/supabase/client';
+import {
+    resolveBlockEngagementMode,
+    resolveBlockLocationMode,
+    resolveBlockPresenceMode,
+    resolveBlockRequiresFocusMode,
+    resolveBlockSocialDemand,
+} from '@/lib/engines/activityExperience';
+import {
+    inferBlockActivityExperience,
+    recordBlockRescheduleActivity,
+} from '@/lib/services/activityExperienceService';
+
+function canSyncActivityExperiences() {
+    return typeof window !== "undefined" && process.env.NODE_ENV !== "test";
+}
 
 interface BlockRow {
     id: string;
@@ -23,6 +38,12 @@ interface BlockRow {
     cognitively_heavy: boolean | null;
     splittable: boolean | null;
     optional: boolean | null;
+    engagement_mode: Block["engagementMode"] | null;
+    requires_focus_mode: boolean | null;
+    generates_experience_record: boolean | null;
+    social_demand_hint: Block["socialDemandHint"] | null;
+    location_mode: Block["locationMode"] | null;
+    presence_mode: Block["presenceMode"] | null;
     recurrence_id: string | null;
     recurrence_pattern: Block["recurrencePattern"] | null;
     notifications: number[] | null;
@@ -48,6 +69,12 @@ type BlockInsertPayload = {
     cognitively_heavy?: boolean;
     splittable?: boolean;
     optional?: boolean;
+    engagement_mode?: Block["engagementMode"];
+    requires_focus_mode?: boolean;
+    generates_experience_record?: boolean;
+    social_demand_hint?: Block["socialDemandHint"];
+    location_mode?: Block["locationMode"];
+    presence_mode?: Block["presenceMode"];
     recurrence_id?: string;
     recurrence_pattern?: Block["recurrencePattern"];
     notifications?: number[];
@@ -71,6 +98,12 @@ type BlockUpdatePayload = Partial<{
     cognitively_heavy: boolean | null;
     splittable: boolean | null;
     optional: boolean | null;
+    engagement_mode: Block["engagementMode"] | null;
+    requires_focus_mode: boolean | null;
+    generates_experience_record: boolean | null;
+    social_demand_hint: Block["socialDemandHint"] | null;
+    location_mode: Block["locationMode"] | null;
+    presence_mode: Block["presenceMode"] | null;
     notifications: number[] | null;
 }>;
 
@@ -128,6 +161,12 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             cognitivelyHeavy: b.cognitively_heavy ?? undefined,
             splittable: b.splittable ?? undefined,
             optional: b.optional ?? undefined,
+            engagementMode: b.engagement_mode ?? undefined,
+            requiresFocusMode: b.requires_focus_mode ?? undefined,
+            generatesExperienceRecord: b.generates_experience_record ?? undefined,
+            socialDemandHint: b.social_demand_hint ?? undefined,
+            locationMode: b.location_mode ?? undefined,
+            presenceMode: b.presence_mode ?? undefined,
             recurrenceId: b.recurrence_id ?? undefined,
             recurrencePattern: b.recurrence_pattern ?? undefined,
             notifications: b.notifications || [5],
@@ -189,6 +228,20 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                     }
                 })
         );
+
+        if (canSyncActivityExperiences()) {
+            await Promise.all(
+                statusUpdates
+                    .filter((entry) => entry.nextStatus === "completed")
+                    .map(async (entry) => {
+                        try {
+                            await inferBlockActivityExperience(entry.id);
+                        } catch (error) {
+                            console.error("Failed to infer auto-completed block activity experience", error);
+                        }
+                    })
+            );
+        }
     },
 
     createBlock: (partial) => {
@@ -220,10 +273,23 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             cognitivelyHeavy: partial.cognitivelyHeavy,
             splittable: partial.splittable,
             optional: partial.optional,
+            engagementMode: partial.engagementMode,
+            requiresFocusMode: partial.requiresFocusMode,
+            generatesExperienceRecord: partial.generatesExperienceRecord,
+            socialDemandHint: partial.socialDemandHint,
+            locationMode: partial.locationMode,
+            presenceMode: partial.presenceMode,
             recurrenceId,
             recurrencePattern: partial.recurrencePattern,
             notifications: partial.notifications || [5],
         };
+
+        baseBlock.engagementMode = baseBlock.engagementMode ?? resolveBlockEngagementMode(baseBlock);
+        baseBlock.requiresFocusMode = baseBlock.requiresFocusMode ?? resolveBlockRequiresFocusMode(baseBlock);
+        baseBlock.generatesExperienceRecord = baseBlock.generatesExperienceRecord ?? true;
+        baseBlock.socialDemandHint = baseBlock.socialDemandHint ?? resolveBlockSocialDemand(baseBlock);
+        baseBlock.locationMode = baseBlock.locationMode ?? resolveBlockLocationMode(baseBlock);
+        baseBlock.presenceMode = baseBlock.presenceMode ?? resolveBlockPresenceMode(baseBlock);
 
         newBlocks.push(baseBlock);
 
@@ -300,6 +366,12 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 if (b.cognitivelyHeavy != null) payload.cognitively_heavy = b.cognitivelyHeavy;
                 if (b.splittable != null) payload.splittable = b.splittable;
                 if (b.optional != null) payload.optional = b.optional;
+                if (b.engagementMode) payload.engagement_mode = b.engagementMode;
+                if (b.requiresFocusMode != null) payload.requires_focus_mode = b.requiresFocusMode;
+                if (b.generatesExperienceRecord != null) payload.generates_experience_record = b.generatesExperienceRecord;
+                if (b.socialDemandHint) payload.social_demand_hint = b.socialDemandHint;
+                if (b.locationMode) payload.location_mode = b.locationMode;
+                if (b.presenceMode) payload.presence_mode = b.presenceMode;
                 if (b.recurrenceId) payload.recurrence_id = b.recurrenceId;
                 if (b.recurrencePattern) payload.recurrence_pattern = b.recurrencePattern;
                 if (b.notifications) payload.notifications = b.notifications;
@@ -318,6 +390,10 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
     },
 
     updateBlock: async (id, patch) => {
+        const previousBlock = get().blocks.find((b) => b.id === id);
+        if (!previousBlock) return;
+        const nextBlock: Block = { ...previousBlock, ...patch };
+
         // Optimistic update
         set((state) => ({
             blocks: state.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b))
@@ -343,10 +419,44 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         if (patch.cognitivelyHeavy !== undefined) updateData.cognitively_heavy = patch.cognitivelyHeavy ?? null;
         if (patch.splittable !== undefined) updateData.splittable = patch.splittable ?? null;
         if (patch.optional !== undefined) updateData.optional = patch.optional ?? null;
+        if (patch.engagementMode !== undefined) updateData.engagement_mode = patch.engagementMode ?? null;
+        if (patch.requiresFocusMode !== undefined) updateData.requires_focus_mode = patch.requiresFocusMode ?? null;
+        if (patch.generatesExperienceRecord !== undefined) updateData.generates_experience_record = patch.generatesExperienceRecord ?? null;
+        if (patch.socialDemandHint !== undefined) updateData.social_demand_hint = patch.socialDemandHint ?? null;
+        if (patch.locationMode !== undefined) updateData.location_mode = patch.locationMode ?? null;
+        if (patch.presenceMode !== undefined) updateData.presence_mode = patch.presenceMode ?? null;
         if (patch.notifications !== undefined) updateData.notifications = patch.notifications ?? null;
 
         const { error } = await supabase.from('blocks').update(updateData).eq('id', id);
-        if (error) console.error('Error updating block:', error);
+        if (error) {
+            console.error('Error updating block:', error);
+            return;
+        }
+
+        const scheduleChanged = (
+            patch.startAt instanceof Date
+            || patch.endAt instanceof Date
+        ) && (
+            previousBlock.startAt.getTime() !== nextBlock.startAt.getTime()
+            || previousBlock.endAt.getTime() !== nextBlock.endAt.getTime()
+        );
+
+        if (scheduleChanged && canSyncActivityExperiences()) {
+            void recordBlockRescheduleActivity(previousBlock, nextBlock).catch((activityError) => {
+                console.error("Failed to record rescheduled activity experience", activityError);
+            });
+        }
+
+        const shouldInferActivity = (
+            (patch.status === "completed" || patch.status === "canceled")
+            || nextBlock.endAt.getTime() <= Date.now()
+        );
+
+        if (shouldInferActivity && canSyncActivityExperiences()) {
+            void inferBlockActivityExperience(id).catch((activityError) => {
+                console.error("Failed to infer block activity experience", activityError);
+            });
+        }
     },
 
     deleteBlock: async (id) => {
@@ -417,6 +527,12 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 cognitively_heavy: copy.cognitivelyHeavy ?? null,
                 splittable: copy.splittable ?? null,
                 optional: copy.optional ?? null,
+                engagement_mode: copy.engagementMode ?? null,
+                requires_focus_mode: copy.requiresFocusMode ?? null,
+                generates_experience_record: copy.generatesExperienceRecord ?? null,
+                social_demand_hint: copy.socialDemandHint ?? null,
+                location_mode: copy.locationMode ?? null,
+                presence_mode: copy.presenceMode ?? null,
                 notifications: copy.notifications
             });
             if (error) console.error('Error duplicating block:', error);
@@ -543,6 +659,12 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 cognitively_heavy: b.cognitivelyHeavy ?? null,
                 splittable: b.splittable ?? null,
                 optional: b.optional ?? null,
+                engagement_mode: b.engagementMode ?? null,
+                requires_focus_mode: b.requiresFocusMode ?? null,
+                generates_experience_record: b.generatesExperienceRecord ?? null,
+                social_demand_hint: b.socialDemandHint ?? null,
+                location_mode: b.locationMode ?? null,
+                presence_mode: b.presenceMode ?? null,
                 recurrence_id: b.recurrenceId,
                 recurrence_pattern: b.recurrencePattern,
                 notifications: b.notifications

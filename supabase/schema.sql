@@ -38,6 +38,12 @@ create table public.blocks (
   cognitively_heavy boolean default false,
   splittable boolean default true,
   optional boolean default false,
+  engagement_mode text,
+  requires_focus_mode boolean default false,
+  generates_experience_record boolean default true,
+  social_demand_hint text,
+  location_mode text,
+  presence_mode text,
   recurrence_id text,
   recurrence_pattern jsonb,
   created_at timestamp with time zone default now(),
@@ -196,7 +202,66 @@ alter table public.daily_metrics
   add column if not exists active_duration_ms bigint default 0,
   add column if not exists pause_duration_ms bigint default 0,
   add column if not exists inactivity_duration_ms bigint default 0,
-  add column if not exists behavior_score numeric;
+  add column if not exists behavior_score numeric,
+  add column if not exists attendance_rate numeric,
+  add column if not exists skip_rate numeric,
+  add column if not exists postpone_rate numeric,
+  add column if not exists non_focus_completion_rate numeric,
+  add column if not exists passive_load_score numeric,
+  add column if not exists logistics_load_score numeric,
+  add column if not exists collaborative_load_score numeric,
+  add column if not exists recovery_effect_score numeric,
+  add column if not exists transition_cost_score numeric,
+  add column if not exists real_day_load_score numeric,
+  add column if not exists residual_energy_estimate numeric,
+  add column if not exists plan_reality_variance numeric;
+
+create table if not exists public.activity_experiences (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  experience_key text not null,
+  source_block_id uuid references public.blocks(id) on delete set null,
+  source_focus_session_id text references public.focus_sessions(id) on delete cascade,
+  title_snapshot text,
+  block_type_snapshot public.block_type,
+  tag_snapshot text,
+  engagement_mode text not null,
+  outcome text not null default 'unknown',
+  source text not null,
+  scheduled_start timestamp with time zone,
+  scheduled_end timestamp with time zone,
+  actual_start timestamp with time zone,
+  actual_end timestamp with time zone,
+  actual_duration_min integer,
+  energy_impact text not null default 'unknown',
+  cognitive_load text not null default 'unknown',
+  perceived_value text not null default 'unknown',
+  social_demand text not null default 'unknown',
+  outcome_reason text not null default 'unknown',
+  location_mode text,
+  presence_mode text,
+  was_planned boolean not null default true,
+  was_completed_as_planned boolean not null default false,
+  was_user_confirmed boolean not null default false,
+  was_system_inferred boolean not null default false,
+  confidence numeric,
+  notes text,
+  metadata_json jsonb not null default '{}'::jsonb,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(user_id, experience_key)
+);
+
+alter table public.activity_experiences enable row level security;
+create policy "Users can view their own activity experiences" on public.activity_experiences for select using (auth.uid() = user_id);
+create policy "Users can create their own activity experiences" on public.activity_experiences for insert with check (auth.uid() = user_id);
+create policy "Users can update their own activity experiences" on public.activity_experiences for update using (auth.uid() = user_id);
+create policy "Users can delete their own activity experiences" on public.activity_experiences for delete using (auth.uid() = user_id);
+
+create index if not exists idx_activity_experiences_user_scheduled on public.activity_experiences (user_id, scheduled_start desc);
+create index if not exists idx_activity_experiences_user_block on public.activity_experiences (user_id, source_block_id);
+create index if not exists idx_activity_experiences_user_focus on public.activity_experiences (user_id, source_focus_session_id);
+create index if not exists idx_activity_experiences_user_engagement_outcome on public.activity_experiences (user_id, engagement_mode, outcome, updated_at desc);
 
 create table if not exists public.focus_session_events (
   id text primary key,
@@ -317,7 +382,11 @@ create table if not exists public.user_behavior_profile (
   recent_improvements jsonb default '[]'::jsonb,
   active_patterns jsonb default '[]'::jsonb,
   confidence_overview jsonb default '{}'::jsonb,
+  activity_signals jsonb default '{}'::jsonb,
+  activity_patterns jsonb default '[]'::jsonb,
+  activity_analytics jsonb default '{}'::jsonb,
   last_session_analytics_at timestamp with time zone,
+  last_activity_analytics_at timestamp with time zone,
   last_daily_consolidated_at timestamp with time zone,
   last_weekly_consolidated_at timestamp with time zone,
   last_updated_at timestamp with time zone default now(),

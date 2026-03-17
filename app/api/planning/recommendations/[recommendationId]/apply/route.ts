@@ -16,7 +16,8 @@ export async function POST(_: Request, context: RouteContext) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { recommendationId } = await context.params;
+    const { recommendationId: rawRecommendationId } = await context.params;
+    const recommendationId = decodeURIComponent(rawRecommendationId);
 
     try {
         const result = await applyPlanningRecommendation(supabase, user.id, recommendationId);

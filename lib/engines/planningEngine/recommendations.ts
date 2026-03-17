@@ -12,8 +12,10 @@ import {
     RecommendationApplyability,
 } from "@/lib/types/planning";
 import { BehaviorProfile } from "@/lib/types/behavior";
+import { ActivityExperience } from "@/lib/types/activity";
 import { buildPlanningBlockSnapshot } from "./blockMetadata";
 import { computeDailyLoad } from "./dailyLoad";
+import { estimatePostActivityApplicability } from "@/lib/engines/activityExperience";
 
 function average(values: number[]) {
     if (values.length === 0) return 0;
@@ -59,6 +61,12 @@ function getDayBlocks(blocks: Block[], date: string) {
     return blocks
         .filter((block) => block.startAt.toISOString().slice(0, 10) === date)
         .sort((left, right) => left.startAt.getTime() - right.startAt.getTime());
+}
+
+function getDayExperiences(experiences: ActivityExperience[], date: string) {
+    return experiences.filter((experience) => (
+        (experience.actualStart ?? experience.scheduledStart ?? experience.createdAt).slice(0, 10) === date
+    ));
 }
 
 function getWindowHours(window: NonNullable<BehaviorProfile["bestFocusWindow"]>["data"]["window"]) {
@@ -291,6 +299,7 @@ function applyFeedbackSummary(
 function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Block[]) {
     const recommendations: PlanningRecommendation[] = [];
     const profile = input.profile;
+    const dayExperiences = getDayExperiences(input.activityExperiences, input.targetDate);
     const targetBlock = input.targetBlockId
         ? dayBlocks.find((block) => block.id === input.targetBlockId)
         : null;
@@ -298,6 +307,12 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
 
     for (const block of blocksToEvaluate) {
         const snapshot = buildPlanningBlockSnapshot(block);
+        const activityApplicability = estimatePostActivityApplicability({
+            targetDate: input.targetDate,
+            blockStart: block.startAt,
+            cognitivelyHeavy: snapshot.cognitivelyHeavy,
+            experiences: dayExperiences,
+        });
         const bestWindow = profile.bestFocusWindow;
         const frictionSource = profile.topFrictionSources.find((pattern) => (
             pattern.data.sourceType === "block_type" && pattern.data.value === block.type
@@ -314,6 +329,10 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
             const openSlot = findOpenSlot(dayBlocks, input.targetDate, startHour, endHour, snapshot.durationMinutes, block.id);
 
             if (openSlot) {
+                const confidence = Math.min(0.92, bestWindow.confidence) * activityApplicability.modifier;
+                if (confidence < 0.62) {
+                    continue;
+                }
                 recommendations.push(buildRecommendation({
                     id: getStableRecommendationId(input.userId, "move_block", "block", block.id, bestWindow.data.window),
                     type: "move_block",
@@ -321,7 +340,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     targetBlockId: block.id,
                     targetDate: input.targetDate,
                     priority: "high",
-                    confidence: Math.min(0.92, bestWindow.confidence),
+                    confidence,
                     reasonCode: "BEST_WINDOW_MISMATCH",
                     reasonPayload: {
                         currentWindowLabel: getPlanningWindowLabel(
@@ -335,7 +354,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                         hypothesisStrength: "stable",
                         lastUpdated: bestWindow.updatedAt,
                         appliesTo: [block.id],
-                        signals: ["best_focus_window", "flexible_block", "cognitively_heavy"],
+                        signals: ["best_focus_window", "flexible_block", "cognitively_heavy", ...activityApplicability.signals],
                     }),
                     applyability: {
                         mode: "auto",
@@ -356,6 +375,10 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
 
             if (snapshot.durationMinutes > recommendedMax + 20) {
                 const splitTargetMinutes = Math.max(25, Math.min(recommendedMax, Math.round(snapshot.durationMinutes / 2)));
+                const confidence = Math.min(0.9, profile.optimalSessionLength.confidence) * activityApplicability.modifier;
+                if (confidence < 0.58) {
+                    continue;
+                }
                 recommendations.push(buildRecommendation({
                     id: getStableRecommendationId(input.userId, "shorten_block", "block", block.id),
                     type: snapshot.splittable ? "split_block" : "shorten_block",
@@ -363,7 +386,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     targetBlockId: block.id,
                     targetDate: input.targetDate,
                     priority: snapshot.splittable ? "high" : "medium",
-                    confidence: Math.min(0.9, profile.optimalSessionLength.confidence),
+                    confidence,
                     reasonCode: "SESSION_TOO_LONG",
                     reasonPayload: {
                         recommendedRange: `${optimalRange.minMinutes}-${optimalRange.maxMinutes} min`,
@@ -375,7 +398,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                         hypothesisStrength: "stable",
                         lastUpdated: profile.optimalSessionLength.updatedAt,
                         appliesTo: [block.id],
-                        signals: ["optimal_session_length", "planned_duration"],
+                        signals: ["optimal_session_length", "planned_duration", ...activityApplicability.signals],
                     }),
                     applyability: {
                         mode: "auto",
@@ -405,6 +428,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
 
         if (frictionSource && frictionSource.confidence >= 0.72) {
             const targetMinutes = Math.min(35, Math.max(20, Math.round(snapshot.durationMinutes * 0.45)));
+            const confidence = Math.min(0.88, frictionSource.confidence) * Math.max(0.8, activityApplicability.modifier);
             recommendations.push(buildRecommendation({
                 id: getStableRecommendationId(input.userId, "start_small", "block", block.id),
                 type: "start_small",
@@ -412,7 +436,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                 targetBlockId: block.id,
                 targetDate: input.targetDate,
                 priority: "medium",
-                confidence: Math.min(0.88, frictionSource.confidence),
+                confidence,
                 reasonCode: "HIGH_FRICTION_CATEGORY",
                 reasonPayload: {
                     contextLabel: frictionSource.data.label,
@@ -423,7 +447,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     hypothesisStrength: "stable",
                     lastUpdated: frictionSource.updatedAt,
                     appliesTo: [block.id],
-                    signals: ["friction_source", "category_match"],
+                    signals: ["friction_source", "category_match", ...activityApplicability.signals],
                 }),
                 applyability: {
                     mode: "auto",
@@ -456,7 +480,8 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
 
 function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block[]) {
     const recommendations: PlanningRecommendation[] = [];
-    const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics);
+    const dayExperiences = getDayExperiences(input.activityExperiences, input.targetDate);
+    const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics, input.activityExperiences);
     const daySnapshots = dayBlocks.map(buildPlanningBlockSnapshot);
     const intenseSnapshots = daySnapshots.filter((snapshot) => snapshot.cognitivelyHeavy || snapshot.intensity === "high");
 
@@ -548,6 +573,57 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 },
             },
         }));
+    }
+
+    if ((dailyLoad.residualEnergyEstimate <= 40 || dailyLoad.collaborativeLoad >= 90 || dailyLoad.passiveAttendanceLoad >= 80) && dayBlocks.length > 0) {
+        const flexibleHeavy = daySnapshots.find((snapshot) => snapshot.cognitivelyHeavy && snapshot.flexibility !== "fixed");
+        if (flexibleHeavy) {
+            recommendations.push(buildRecommendation({
+                id: getStableRecommendationId(input.userId, "start_small", "day", input.targetDate, "post_activity_drain"),
+                type: "start_small",
+                scope: "day",
+                targetBlockId: flexibleHeavy.block.id,
+                targetDate: input.targetDate,
+                priority: "high",
+                confidence: 0.76,
+                reasonCode: "HIGH_FRICTION_CATEGORY",
+                reasonPayload: {
+                    contextLabel: dailyLoad.collaborativeLoad >= dailyLoad.passiveAttendanceLoad
+                        ? "recent collaboration load"
+                        : "recent passive load",
+                },
+                evidence: buildEvidence({
+                    confidence: 0.76,
+                    sampleSize: Math.max(3, dayExperiences.length),
+                    hypothesisStrength: "recent",
+                    lastUpdated: input.profile.activitySignals.lastActivityAt,
+                    appliesTo: [input.targetDate, flexibleHeavy.block.id],
+                    signals: ["real_day_load", "residual_energy_estimate", "post_activity_applicability"],
+                }),
+                applyability: {
+                    mode: flexibleHeavy.splittable ? "auto" : "manual",
+                    helperText: flexibleHeavy.splittable
+                        ? "Agendo can lower the entry cost automatically."
+                        : "This is better adjusted manually.",
+                },
+                suggestedAction: flexibleHeavy.splittable
+                    ? {
+                        kind: "split",
+                        label: "Reduce the first pass",
+                        payload: {
+                            firstDurationMinutes: Math.min(30, Math.max(20, Math.round(flexibleHeavy.durationMinutes * 0.4))),
+                            secondDurationMinutes: Math.max(15, flexibleHeavy.durationMinutes - Math.min(30, Math.max(20, Math.round(flexibleHeavy.durationMinutes * 0.4)))),
+                        },
+                    }
+                    : {
+                        kind: "review_plan",
+                        label: "Review today manually",
+                        payload: {
+                            reason: "post_activity_drain",
+                        },
+                    },
+            }));
+        }
     }
 
     const bestWindow = input.profile.bestFocusWindow;
@@ -737,7 +813,7 @@ function buildGuidedPlan(
         };
     });
 
-    const loadSummary = dailyLoad.level === "overload"
+    const loadSummary = dailyLoad.realDayLoad >= 140 || dailyLoad.level === "overload"
         ? "Simplify before you execute."
         : dailyLoad.level === "high"
             ? "Prioritize hard and leave real air."
@@ -753,7 +829,7 @@ function buildGuidedPlan(
         summary: bestWindow
             ? `Your strongest window is still the ${getPlanningWindowLabel(bestWindow)}. Shape the day around high-cost work there.`
             : "Your strongest window is still calibrating, so the priority is keeping the day realistic.",
-        strategy: energyStrategy,
+        strategy: `${energyStrategy} Real day load is reading ${Math.round(dailyLoad.realDayLoad)} and residual energy looks ${Math.round(dailyLoad.residualEnergyEstimate)}%.`,
         priorityBlockIds: steps.map((step) => step.blockId).filter((blockId): blockId is string => Boolean(blockId)),
         steps,
         adjustmentRecommendationIds: recommendations.slice(0, 3).map((recommendation) => recommendation.id),
@@ -762,7 +838,7 @@ function buildGuidedPlan(
 
 export function buildPlanningGuide(input: PlanningEngineInput): PlanningGuideResult {
     const dayBlocks = getDayBlocks(input.blocks, input.targetDate);
-    const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics);
+    const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics, input.activityExperiences);
     const blockRecommendations = generateBlockRecommendations(input, dayBlocks);
     const dayRecommendations = generateDayRecommendations(input, dayBlocks);
 
@@ -814,5 +890,15 @@ export function buildPlanningGuide(input: PlanningEngineInput): PlanningGuideRes
         recommendations,
         bestFocusWindow: input.profile.bestFocusWindow?.data.window ?? null,
         guidedPlan: buildGuidedPlan(input, dayBlocks, recommendations, dailyLoad),
+        activityLoad: {
+            passiveAttendanceLoad: dailyLoad.passiveAttendanceLoad,
+            logisticsLoad: dailyLoad.logisticsLoad,
+            collaborativeLoad: dailyLoad.collaborativeLoad,
+            recoveryEffect: dailyLoad.recoveryEffect,
+            transitionCost: dailyLoad.transitionCost,
+            realDayLoad: dailyLoad.realDayLoad,
+            residualEnergyEstimate: dailyLoad.residualEnergyEstimate,
+            planRealityVariance: dailyLoad.planRealityVariance,
+        },
     };
 }

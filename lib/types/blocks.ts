@@ -1,3 +1,10 @@
+import type {
+    ActivityLocationMode,
+    ActivityPresenceMode,
+    EngagementMode,
+    SocialDemand,
+} from "./activity";
+
 export type BlockType =
     | "deep_work"
     | "study"
@@ -45,6 +52,12 @@ export interface Block {
     cognitivelyHeavy?: boolean;
     splittable?: boolean;
     optional?: boolean;
+    engagementMode?: EngagementMode;
+    requiresFocusMode?: boolean;
+    generatesExperienceRecord?: boolean;
+    socialDemandHint?: SocialDemand;
+    locationMode?: ActivityLocationMode;
+    presenceMode?: ActivityPresenceMode;
 
     // Recurrence
     recurrenceId?: string;

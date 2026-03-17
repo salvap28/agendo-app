@@ -1,7 +1,9 @@
 import { FocusSessionAnalytics } from "@/lib/types/behavior";
 import { Block } from "@/lib/types/blocks";
 import { DailyLoadSnapshot } from "@/lib/types/planning";
+import { ActivityExperience } from "@/lib/types/activity";
 import { buildPlanningBlockSnapshot } from "./blockMetadata";
+import { computeDailyActivityLoad } from "@/lib/engines/activityExperience";
 
 interface HistoricalDayCapacity {
     activeDays: number;
@@ -92,6 +94,7 @@ export function computeDailyLoad(
     blocks: Block[],
     date: string,
     recentAnalytics: FocusSessionAnalytics[],
+    activityExperiences: ActivityExperience[] = [],
 ): DailyLoadSnapshot {
     const dayBlocks = blocks
         .filter((block) => block.startAt.toISOString().slice(0, 10) === date)
@@ -116,6 +119,7 @@ export function computeDailyLoad(
     const breakCoverageRatio = intenseBlocks.length === 0
         ? breakBlocks.length > 0 ? 1 : 0
         : Math.min(1, breakBlocks.length / intenseBlocks.length);
+    const activityLoad = computeDailyActivityLoad(activityExperiences, blocks, date);
 
     const historicalCapacity = computeHistoricalDayCapacity(recentAnalytics, date);
     const comfortMinutes = Math.max(historicalCapacity.typicalActiveMinutes, historicalCapacity.comfortUpperMinutes);
@@ -144,6 +148,13 @@ export function computeDailyLoad(
             (intenseSequences * 10) +
             (deadlinePressureCount * 8) +
             ((1 - breakCoverageRatio) * 14) +
+            (activityLoad.passiveAttendanceLoad / 18) +
+            (activityLoad.collaborativeLoad / 16) +
+            (activityLoad.logisticsLoad / 24) +
+            (activityLoad.transitionCost * 0.8) +
+            Math.max(0, (50 - activityLoad.residualEnergyEstimate) * 0.35) +
+            Math.max(0, activityLoad.planRealityVariance / 12) -
+            Math.min(12, activityLoad.recoveryEffect / 14) +
             historicalMinutesPenalty +
             historicalDemandPenalty
         )
@@ -168,5 +179,13 @@ export function computeDailyLoad(
         intenseSequences,
         deadlinePressureCount,
         breakCoverageRatio: Math.round(breakCoverageRatio * 100) / 100,
+        passiveAttendanceLoad: activityLoad.passiveAttendanceLoad,
+        logisticsLoad: activityLoad.logisticsLoad,
+        collaborativeLoad: activityLoad.collaborativeLoad,
+        recoveryEffect: activityLoad.recoveryEffect,
+        transitionCost: activityLoad.transitionCost,
+        realDayLoad: activityLoad.realDayLoad,
+        residualEnergyEstimate: activityLoad.residualEnergyEstimate,
+        planRealityVariance: activityLoad.planRealityVariance,
     };
 }

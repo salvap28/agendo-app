@@ -11,10 +11,16 @@ export async function GET(request: NextRequest) {
     }
 
     const date = request.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+    try {
+        const guide = await getPlanningGuideData(supabase, user.id, {
+            targetDate: date,
+        });
 
-    const guide = await getPlanningGuideData(supabase, user.id, {
-        targetDate: date,
-    });
-
-    return NextResponse.json(guide);
+        return NextResponse.json(guide);
+    } catch (error) {
+        return NextResponse.json(
+            { error: error instanceof Error ? error.message : "Unable to load day planning" },
+            { status: 400 },
+        );
+    }
 }

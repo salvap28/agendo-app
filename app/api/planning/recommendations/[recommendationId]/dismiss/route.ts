@@ -16,7 +16,15 @@ export async function POST(_: Request, context: RouteContext) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { recommendationId } = await context.params;
-    const recommendation = await updateRecommendationStatus(supabase, user.id, recommendationId, "dismissed");
-    return NextResponse.json({ recommendation });
+    const { recommendationId: rawRecommendationId } = await context.params;
+    const recommendationId = decodeURIComponent(rawRecommendationId);
+    try {
+        const recommendation = await updateRecommendationStatus(supabase, user.id, recommendationId, "dismissed");
+        return NextResponse.json({ recommendation });
+    } catch (error) {
+        return NextResponse.json(
+            { error: error instanceof Error ? error.message : "Unable to dismiss recommendation" },
+            { status: 400 },
+        );
+    }
 }

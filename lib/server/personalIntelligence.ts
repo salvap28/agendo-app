@@ -9,6 +9,7 @@ import {
     calculateHistoricalConsistencyScore,
     deriveSessionAnalytics,
 } from "@/lib/engines/personalIntelligence";
+import type { Block } from "@/lib/types/blocks";
 import {
     BehaviorPatternRecord,
     BehaviorProfile,
@@ -17,6 +18,13 @@ import {
 } from "@/lib/types/behavior";
 import { FocusInterventionRecord, FocusSession, FocusSessionEvent } from "@/lib/types/focus";
 import { DailyMetric } from "@/lib/types/metrics";
+import type { ActivityPatternSummary } from "@/lib/types/activity";
+import {
+    computeActivityExperienceAnalyticsForUser,
+    fetchRecentActivityExperiences,
+    syncFocusSessionToActivityExperience,
+} from "@/lib/server/activityExperience";
+import { computeDailyActivityLoad } from "@/lib/engines/activityExperience";
 
 type PersonalIntelligenceScope = "session" | "daily" | "weekly";
 type ConsolidationBatchScope = Exclude<PersonalIntelligenceScope, "session">;
@@ -184,6 +192,18 @@ function mapDailyMetricRow(row: DbRow): DailyMetric {
         activeDurationMs: row.active_duration_ms == null ? undefined : asNumber(row.active_duration_ms),
         pauseDurationMs: row.pause_duration_ms == null ? undefined : asNumber(row.pause_duration_ms),
         inactivityDurationMs: row.inactivity_duration_ms == null ? undefined : asNumber(row.inactivity_duration_ms),
+        attendanceRate: row.attendance_rate == null ? undefined : asNumber(row.attendance_rate),
+        skipRate: row.skip_rate == null ? undefined : asNumber(row.skip_rate),
+        postponeRate: row.postpone_rate == null ? undefined : asNumber(row.postpone_rate),
+        nonFocusCompletionRate: row.non_focus_completion_rate == null ? undefined : asNumber(row.non_focus_completion_rate),
+        passiveLoadScore: row.passive_load_score == null ? undefined : asNumber(row.passive_load_score),
+        logisticsLoadScore: row.logistics_load_score == null ? undefined : asNumber(row.logistics_load_score),
+        collaborativeLoadScore: row.collaborative_load_score == null ? undefined : asNumber(row.collaborative_load_score),
+        recoveryEffectScore: row.recovery_effect_score == null ? undefined : asNumber(row.recovery_effect_score),
+        transitionCostScore: row.transition_cost_score == null ? undefined : asNumber(row.transition_cost_score),
+        realDayLoadScore: row.real_day_load_score == null ? undefined : asNumber(row.real_day_load_score),
+        residualEnergyEstimate: row.residual_energy_estimate == null ? undefined : asNumber(row.residual_energy_estimate),
+        planRealityVariance: row.plan_reality_variance == null ? undefined : asNumber(row.plan_reality_variance),
         createdAt: asString(row.created_at),
         updatedAt: asString(row.updated_at),
     };
@@ -207,7 +227,21 @@ function hydrateProfileRow(row: DbRow): BehaviorProfile {
             recentImprovement: null,
             overall: 0,
         }) as BehaviorProfile["confidenceOverview"],
+        activitySignals: (row.activity_signals ?? {
+            attendanceReliability: null,
+            postMeetingFatigue: null,
+            postClassResidualLoad: null,
+            preferredLightExecutionWindows: [],
+            postponeTendencies: [],
+            energyImpactByEngagementMode: [],
+            dominantReasons: [],
+            patterns: [],
+            lastActivityAt: null,
+        }) as BehaviorProfile["activitySignals"],
+        activityAnalytics: (row.activity_analytics ?? null) as BehaviorProfile["activityAnalytics"],
+        activityPatterns: (row.activity_patterns ?? []) as BehaviorProfile["activityPatterns"],
         lastSessionAnalyticsAt: asNullableString(row.last_session_analytics_at),
+        lastActivityAnalyticsAt: asNullableString(row.last_activity_analytics_at),
         lastDailyConsolidatedAt: asNullableString(row.last_daily_consolidated_at),
         lastWeeklyConsolidatedAt: asNullableString(row.last_weekly_consolidated_at),
         lastUpdatedAt: asNullableString(row.last_updated_at) ?? new Date().toISOString(),
@@ -226,7 +260,11 @@ function serializeProfile(profile: BehaviorProfile) {
         recent_improvements: profile.recentImprovements,
         active_patterns: profile.activePatterns,
         confidence_overview: profile.confidenceOverview,
+        activity_signals: profile.activitySignals,
+        activity_patterns: profile.activityPatterns,
+        activity_analytics: profile.activityAnalytics,
         last_session_analytics_at: profile.lastSessionAnalyticsAt,
+        last_activity_analytics_at: profile.lastActivityAnalyticsAt,
         last_daily_consolidated_at: profile.lastDailyConsolidatedAt,
         last_weekly_consolidated_at: profile.lastWeeklyConsolidatedAt,
         last_updated_at: profile.lastUpdatedAt,
@@ -385,7 +423,7 @@ async function recomputeDailyMetricsFromAnalytics(
     const consistencyWindowStart = new Date(targetDateObj);
     consistencyWindowStart.setDate(consistencyWindowStart.getDate() - 6);
 
-    const [{ data: analyticsRows }, { data: consistencyWindowRows }] = await Promise.all([
+    const [{ data: analyticsRows }, { data: consistencyWindowRows }, activityExperiences] = await Promise.all([
         supabase
             .from("focus_session_analytics")
             .select("*")
@@ -398,6 +436,10 @@ async function recomputeDailyMetricsFromAnalytics(
             .eq("user_id", userId)
             .gte("ended_at", startOfDayIso(consistencyWindowStart))
             .lte("ended_at", dayEnd),
+        fetchRecentActivityExperiences(supabase, userId, {
+            startDate: targetDateStr,
+            endDate: targetDateStr,
+        }),
     ]);
 
     const dayAnalytics = (analyticsRows ?? []).map(mapAnalyticsRow);
@@ -413,6 +455,43 @@ async function recomputeDailyMetricsFromAnalytics(
     const pauseDurationMs = dayAnalytics.reduce((total, item) => total + item.pauseDurationMs, 0);
     const inactivityDurationMs = dayAnalytics.reduce((total, item) => total + item.inactivityDurationMs, 0);
     const momentumDay = calculateDailyCompositeSignal(progressScore, consistencyScore, frictionScore, behaviorScore);
+    const { data: blockRows } = await supabase
+        .from("blocks")
+        .select("*")
+        .eq("user_id", userId)
+        .gte("start_at", dayStart)
+        .lte("start_at", dayEnd);
+    const blocks = (blockRows ?? []).map((row) => ({
+        id: asString((row as DbRow).id),
+        title: asString((row as DbRow).title),
+        type: asString((row as DbRow).type) as Block["type"],
+        status: asString((row as DbRow).status) as Block["status"],
+        startAt: new Date(asString((row as DbRow).start_at)),
+        endAt: new Date(asString((row as DbRow).end_at)),
+        notes: asNullableString((row as DbRow).notes) ?? undefined,
+        tag: asNullableString((row as DbRow).tag) ?? undefined,
+        color: asNullableString((row as DbRow).color) ?? undefined,
+        priority: (row as DbRow).priority == null ? undefined : asNumber((row as DbRow).priority) as Block["priority"],
+        estimatedDurationMinutes: (row as DbRow).estimated_duration_minutes == null ? undefined : asNumber((row as DbRow).estimated_duration_minutes),
+        difficulty: (row as DbRow).difficulty == null ? undefined : asNumber((row as DbRow).difficulty),
+        flexibility: (asNullableString((row as DbRow).flexibility) ?? undefined) as Block["flexibility"],
+        intensity: (asNullableString((row as DbRow).intensity) ?? undefined) as Block["intensity"],
+        deadline: asNullableString((row as DbRow).deadline) ? new Date(asString((row as DbRow).deadline)) : undefined,
+        cognitivelyHeavy: (row as DbRow).cognitively_heavy == null ? undefined : asBoolean((row as DbRow).cognitively_heavy),
+        splittable: (row as DbRow).splittable == null ? undefined : asBoolean((row as DbRow).splittable),
+        optional: (row as DbRow).optional == null ? undefined : asBoolean((row as DbRow).optional),
+        engagementMode: (asNullableString((row as DbRow).engagement_mode) ?? undefined) as Block["engagementMode"],
+        requiresFocusMode: (row as DbRow).requires_focus_mode == null ? undefined : asBoolean((row as DbRow).requires_focus_mode),
+        generatesExperienceRecord: (row as DbRow).generates_experience_record == null ? undefined : asBoolean((row as DbRow).generates_experience_record),
+        socialDemandHint: (asNullableString((row as DbRow).social_demand_hint) ?? undefined) as Block["socialDemandHint"],
+        locationMode: (asNullableString((row as DbRow).location_mode) ?? undefined) as Block["locationMode"],
+        presenceMode: (asNullableString((row as DbRow).presence_mode) ?? undefined) as Block["presenceMode"],
+    })) satisfies Block[];
+    const activityDailyLoad = computeDailyActivityLoad(activityExperiences, blocks, targetDateStr);
+    const activityAnalytics = await computeActivityExperienceAnalyticsForUser(supabase, userId, {
+        sinceDays: 30,
+        limit: 200,
+    });
 
     const since = new Date(targetDateObj);
     since.setDate(since.getDate() - 30);
@@ -450,6 +529,18 @@ async function recomputeDailyMetricsFromAnalytics(
         active_duration_ms: activeDurationMs,
         pause_duration_ms: pauseDurationMs,
         inactivity_duration_ms: inactivityDurationMs,
+        attendance_rate: activityAnalytics.attendanceRate,
+        skip_rate: activityAnalytics.skipRate,
+        postpone_rate: activityAnalytics.postponeRate,
+        non_focus_completion_rate: activityAnalytics.nonFocusCompletionRate,
+        passive_load_score: activityDailyLoad.passiveAttendanceLoad,
+        logistics_load_score: activityDailyLoad.logisticsLoad,
+        collaborative_load_score: activityDailyLoad.collaborativeLoad,
+        recovery_effect_score: activityDailyLoad.recoveryEffect,
+        transition_cost_score: activityDailyLoad.transitionCost,
+        real_day_load_score: activityDailyLoad.realDayLoad,
+        residual_energy_estimate: activityDailyLoad.residualEnergyEstimate,
+        plan_reality_variance: activityDailyLoad.planRealityVariance,
         updated_at: new Date().toISOString(),
     };
 
@@ -506,6 +597,43 @@ async function syncPatternHistory(
     }
 }
 
+function mapActivityPatternToHistoryRecord(
+    pattern: ActivityPatternSummary,
+    now: Date,
+): BehaviorPatternRecord {
+    const recencyDays = Math.max(
+        0,
+        Math.round((now.getTime() - new Date(pattern.updatedAt).getTime()) / (24 * 60 * 60 * 1000)),
+    );
+
+    return {
+        patternKey: pattern.patternKey,
+        patternType: pattern.patternType,
+        windowKind: pattern.confidence >= 0.75 && pattern.sampleSize >= 5 ? "persistent" : "recent",
+        status: pattern.confidence >= 0.66 ? "active" : "warming",
+        confidence: pattern.confidence,
+        sampleSize: pattern.sampleSize,
+        data: {
+            ...pattern.data,
+            title: pattern.title,
+            description: pattern.description,
+            appliesTo: pattern.appliesTo,
+        },
+        evidence: {
+            sampleSize: pattern.sampleSize,
+            confidence: pattern.confidence,
+            recencyDays,
+            variability: Math.max(0.08, Math.round((1 - pattern.confidence) * 100) / 100),
+            consistency: pattern.confidence,
+            dominance: pattern.confidence,
+            recentWins: Math.min(pattern.sampleSize, 6),
+        },
+        firstDetectedAt: pattern.updatedAt,
+        lastConfirmedAt: pattern.updatedAt,
+        updatedAt: pattern.updatedAt,
+    };
+}
+
 async function consolidateBehaviorProfile(
     supabase: SupabaseClient,
     userId: string,
@@ -513,10 +641,14 @@ async function consolidateBehaviorProfile(
 ) {
     const currentProfile = await fetchProfileRow(supabase, userId);
     const analytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 60 });
+    const activityExperiences = await fetchRecentActivityExperiences(supabase, userId, {
+        sinceDays: 60,
+        limit: 240,
+    });
     const now = new Date();
     const nowIso = now.toISOString();
 
-    const profile = analytics.length === 0
+    const profile = analytics.length === 0 && activityExperiences.length === 0
         ? buildEmptyBehaviorProfile(userId, nowIso)
         : buildBehaviorProfile(userId, analytics, {
             now,
@@ -526,6 +658,7 @@ async function consolidateBehaviorProfile(
             lastWeeklyConsolidatedAt: scope === "weekly"
                 ? nowIso
                 : currentProfile?.lastWeeklyConsolidatedAt ?? null,
+            activityExperiences,
         });
 
     if (scope === "session") {
@@ -537,7 +670,15 @@ async function consolidateBehaviorProfile(
         .from("user_behavior_profile")
         .upsert(serializeProfile(profile), { onConflict: "user_id" });
 
-    await syncPatternHistory(supabase, userId, profile.activePatterns, nowIso);
+    await syncPatternHistory(
+        supabase,
+        userId,
+        [
+            ...profile.activePatterns,
+            ...profile.activityPatterns.map((pattern) => mapActivityPatternToHistoryRecord(pattern, now)),
+        ],
+        nowIso,
+    );
     return profile;
 }
 
@@ -592,6 +733,8 @@ export async function syncSessionPersonalIntelligence(
     await supabase
         .from("focus_session_analytics")
         .upsert(serializeAnalytics(analytics), { onConflict: "session_id" });
+
+    await syncFocusSessionToActivityExperience(supabase, userId, session, analytics);
 
     await recomputeDailyMetricsFromAnalytics(supabase, userId, analytics.endedAt);
     const profile = await consolidateBehaviorProfile(supabase, userId, "session");
@@ -759,9 +902,13 @@ export async function getInsightsDashboardData(
 ): Promise<InsightsDashboardData> {
     let profile = await fetchProfileRow(supabase, userId);
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 30 });
+    const recentActivityExperiences = await fetchRecentActivityExperiences(supabase, userId, {
+        sinceDays: 30,
+        limit: 160,
+    });
 
     if (!profile) {
-        profile = recentAnalytics.length > 0
+        profile = recentAnalytics.length > 0 || recentActivityExperiences.length > 0
             ? await consolidateBehaviorProfile(supabase, userId, "daily")
             : buildEmptyBehaviorProfile(userId);
     }
@@ -792,6 +939,7 @@ export async function getInsightsDashboardData(
         profile,
         cards: buildInsightCards(profile),
         timeline,
+        activityOverview: profile.activityAnalytics,
         weeklySessions: weeklyAnalytics.length,
         completionRate: weeklyAnalytics.length === 0
             ? 0

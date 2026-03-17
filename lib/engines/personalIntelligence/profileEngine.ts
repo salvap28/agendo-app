@@ -13,6 +13,11 @@ import {
     WarmupStage,
     OptimalSessionLengthPattern,
 } from "@/lib/types/behavior";
+import { ActivityExperience } from "@/lib/types/activity";
+import {
+    buildActivityBehaviorSignals,
+    computeActivityExperienceAnalytics,
+} from "@/lib/engines/activityExperience";
 import {
     calculateEvidenceConfidence,
     clampUnit,
@@ -522,7 +527,21 @@ export function buildEmptyBehaviorProfile(userId: string, nowIso = new Date().to
         recentImprovements: [],
         activePatterns: [],
         confidenceOverview: buildEmptyConfidenceOverview(),
+        activitySignals: {
+            attendanceReliability: null,
+            postMeetingFatigue: null,
+            postClassResidualLoad: null,
+            preferredLightExecutionWindows: [],
+            postponeTendencies: [],
+            energyImpactByEngagementMode: [],
+            dominantReasons: [],
+            patterns: [],
+            lastActivityAt: null,
+        },
+        activityAnalytics: null,
+        activityPatterns: [],
         lastSessionAnalyticsAt: null,
+        lastActivityAnalyticsAt: null,
         lastDailyConsolidatedAt: null,
         lastWeeklyConsolidatedAt: null,
         lastUpdatedAt: nowIso,
@@ -537,14 +556,24 @@ export function buildBehaviorProfile(
         now?: Date;
         lastDailyConsolidatedAt?: string | null;
         lastWeeklyConsolidatedAt?: string | null;
+        activityExperiences?: ActivityExperience[];
     }
 ): BehaviorProfile {
     const now = options?.now ?? new Date();
     const sortedAnalytics = sortByEndedAtDescending(analytics);
+    const sortedActivities = [...(options?.activityExperiences ?? [])]
+        .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
     const warmupStage = getWarmupStage(sortedAnalytics.length);
     if (sortedAnalytics.length === 0) {
+        const emptyProfile = buildEmptyBehaviorProfile(userId, now.toISOString());
+        if (sortedActivities.length > 0) {
+            emptyProfile.activitySignals = buildActivityBehaviorSignals(sortedActivities, sortedAnalytics, now);
+            emptyProfile.activityAnalytics = computeActivityExperienceAnalytics(sortedActivities);
+            emptyProfile.activityPatterns = emptyProfile.activitySignals.patterns;
+            emptyProfile.lastActivityAnalyticsAt = sortedActivities[0]?.updatedAt ?? null;
+        }
         return {
-            ...buildEmptyBehaviorProfile(userId, now.toISOString()),
+            ...emptyProfile,
             lastDailyConsolidatedAt: options?.lastDailyConsolidatedAt ?? null,
             lastWeeklyConsolidatedAt: options?.lastWeeklyConsolidatedAt ?? null,
         };
@@ -572,6 +601,11 @@ export function buildBehaviorProfile(
         ...(consistencyTrend ? [consistencyTrend] : []),
         ...recentImprovements,
     ];
+    const activitySignals = buildActivityBehaviorSignals(sortedActivities, sortedAnalytics, now);
+    const activityAnalytics = sortedActivities.length > 0
+        ? computeActivityExperienceAnalytics(sortedActivities)
+        : null;
+    const activityPatterns = activitySignals.patterns;
 
     const confidenceOverview: ConfidenceOverview = {
         bestFocusWindow: bestFocusWindow?.confidence ?? null,
@@ -598,7 +632,11 @@ export function buildBehaviorProfile(
         recentImprovements,
         activePatterns,
         confidenceOverview,
+        activitySignals,
+        activityAnalytics,
+        activityPatterns,
         lastSessionAnalyticsAt: sortedAnalytics[0]?.endedAt ?? null,
+        lastActivityAnalyticsAt: sortedActivities[0]?.updatedAt ?? null,
         lastDailyConsolidatedAt: options?.lastDailyConsolidatedAt ?? null,
         lastWeeklyConsolidatedAt: options?.lastWeeklyConsolidatedAt ?? null,
         lastUpdatedAt: now.toISOString(),

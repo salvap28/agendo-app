@@ -121,6 +121,51 @@ export function buildInsightCards(profile: BehaviorProfile): InsightCardData[] {
         });
     }
 
+    const activityPattern = profile.activityPatterns[0];
+    if (activityPattern && activityPattern.confidence >= 0.68) {
+        cards.push({
+            id: activityPattern.patternKey,
+            patternKey: activityPattern.patternKey,
+            type: activityPattern.patternType,
+            tone: activityPattern.patternType === "recovery_boost" || activityPattern.patternType === "preferred_light_execution_window"
+                ? "positive"
+                : activityPattern.patternType === "attendance_reliability"
+                    ? "neutral"
+                    : "caution",
+            title: activityPattern.title,
+            description: activityPattern.description,
+            confidence: activityPattern.confidence,
+            sampleSize: activityPattern.sampleSize,
+        });
+    }
+
+    if (profile.activitySignals.attendanceReliability !== null && profile.activitySignals.attendanceReliability < 0.62) {
+        cards.push({
+            id: "attendance_reliability",
+            patternKey: "activity_signal:attendance_reliability",
+            type: "activity_signal",
+            tone: "caution",
+            title: "Attendance is less stable than it looks",
+            description: "Classes, meetings or attendance-style blocks are not landing as consistently as they are being scheduled.",
+            confidence: 0.7,
+            sampleSize: Math.max(2, profile.activityAnalytics?.totalCount ?? 0),
+        });
+    }
+
+    if (profile.activitySignals.preferredLightExecutionWindows[0] && cards.length < 5) {
+        const preferredWindow = profile.activitySignals.preferredLightExecutionWindows[0];
+        cards.push({
+            id: "preferred_light_execution_window",
+            patternKey: `activity_signal:${preferredWindow.window}`,
+            type: "activity_signal",
+            tone: "neutral",
+            title: "A cleaner window for lighter work",
+            description: `${preferredWindow.window} is reading as a better slot for admin or lighter execution blocks.`,
+            confidence: preferredWindow.confidence,
+            sampleSize: preferredWindow.sampleSize,
+        });
+    }
+
     return cards;
 }
 
@@ -139,6 +184,10 @@ export function buildProfileSummary(profile: BehaviorProfile, recentAnalytics: F
 
     if (profile.topFrictionSources.length > 0) {
         return "A recurring friction context is already becoming clear.";
+    }
+
+    if (profile.activityPatterns.length > 0) {
+        return "Agendo is also learning from meetings, recovery and lighter activities beyond Focus Mode.";
     }
 
     return "Your profile is gathering enough evidence to guide you more clearly.";

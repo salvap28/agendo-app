@@ -4,6 +4,10 @@ function parseGuide(payload: PlanningGuideResult): PlanningGuideResult {
     return payload;
 }
 
+function encodeRecommendationId(recommendationId: string) {
+    return encodeURIComponent(recommendationId);
+}
+
 async function readJson<T>(response: Response): Promise<T> {
     if (!response.ok) {
         const payload = await response.json().catch(() => ({ error: "Request failed" }));
@@ -40,7 +44,7 @@ export async function fetchGuidedPlanning(date: string, preferences?: PlanningPr
 }
 
 export async function dismissPlanningRecommendation(recommendationId: string) {
-    const response = await fetch(`/api/planning/recommendations/${recommendationId}/dismiss`, {
+    const response = await fetch(`/api/planning/recommendations/${encodeRecommendationId(recommendationId)}/dismiss`, {
         method: "POST",
     });
 
@@ -48,7 +52,7 @@ export async function dismissPlanningRecommendation(recommendationId: string) {
 }
 
 export async function acceptPlanningRecommendation(recommendationId: string) {
-    const response = await fetch(`/api/planning/recommendations/${recommendationId}/accept`, {
+    const response = await fetch(`/api/planning/recommendations/${encodeRecommendationId(recommendationId)}/accept`, {
         method: "POST",
     });
 
@@ -56,7 +60,7 @@ export async function acceptPlanningRecommendation(recommendationId: string) {
 }
 
 export async function applyPlanningRecommendation(recommendationId: string) {
-    const response = await fetch(`/api/planning/recommendations/${recommendationId}/apply`, {
+    const response = await fetch(`/api/planning/recommendations/${encodeRecommendationId(recommendationId)}/apply`, {
         method: "POST",
     });
 

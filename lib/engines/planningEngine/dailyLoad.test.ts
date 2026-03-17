@@ -109,7 +109,7 @@ describe("computeDailyLoad", () => {
                 cognitivelyHeavy: false,
                 priority: 1,
             }),
-        ], "2026-03-18", analytics);
+        ], "2026-03-18", analytics, []);
 
         expect(load.level === "low" || load.level === "medium").toBe(true);
     });
@@ -127,7 +127,7 @@ describe("computeDailyLoad", () => {
             makeBlock("b2", "2026-03-18T10:15:00.000Z", "2026-03-18T12:15:00.000Z"),
             makeBlock("b3", "2026-03-18T13:00:00.000Z", "2026-03-18T15:00:00.000Z"),
             makeBlock("b4", "2026-03-18T15:15:00.000Z", "2026-03-18T17:15:00.000Z"),
-        ], "2026-03-18", analytics);
+        ], "2026-03-18", analytics, []);
 
         expect(load.level === "high" || load.level === "overload").toBe(true);
         expect(load.score).toBeGreaterThanOrEqual(58);

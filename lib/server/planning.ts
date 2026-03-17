@@ -4,6 +4,8 @@ import {
     buildEmptyBehaviorProfile,
 } from "@/lib/engines/personalIntelligence";
 import { buildPlanningGuide } from "@/lib/engines/planningEngine";
+import { fetchRecentActivityExperiences } from "@/lib/server/activityExperience";
+import { ActivityExperience } from "@/lib/types/activity";
 import { BehaviorProfile, FocusSessionAnalytics } from "@/lib/types/behavior";
 import { Block } from "@/lib/types/blocks";
 import {
@@ -48,6 +50,42 @@ function addDays(date: string, amount: number) {
     const value = startOfDay(date);
     value.setDate(value.getDate() + amount);
     return value;
+}
+
+type RecommendationLocator = {
+    scopedUserId: string | null;
+    scope: "block" | "day" | "guided_plan";
+    type: string;
+    targetKey: string;
+    variant: string;
+};
+
+export function parseRecommendationLocator(recommendationId: string): RecommendationLocator | null {
+    const parts = recommendationId.split(":").filter(Boolean);
+    if (parts.length < 4) return null;
+
+    const knownScopes = new Set(["block", "day", "guided_plan"]);
+    if (knownScopes.has(parts[0])) {
+        const [scope, type, targetKey, ...variantParts] = parts;
+        return {
+            scopedUserId: null,
+            scope: scope as RecommendationLocator["scope"],
+            type,
+            targetKey,
+            variant: variantParts.join(":") || "default",
+        };
+    }
+
+    if (parts.length < 5 || !knownScopes.has(parts[1])) return null;
+
+    const [scopedUserId, scope, type, targetKey, ...variantParts] = parts;
+    return {
+        scopedUserId,
+        scope: scope as RecommendationLocator["scope"],
+        type,
+        targetKey,
+        variant: variantParts.join(":") || "default",
+    };
 }
 
 function mapAnalyticsRow(row: DbRow): FocusSessionAnalytics {
@@ -109,7 +147,21 @@ function hydrateProfileRow(row: DbRow): BehaviorProfile {
             recentImprovement: null,
             overall: 0,
         }) as BehaviorProfile["confidenceOverview"],
+        activitySignals: (row.activity_signals ?? {
+            attendanceReliability: null,
+            postMeetingFatigue: null,
+            postClassResidualLoad: null,
+            preferredLightExecutionWindows: [],
+            postponeTendencies: [],
+            energyImpactByEngagementMode: [],
+            dominantReasons: [],
+            patterns: [],
+            lastActivityAt: null,
+        }) as BehaviorProfile["activitySignals"],
+        activityAnalytics: (row.activity_analytics ?? null) as BehaviorProfile["activityAnalytics"],
+        activityPatterns: (row.activity_patterns ?? []) as BehaviorProfile["activityPatterns"],
         lastSessionAnalyticsAt: asNullableString(row.last_session_analytics_at),
+        lastActivityAnalyticsAt: asNullableString(row.last_activity_analytics_at),
         lastDailyConsolidatedAt: asNullableString(row.last_daily_consolidated_at),
         lastWeeklyConsolidatedAt: asNullableString(row.last_weekly_consolidated_at),
         lastUpdatedAt: asNullableString(row.last_updated_at) ?? new Date().toISOString(),
@@ -166,10 +218,10 @@ function mapRecommendationRow(row: DbRow): PersistedPlanningRecommendation {
             helperText: asString(
                 (row.applyability as DbRow | undefined)?.helperText,
                 actionMode === "auto"
-                    ? "Agendo puede aplicar este ajuste automaticamente."
+                    ? "Agendo can apply this adjustment automatically."
                     : actionMode === "manual"
-                        ? "Conviene revisarlo manualmente."
-                        : "Es una sugerencia para tener en cuenta.",
+                        ? "This one is better reviewed manually."
+                        : "This is guidance to keep in mind.",
             ),
         },
         suggestedAction: (row.suggested_action ?? {}) as PersistedPlanningRecommendation["suggestedAction"],
@@ -291,6 +343,75 @@ export function serializeRecommendation(
     };
 }
 
+const LEGACY_RECOMMENDATION_COLUMNS = [
+    "recommendation_id",
+    "user_id",
+    "target_block_id",
+    "target_date",
+    "type",
+    "scope",
+    "status",
+    "confidence",
+    "priority",
+    "title",
+    "message",
+    "reason_code",
+    "reason_payload",
+    "evidence",
+    "suggested_action",
+    "dismissible",
+    "reversible",
+    "created_at",
+    "expires_at",
+    "applied_at",
+    "dismissed_at",
+    "updated_at",
+] as const;
+
+function isPlanningPersistenceCompatibilityError(error: unknown) {
+    if (!error || typeof error !== "object") return false;
+
+    const code = "code" in error ? asString((error as DbRow).code) : "";
+    const message = "message" in error ? asString((error as DbRow).message) : "";
+    const details = "details" in error ? asString((error as DbRow).details) : "";
+    const combined = `${message} ${details}`.toLowerCase();
+
+    return (
+        code === "42703"
+        || combined.includes("column")
+        || combined.includes("applyability")
+        || combined.includes("action_mode")
+        || combined.includes("accepted_at")
+        || combined.includes("ignored_at")
+        || combined.includes("first_seen_at")
+        || combined.includes("last_seen_at")
+        || combined.includes("seen_count")
+        || combined.includes("accepted_count")
+        || combined.includes("dismissed_count")
+        || combined.includes("ignored_count")
+        || combined.includes("applied_count")
+    );
+}
+
+function toLegacyRecommendationPayload(payload: Record<string, unknown>) {
+    return LEGACY_RECOMMENDATION_COLUMNS.reduce<Record<string, unknown>>((legacyPayload, key) => {
+        legacyPayload[key] = payload[key];
+        return legacyPayload;
+    }, {});
+}
+
+function buildLegacyStatusPayload(
+    status: Extract<PlanningRecommendationStatus, "accepted" | "dismissed" | "applied">,
+    now: string,
+) {
+    return {
+        status,
+        updated_at: now,
+        dismissed_at: status === "dismissed" ? now : null,
+        applied_at: status === "applied" ? now : null,
+    };
+}
+
 export function isSuppressed(row: PersistedPlanningRecommendation) {
     const reference = row.dismissedAt ?? row.appliedAt ?? row.acceptedAt ?? row.ignoredAt ?? row.createdAt;
     const ageHours = (Date.now() - new Date(reference).getTime()) / (60 * 60 * 1000);
@@ -302,7 +423,12 @@ export function isSuppressed(row: PersistedPlanningRecommendation) {
     return false;
 }
 
-async function fetchBehaviorProfile(supabase: SupabaseClient, userId: string, analytics: FocusSessionAnalytics[]) {
+async function fetchBehaviorProfile(
+    supabase: SupabaseClient,
+    userId: string,
+    analytics: FocusSessionAnalytics[],
+    activityExperiences: ActivityExperience[] = [],
+) {
     const { data } = await supabase
         .from("user_behavior_profile")
         .select("*")
@@ -310,9 +436,10 @@ async function fetchBehaviorProfile(supabase: SupabaseClient, userId: string, an
         .maybeSingle();
 
     if (data) return hydrateProfileRow(data as DbRow);
-    if (analytics.length > 0) {
+    if (analytics.length > 0 || activityExperiences.length > 0) {
         return buildBehaviorProfile(userId, [...analytics].reverse(), {
             now: new Date(),
+            activityExperiences,
         });
     }
     return buildEmptyBehaviorProfile(userId);
@@ -410,9 +537,17 @@ async function persistRecommendations(
         });
 
     if (rowsToPersist.length > 0) {
-        await supabase
+        let { error } = await supabase
             .from("planning_recommendations")
             .upsert(rowsToPersist, { onConflict: "recommendation_id" });
+
+        if (error && isPlanningPersistenceCompatibilityError(error)) {
+            ({ error } = await supabase
+                .from("planning_recommendations")
+                .upsert(rowsToPersist.map((row) => toLegacyRecommendationPayload(row)), { onConflict: "recommendation_id" }));
+        }
+
+        if (error) throw error;
     }
 
     const visibleRecommendations = recommendations.filter((recommendation) => {
@@ -430,7 +565,7 @@ async function persistRecommendations(
     });
 
     if (staleRows.length > 0) {
-        await supabase
+        const { error } = await supabase
             .from("planning_recommendations")
             .update({
                 status: "expired",
@@ -438,6 +573,8 @@ async function persistRecommendations(
                 updated_at: new Date().toISOString(),
             })
             .in("recommendation_id", staleRows.map((row) => row.recommendationId));
+
+        if (error) throw error;
     }
 
     return visibleRecommendations.map((recommendation) => {
@@ -462,7 +599,13 @@ export async function getPlanningGuideData(
     },
 ): Promise<PlanningGuideResult> {
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId);
-    const profile = await fetchBehaviorProfile(supabase, userId, recentAnalytics);
+    const activityExperiences = await fetchRecentActivityExperiences(supabase, userId, {
+        startDate: options.targetDate,
+        endDate: options.targetDate,
+        sinceDays: 45,
+        limit: 240,
+    });
+    const profile = await fetchBehaviorProfile(supabase, userId, recentAnalytics, activityExperiences);
     const feedbackSummary = await fetchPlanningFeedbackSummary(supabase, userId);
     const blocks = await fetchCalendarBlocks(
         supabase,
@@ -475,6 +618,7 @@ export async function getPlanningGuideData(
         userId,
         profile,
         recentAnalytics,
+        activityExperiences,
         blocks,
         targetDate: options.targetDate,
         targetBlockId: options.targetBlockId,
@@ -525,13 +669,23 @@ export async function updateRecommendationStatus(
         dismissed_count: existing.dismissedCount + (status === "dismissed" ? 1 : 0),
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from("planning_recommendations")
         .update(payload)
         .eq("user_id", userId)
         .eq("recommendation_id", recommendationId)
         .select("*")
         .maybeSingle();
+
+    if (error && isPlanningPersistenceCompatibilityError(error)) {
+        ({ data, error } = await supabase
+            .from("planning_recommendations")
+            .update(buildLegacyStatusPayload(status, now))
+            .eq("user_id", userId)
+            .eq("recommendation_id", recommendationId)
+            .select("*")
+            .maybeSingle());
+    }
 
     if (error) throw error;
     return data ? mapRecommendationRow(data as DbRow) : null;
@@ -550,7 +704,53 @@ async function fetchRecommendationForApply(
         .maybeSingle();
 
     if (error) throw error;
-    return data ? mapRecommendationRow(data as DbRow) : null;
+    if (data) return mapRecommendationRow(data as DbRow);
+
+    const locator = parseRecommendationLocator(recommendationId);
+    if (!locator) return null;
+    if (locator.scopedUserId && locator.scopedUserId !== userId) return null;
+
+    let targetDate: string | null = null;
+    let targetBlockId: string | undefined;
+
+    if (locator.scope === "day" || locator.scope === "guided_plan") {
+        targetDate = locator.targetKey;
+    } else if (locator.scope === "block") {
+        targetBlockId = locator.targetKey;
+
+        const { data: blockRow, error: blockError } = await supabase
+            .from("blocks")
+            .select("start_at")
+            .eq("user_id", userId)
+            .eq("id", targetBlockId)
+            .maybeSingle();
+
+        if (blockError) throw blockError;
+        if (!blockRow) return null;
+
+        targetDate = asString((blockRow as DbRow).start_at).slice(0, 10);
+    }
+
+    if (!targetDate) return null;
+
+    const guide = await getPlanningGuideData(supabase, userId, {
+        targetDate,
+        targetBlockId,
+    });
+
+    if (!guide.recommendations.some((recommendation) => recommendation.id === recommendationId)) {
+        return null;
+    }
+
+    const { data: recoveredRow, error: recoveredError } = await supabase
+        .from("planning_recommendations")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("recommendation_id", recommendationId)
+        .maybeSingle();
+
+    if (recoveredError) throw recoveredError;
+    return recoveredRow ? mapRecommendationRow(recoveredRow as DbRow) : null;
 }
 
 async function assertNoCalendarConflict(
@@ -753,7 +953,7 @@ export async function applyPlanningRecommendation(
         throw new Error("This recommendation requires manual review");
     }
 
-    const { data: updatedRow, error: updateRecommendationError } = await supabase
+    let { data: updatedRow, error: updateRecommendationError } = await supabase
         .from("planning_recommendations")
         .update({
             status: "applied",
@@ -765,6 +965,16 @@ export async function applyPlanningRecommendation(
         .eq("recommendation_id", recommendationId)
         .select("*")
         .maybeSingle();
+
+    if (updateRecommendationError && isPlanningPersistenceCompatibilityError(updateRecommendationError)) {
+        ({ data: updatedRow, error: updateRecommendationError } = await supabase
+            .from("planning_recommendations")
+            .update(buildLegacyStatusPayload("applied", now))
+            .eq("user_id", userId)
+            .eq("recommendation_id", recommendationId)
+            .select("*")
+            .maybeSingle());
+    }
 
     if (updateRecommendationError) throw updateRecommendationError;
 

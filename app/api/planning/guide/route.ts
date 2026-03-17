@@ -19,12 +19,18 @@ export async function POST(request: NextRequest) {
 
     const payload = await request.json() as GuidePayload;
     const date = payload.date ?? new Date().toISOString().slice(0, 10);
+    try {
+        const guide = await getPlanningGuideData(supabase, user.id, {
+            targetDate: date,
+            targetBlockId: payload.targetBlockId,
+            preferences: payload.preferences,
+        });
 
-    const guide = await getPlanningGuideData(supabase, user.id, {
-        targetDate: date,
-        targetBlockId: payload.targetBlockId,
-        preferences: payload.preferences,
-    });
-
-    return NextResponse.json(guide);
+        return NextResponse.json(guide);
+    } catch (error) {
+        return NextResponse.json(
+            { error: error instanceof Error ? error.message : "Unable to load guided planning" },
+            { status: 400 },
+        );
+    }
 }

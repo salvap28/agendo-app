@@ -18,10 +18,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { blockId } = await context.params;
     const date = request.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
-    const guide = await getPlanningGuideData(supabase, user.id, {
-        targetDate: date,
-        targetBlockId: blockId,
-    });
+    try {
+        const guide = await getPlanningGuideData(supabase, user.id, {
+            targetDate: date,
+            targetBlockId: blockId,
+        });
 
-    return NextResponse.json(guide);
+        return NextResponse.json(guide);
+    } catch (error) {
+        return NextResponse.json(
+            { error: error instanceof Error ? error.message : "Unable to load block planning" },
+            { status: 400 },
+        );
+    }
 }
