@@ -126,14 +126,25 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
 }
 
 export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelectedBlockId, setIsNewBlock }: DailyAgendaViewProps) {
-    const { blocks } = useBlocksStore();
-    const { fetchDayExperiences } = useActivityExperienceStore();
-    const { session, returnToFocus } = useFocusStore();
+    const blocks = useBlocksStore((state) => state.blocks);
+    const fetchDayExperiences = useActivityExperienceStore((state) => state.fetchDayExperiences);
+    const session = useFocusStore((state) => state.session);
+    const returnToFocus = useFocusStore((state) => state.returnToFocus);
 
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
     const [internalSelectedDate, setInternalSelectedDate] = useState(startOfDay(new Date()));
     const [currentTime, setCurrentTime] = useState(() => new Date());
-    const effectiveSelectedDate = selectedDate ? startOfDay(selectedDate) : internalSelectedDate;
+    const effectiveSelectedDateMs = selectedDate
+        ? startOfDay(selectedDate).getTime()
+        : internalSelectedDate.getTime();
+    const effectiveSelectedDate = useMemo(
+        () => new Date(effectiveSelectedDateMs),
+        [effectiveSelectedDateMs],
+    );
+    const effectiveSelectedDateKey = useMemo(
+        () => format(effectiveSelectedDate, "yyyy-MM-dd"),
+        [effectiveSelectedDate],
+    );
 
     // --- Animation Key ---
     // Change this key every time selectedDate changes to force re-render the timeline
@@ -149,8 +160,8 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
     }, []);
 
     useEffect(() => {
-        void fetchDayExperiences(effectiveSelectedDate.toISOString().slice(0, 10));
-    }, [effectiveSelectedDate, fetchDayExperiences]);
+        void fetchDayExperiences(effectiveSelectedDateKey);
+    }, [effectiveSelectedDateKey, fetchDayExperiences]);
 
     const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
     const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));

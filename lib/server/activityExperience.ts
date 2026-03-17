@@ -18,6 +18,12 @@ import {
 } from "@/lib/engines/activityExperience";
 
 type DbRow = Record<string, unknown>;
+type PostgrestLikeError = {
+    code?: string;
+    message?: string;
+    details?: string | null;
+    hint?: string | null;
+};
 
 function asString(value: unknown, fallback = "") {
     return typeof value === "string" ? value : fallback;
@@ -44,6 +50,18 @@ function asObject(value: unknown) {
     return value && typeof value === "object" && !Array.isArray(value)
         ? value as Record<string, unknown>
         : undefined;
+}
+
+function isActivityExperienceSchemaMissing(error: unknown) {
+    if (!error || typeof error !== "object") return false;
+    const candidate = error as PostgrestLikeError;
+    const message = candidate.message ?? "";
+    const hint = candidate.hint ?? "";
+
+    return candidate.code === "PGRST205"
+        || candidate.code === "42P01"
+        || message.includes("activity_experiences")
+        || hint.includes("activity_experiences");
 }
 
 export function mapActivityExperienceRow(row: DbRow): ActivityExperience {
@@ -131,7 +149,12 @@ async function upsertActivityExperience(
         .select("*")
         .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+        if (isActivityExperienceSchemaMissing(error)) {
+            return experience;
+        }
+        throw error;
+    }
     return data ? mapActivityExperienceRow(data as DbRow) : experience;
 }
 
@@ -147,7 +170,10 @@ export async function fetchActivityExperienceByKey(
         .eq("experience_key", experienceKey)
         .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+        if (isActivityExperienceSchemaMissing(error)) return null;
+        throw error;
+    }
     return data ? mapActivityExperienceRow(data as DbRow) : null;
 }
 
@@ -165,7 +191,10 @@ export async function fetchActivityExperienceForBlock(
         .limit(1)
         .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+        if (isActivityExperienceSchemaMissing(error)) return null;
+        throw error;
+    }
     return data ? mapActivityExperienceRow(data as DbRow) : null;
 }
 
@@ -210,7 +239,10 @@ export async function fetchRecentActivityExperiences(
     }
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+        if (isActivityExperienceSchemaMissing(error)) return [];
+        throw error;
+    }
     return (data ?? []).map((row) => mapActivityExperienceRow(row as DbRow));
 }
 

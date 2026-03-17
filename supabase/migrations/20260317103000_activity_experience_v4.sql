@@ -221,7 +221,7 @@ SELECT
   COALESCE(b.location_mode, 'unknown'),
   COALESCE(b.presence_mode, 'self_directed'),
   true,
-  fsa.closure_type = 'completed',
+  COALESCE(fsa.closure_type = 'completed', false),
   false,
   false,
   CASE
@@ -323,7 +323,7 @@ SELECT
   COALESCE(b.location_mode, 'unknown'),
   COALESCE(b.presence_mode, 'unknown'),
   true,
-  b.status = 'completed',
+  COALESCE(b.status = 'completed', false),
   false,
   true,
   CASE
