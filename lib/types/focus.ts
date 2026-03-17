@@ -28,6 +28,7 @@ export type FocusSessionEventType =
     | "session_exit"
     | "session_returned"
     | "session_completed"
+    | "session_abandoned"
     | "session_interaction"
     | "task_changed"
     | "inactivity_detected"
@@ -168,6 +169,7 @@ export interface FocusSession {
     blockType?: BlockType;
 
     initiatedAt?: string;
+    // Marks the effective runtime start after the entry ritual settles.
     consolidatedAt?: string;
     startedAt: string; // ISO string for localStorage persistence
     endedAt?: string;

@@ -29,6 +29,15 @@ create table public.blocks (
   notes text,
   tag text,
   color text,
+  priority smallint,
+  estimated_duration_minutes integer,
+  difficulty smallint,
+  flexibility text,
+  intensity text,
+  deadline timestamp with time zone,
+  cognitively_heavy boolean default false,
+  splittable boolean default true,
+  optional boolean default false,
   recurrence_id text,
   recurrence_pattern jsonb,
   created_at timestamp with time zone default now(),
@@ -105,6 +114,60 @@ create policy "Users can delete their own daily metrics" on public.daily_metrics
 
 -- Create indexes for frequent queries
 create index idx_daily_metrics_user_date on public.daily_metrics (user_id, date);
+
+create table if not exists public.planning_recommendations (
+  recommendation_id text primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  target_block_id uuid references public.blocks(id) on delete cascade,
+  target_date date,
+  type text not null,
+  scope text not null,
+  status text not null default 'active',
+  confidence numeric not null,
+  priority text not null,
+  title text not null,
+  message text not null,
+  reason_code text not null,
+  reason_payload jsonb not null default '{}'::jsonb,
+  evidence jsonb not null default '{}'::jsonb,
+  applyability jsonb not null default '{"mode":"manual","helperText":"Conviene revisarlo manualmente."}'::jsonb,
+  action_mode text not null default 'manual',
+  suggested_action jsonb not null default '{}'::jsonb,
+  dismissible boolean not null default true,
+  reversible boolean not null default false,
+  created_at timestamp with time zone default now(),
+  expires_at timestamp with time zone,
+  accepted_at timestamp with time zone,
+  applied_at timestamp with time zone,
+  dismissed_at timestamp with time zone,
+  ignored_at timestamp with time zone,
+  first_seen_at timestamp with time zone,
+  last_seen_at timestamp with time zone,
+  seen_count integer not null default 0,
+  accepted_count integer not null default 0,
+  dismissed_count integer not null default 0,
+  ignored_count integer not null default 0,
+  applied_count integer not null default 0,
+  updated_at timestamp with time zone default now()
+);
+
+alter table public.planning_recommendations
+  add constraint planning_recommendations_status_check
+  check (status in ('active', 'dismissed', 'accepted', 'ignored', 'expired', 'applied'));
+
+alter table public.planning_recommendations
+  add constraint planning_recommendations_action_mode_check
+  check (action_mode in ('informational', 'manual', 'auto'));
+
+alter table public.planning_recommendations enable row level security;
+create policy "Users can view their own planning recommendations" on public.planning_recommendations for select using (auth.uid() = user_id);
+create policy "Users can create their own planning recommendations" on public.planning_recommendations for insert with check (auth.uid() = user_id);
+create policy "Users can update their own planning recommendations" on public.planning_recommendations for update using (auth.uid() = user_id);
+create policy "Users can delete their own planning recommendations" on public.planning_recommendations for delete using (auth.uid() = user_id);
+
+create index if not exists idx_planning_recommendations_user_date on public.planning_recommendations (user_id, target_date, status);
+create index if not exists idx_planning_recommendations_user_block on public.planning_recommendations (user_id, target_block_id, status);
+create index if not exists idx_planning_recommendations_user_type_status on public.planning_recommendations (user_id, type, status, updated_at desc);
 
 -- V2 Personal Intelligence
 alter table public.focus_sessions

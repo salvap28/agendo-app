@@ -36,14 +36,14 @@ export function standardDeviation(values: number[]) {
 
 export function calculateEvidenceConfidence({
     sampleSize,
-    minSampleSize = 3,
-    targetSampleSize = 8,
+    minSampleSize = 4,
+    targetSampleSize = 12,
     variability,
-    variabilityTolerance = 20,
+    variabilityTolerance = 16,
     recencyDays,
-    recencyWindowDays = 30,
+    recencyWindowDays = 21,
     dominance,
-    dominanceTarget = 14,
+    dominanceTarget = 18,
     consistency,
 }: EvidenceConfidenceArgs) {
     const sampleScore = sampleSize < minSampleSize
@@ -71,7 +71,7 @@ export function meetsEvidenceThreshold(
         minSampleSize?: number;
     }
 ) {
-    const minConfidence = options?.minConfidence ?? 0.6;
-    const minSampleSize = options?.minSampleSize ?? 3;
+    const minConfidence = options?.minConfidence ?? 0.72;
+    const minSampleSize = options?.minSampleSize ?? 4;
     return confidence >= minConfidence && sampleSize >= minSampleSize;
 }

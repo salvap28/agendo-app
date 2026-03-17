@@ -116,7 +116,7 @@ export interface SessionAnalyticsDiagnostics {
     scoreBreakdown: {
         progress: number;
         friction: number;
-        consistency: number;
+        contextualConsistency: number;
         behavior: number;
     };
 }
@@ -151,7 +151,7 @@ export interface FocusSessionAnalytics {
     startDelayMs: number;
     progressScore: number;
     frictionScore: number;
-    consistencyScore: number;
+    contextualConsistencyScore: number;
     behaviorScore: number;
     timeWindow: FocusWindow;
     durationBucket: SessionLengthBucket;
@@ -201,9 +201,9 @@ export interface InsightTimelinePoint {
     date: string;
     progressScore: number | null;
     frictionScore: number | null;
-    consistencyScore: number | null;
+    historicalConsistencyScore: number | null;
     behaviorScore: number | null;
-    momentumTotal: number | null;
+    compositeSignalScore: number | null;
 }
 
 export interface InsightsDashboardData {
@@ -213,6 +213,6 @@ export interface InsightsDashboardData {
     weeklySessions: number;
     completionRate: number;
     averageStability: number;
-    momentumCurrent: number;
-    momentumDeltaWeek: number;
+    compositeSignalCurrent: number;
+    compositeSignalDeltaWeek: number;
 }

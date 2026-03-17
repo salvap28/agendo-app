@@ -13,6 +13,10 @@ export type BlockStatus =
     | "completed"
     | "canceled";
 
+export type BlockPriority = 1 | 2 | 3 | 4 | 5;
+export type BlockFlexibility = "fixed" | "moderate" | "flexible";
+export type BlockIntensity = "light" | "medium" | "high";
+
 export interface RecurrencePattern {
     type: 'daily' | 'weekly' | 'custom';
     days?: number[]; // 0-6 for Sun-Sat
@@ -32,6 +36,15 @@ export interface Block {
     tag?: string; // or colorTag
     color?: string; // Hex or token
     notifications?: number[]; // Minutes before start (e.g., [5, 15, 60])
+    priority?: BlockPriority;
+    estimatedDurationMinutes?: number;
+    difficulty?: number;
+    flexibility?: BlockFlexibility;
+    intensity?: BlockIntensity;
+    deadline?: Date;
+    cognitivelyHeavy?: boolean;
+    splittable?: boolean;
+    optional?: boolean;
 
     // Recurrence
     recurrenceId?: string;

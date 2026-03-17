@@ -91,8 +91,8 @@ function buildPatternEvidence(
 }
 
 function getWarmupStage(totalSessions: number): WarmupStage {
-    if (totalSessions >= 12) return "ready";
-    if (totalSessions >= 5) return "warming";
+    if (totalSessions >= 16) return "ready";
+    if (totalSessions >= 8) return "warming";
     return "cold";
 }
 
@@ -138,7 +138,7 @@ function detectBestFocusWindow(
 
     const top = grouped[0];
     const runnerUp = grouped[1];
-    if (!top || top.items.length < 3) return null;
+    if (!top || top.items.length < 5) return null;
 
     const dominance = top.score - (runnerUp?.score ?? average(monthly.map(calculateOutcomeScore)));
     const scores = top.items.map(calculateOutcomeScore);
@@ -152,7 +152,10 @@ function detectBestFocusWindow(
         now
     );
 
-    if (!meetsEvidenceThreshold(evidence.confidence, top.items.length) || dominance < 4) {
+    if (!meetsEvidenceThreshold(evidence.confidence, top.items.length, {
+        minConfidence: 0.76,
+        minSampleSize: 5,
+    }) || dominance < 6) {
         return null;
     }
 
@@ -194,7 +197,7 @@ function detectOptimalSessionLength(
 
     const top = grouped[0];
     const runnerUp = grouped[1];
-    if (!top || top.items.length < 3) return null;
+    if (!top || top.items.length < 5) return null;
 
     const dominance = top.score - (runnerUp?.score ?? average(monthly.map(calculateOutcomeScore)));
     const scores = top.items.map((item) => (
@@ -211,7 +214,10 @@ function detectOptimalSessionLength(
         now
     );
 
-    if (!meetsEvidenceThreshold(evidence.confidence, top.items.length) || dominance < 5) {
+    if (!meetsEvidenceThreshold(evidence.confidence, top.items.length, {
+        minConfidence: 0.76,
+        minSampleSize: 5,
+    }) || dominance < 7) {
         return null;
     }
 
@@ -259,7 +265,7 @@ function buildFrictionCandidates(monthly: FocusSessionAnalytics[]) {
         candidates.push({ key: `duration_bucket:${key}`, items, score: average(items.map((item) => item.frictionScore)) });
     }
 
-    if (slowStartItems.length >= 3) {
+    if (slowStartItems.length >= 4) {
         candidates.push({ key: "start_pattern:slow_start", items: slowStartItems, score: average(slowStartItems.map((item) => item.frictionScore)) });
     }
 
@@ -271,7 +277,7 @@ function detectFrictionSources(
     now = new Date()
 ): FrictionSourcePattern[] {
     const monthly = filterAnalyticsByDays(analytics, 30, now);
-    if (monthly.length < 3) return [];
+    if (monthly.length < 8) return [];
 
     const candidates = buildFrictionCandidates(monthly)
         .map((candidate) => {
@@ -286,8 +292,8 @@ function detectFrictionSources(
                 delta,
             };
         })
-        .filter((candidate) => candidate.items.length >= 3)
-        .filter((candidate) => candidate.score >= 52 || candidate.delta >= 7)
+        .filter((candidate) => candidate.items.length >= 4)
+        .filter((candidate) => candidate.score >= 56 || candidate.delta >= 8)
         .sort((left, right) => right.delta - left.delta);
 
     return candidates.slice(0, 2).flatMap((candidate) => {
@@ -302,7 +308,10 @@ function detectFrictionSources(
             now
         );
 
-        if (!meetsEvidenceThreshold(evidence.confidence, candidate.items.length)) {
+        if (!meetsEvidenceThreshold(evidence.confidence, candidate.items.length, {
+            minConfidence: 0.72,
+            minSampleSize: 4,
+        })) {
             return [];
         }
 
@@ -331,7 +340,7 @@ function detectFrictionSources(
     });
 }
 
-function calculateWindowConsistency(items: FocusSessionAnalytics[]) {
+export function calculateHistoricalConsistencyScore(items: FocusSessionAnalytics[]) {
     if (items.length === 0) return 0;
     const activeDaysRatio = clampUnit(uniqueDayKeys(items.map((item) => item.endedAt)).size / 7);
     const completionRate = average(items.map((item) => item.closureType === "completed" ? 1 : 0));
@@ -355,14 +364,14 @@ function detectConsistencyTrend(
     const recent = filterAnalyticsByDays(analytics, 7, now);
     const fortnight = filterAnalyticsByDays(analytics, 14, now);
     const previous = fortnight.filter((item) => !recent.some((recentItem) => recentItem.sessionId === item.sessionId));
-    if (recent.length + previous.length < 4 || previous.length === 0) return null;
+    if (recent.length + previous.length < 8 || previous.length < 3) return null;
 
-    const recentScore = calculateWindowConsistency(recent);
-    const previousScore = calculateWindowConsistency(previous);
+    const recentScore = calculateHistoricalConsistencyScore(recent);
+    const previousScore = calculateHistoricalConsistencyScore(previous);
     const delta = recentScore - previousScore;
-    const direction: PatternTrend = delta >= 6
+    const direction: PatternTrend = delta >= 8
         ? "improving"
-        : delta <= -6
+        : delta <= -8
             ? "declining"
             : "stable";
     const evidence = buildPatternEvidence(
@@ -376,8 +385,8 @@ function detectConsistencyTrend(
     );
 
     if (!meetsEvidenceThreshold(evidence.confidence, recent.length + previous.length, {
-        minConfidence: 0.55,
-        minSampleSize: 4,
+        minConfidence: 0.72,
+        minSampleSize: 8,
     })) {
         return null;
     }
@@ -409,7 +418,7 @@ function detectRecentImprovements(
     const recent = filterAnalyticsByDays(analytics, 7, now);
     const fortnight = filterAnalyticsByDays(analytics, 14, now);
     const previous = fortnight.filter((item) => !recent.some((recentItem) => recentItem.sessionId === item.sessionId));
-    if (recent.length + previous.length < 4 || previous.length === 0) return [];
+    if (recent.length + previous.length < 8 || previous.length < 3) return [];
 
     const candidates: Array<{
         area: RecentImprovementPattern["data"]["area"];
@@ -420,7 +429,7 @@ function detectRecentImprovements(
 
     const recentFriction = average(recent.map((item) => item.frictionScore));
     const previousFriction = average(previous.map((item) => item.frictionScore));
-    if ((previousFriction - recentFriction) >= 8) {
+    if ((previousFriction - recentFriction) >= 10) {
         candidates.push({
             area: "friction",
             delta: previousFriction - recentFriction,
@@ -431,7 +440,7 @@ function detectRecentImprovements(
 
     const recentStability = average(recent.map((item) => item.stabilityRatio));
     const previousStability = average(previous.map((item) => item.stabilityRatio));
-    if ((recentStability - previousStability) >= 0.08) {
+    if ((recentStability - previousStability) >= 0.1) {
         candidates.push({
             area: "stability",
             delta: (recentStability - previousStability) * 100,
@@ -442,7 +451,7 @@ function detectRecentImprovements(
 
     const recentRecovery = average(recent.map((item) => item.recoveryRatio));
     const previousRecovery = average(previous.map((item) => item.recoveryRatio));
-    if ((recentRecovery - previousRecovery) >= 0.12) {
+    if ((recentRecovery - previousRecovery) >= 0.14) {
         candidates.push({
             area: "recovery",
             delta: (recentRecovery - previousRecovery) * 100,
@@ -451,9 +460,9 @@ function detectRecentImprovements(
         });
     }
 
-    const recentConsistency = calculateWindowConsistency(recent);
-    const previousConsistency = calculateWindowConsistency(previous);
-    if ((recentConsistency - previousConsistency) >= 8) {
+    const recentConsistency = calculateHistoricalConsistencyScore(recent);
+    const previousConsistency = calculateHistoricalConsistencyScore(previous);
+    if ((recentConsistency - previousConsistency) >= 10) {
         candidates.push({
             area: "consistency",
             delta: recentConsistency - previousConsistency,
@@ -477,8 +486,8 @@ function detectRecentImprovements(
             );
 
             if (!meetsEvidenceThreshold(evidence.confidence, recent.length + previous.length, {
-                minConfidence: 0.55,
-                minSampleSize: 4,
+                minConfidence: 0.72,
+                minSampleSize: 8,
             })) {
                 return [];
             }
@@ -532,6 +541,7 @@ export function buildBehaviorProfile(
 ): BehaviorProfile {
     const now = options?.now ?? new Date();
     const sortedAnalytics = sortByEndedAtDescending(analytics);
+    const warmupStage = getWarmupStage(sortedAnalytics.length);
     if (sortedAnalytics.length === 0) {
         return {
             ...buildEmptyBehaviorProfile(userId, now.toISOString()),
@@ -540,11 +550,21 @@ export function buildBehaviorProfile(
         };
     }
 
-    const bestFocusWindow = detectBestFocusWindow(sortedAnalytics, now);
-    const optimalSessionLength = detectOptimalSessionLength(sortedAnalytics, now);
-    const topFrictionSources = detectFrictionSources(sortedAnalytics, now);
-    const consistencyTrend = detectConsistencyTrend(sortedAnalytics, now);
-    const recentImprovements = detectRecentImprovements(sortedAnalytics, now);
+    const bestFocusWindow = warmupStage === "ready"
+        ? detectBestFocusWindow(sortedAnalytics, now)
+        : null;
+    const optimalSessionLength = warmupStage === "ready"
+        ? detectOptimalSessionLength(sortedAnalytics, now)
+        : null;
+    const topFrictionSources = warmupStage === "ready"
+        ? detectFrictionSources(sortedAnalytics, now)
+        : [];
+    const consistencyTrend = warmupStage === "cold"
+        ? null
+        : detectConsistencyTrend(sortedAnalytics, now);
+    const recentImprovements = warmupStage === "cold"
+        ? []
+        : detectRecentImprovements(sortedAnalytics, now);
     const activePatterns: BehaviorPatternRecord[] = [
         ...(bestFocusWindow ? [bestFocusWindow] : []),
         ...(optimalSessionLength ? [optimalSessionLength] : []),
@@ -570,7 +590,7 @@ export function buildBehaviorProfile(
 
     return {
         userId,
-        warmupStage: getWarmupStage(sortedAnalytics.length),
+        warmupStage,
         bestFocusWindow,
         optimalSessionLength,
         topFrictionSources,

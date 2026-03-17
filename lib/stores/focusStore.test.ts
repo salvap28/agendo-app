@@ -67,6 +67,7 @@ describe("focusStore", () => {
         useBlocksStore.setState({
             updateBlock: originalUpdateBlock,
         });
+        vi.useRealTimers();
         vi.unstubAllGlobals();
     });
 
@@ -372,5 +373,76 @@ describe("focusStore", () => {
         useFocusStore.getState().markCardShown("card_closure_bridge");
 
         expect(useFocusStore.getState().session?.closureBridgeShown).toBe(true);
+    });
+
+    it("records explicit runtime interaction without flooding raw events", () => {
+        useFocusStore.setState({
+            session: {
+                id: "session-interaction",
+                mode: "block",
+                blockId: "block-interaction",
+                blockType: "deep_work",
+                startedAt: "2026-03-16T09:00:00.000Z",
+                isActive: true,
+                isPaused: false,
+                totalPausedMs: 0,
+                pauseCount: 0,
+                exitCount: 0,
+                restCount: 0,
+                lastPauseReason: null,
+                history: ["Started"],
+                cardMemory: {},
+                events: [],
+                persistenceStatus: "draft",
+            },
+        });
+
+        useFocusStore.getState().recordSessionInteraction("pointerdown", new Date("2026-03-16T09:05:00.000Z").getTime());
+        useFocusStore.getState().recordSessionInteraction("keydown", new Date("2026-03-16T09:05:10.000Z").getTime());
+
+        const session = useFocusStore.getState().session;
+        expect(session?.events?.filter((event) => event.type === "session_interaction")).toHaveLength(1);
+        expect(session?.lastInteractionAt).toBe("2026-03-16T09:05:10.000Z");
+        expect(session?.startDelayMs).toBe(300000);
+    });
+
+    it("finishes an unstable session as abandoned when runtime evidence is weak", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-03-16T09:12:00.000Z"));
+
+        useFocusStore.setState({
+            session: {
+                id: "session-abandoned",
+                mode: "block",
+                blockId: "block-abandoned",
+                blockType: "admin",
+                startedAt: "2026-03-16T09:06:00.000Z",
+                plannedDurationMs: 45 * 60 * 1000,
+                isActive: true,
+                isPaused: false,
+                totalPausedMs: 3 * 60 * 1000,
+                pauseCount: 1,
+                exitCount: 2,
+                restCount: 0,
+                lastPauseReason: null,
+                clarity: 2,
+                difficulty: 5,
+                progressFeelingAfter: 2,
+                history: ["Started"],
+                cardMemory: {},
+                events: [],
+                persistenceStatus: "draft",
+            },
+        });
+
+        await useFocusStore.getState().finish();
+
+        const session = useFocusStore.getState().session;
+        const terminalEvent = session?.events?.slice(-1)[0];
+        expect(session?.runtimeState).toBe("abandoned");
+        expect(terminalEvent?.type).toBe("session_abandoned");
+        expect(session?.persistenceStatus).toBe("persisted");
+
+        vi.useRealTimers();
     });
 });

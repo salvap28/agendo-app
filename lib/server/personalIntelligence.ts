@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calculateMomentumDay, calculateMomentumTotal } from "@/lib/engines/patternEngine/momentum";
 import {
     buildBehaviorProfile,
     buildEmptyBehaviorProfile,
     buildInsightCards,
     buildProfileSummary,
+    calculateCompositeTrajectory,
+    calculateDailyCompositeSignal,
+    calculateHistoricalConsistencyScore,
     deriveSessionAnalytics,
-    getFocusWindowLabel,
 } from "@/lib/engines/personalIntelligence";
 import {
     BehaviorPatternRecord,
@@ -155,7 +156,7 @@ function mapAnalyticsRow(row: DbRow): FocusSessionAnalytics {
         startDelayMs: asNumber(row.start_delay_ms),
         progressScore: asNumber(row.progress_score),
         frictionScore: asNumber(row.friction_score),
-        consistencyScore: asNumber(row.consistency_score),
+        contextualConsistencyScore: asNumber(row.consistency_score),
         behaviorScore: asNumber(row.behavior_score),
         timeWindow: asString(row.time_window) as FocusSessionAnalytics["timeWindow"],
         durationBucket: asString(row.duration_bucket) as FocusSessionAnalytics["durationBucket"],
@@ -266,7 +267,7 @@ function serializeAnalytics(analytics: FocusSessionAnalytics) {
         start_delay_ms: analytics.startDelayMs,
         progress_score: analytics.progressScore,
         friction_score: analytics.frictionScore,
-        consistency_score: analytics.consistencyScore,
+        consistency_score: analytics.contextualConsistencyScore,
         behavior_score: analytics.behaviorScore,
         diagnostics: analytics.diagnostics,
         computed_at: analytics.computedAt,
@@ -289,6 +290,21 @@ function endOfDayIso(value: string | Date) {
 function average(values: number[]) {
     if (values.length === 0) return 0;
     return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function getHomeWindowLabel(window: NonNullable<BehaviorProfile["bestFocusWindow"]>["data"]["window"]) {
+    switch (window) {
+        case "morning":
+            return "morning";
+        case "afternoon":
+            return "afternoon";
+        case "evening":
+            return "evening";
+        case "night":
+            return "night";
+        default:
+            return "best window";
+    }
 }
 
 function calculateFocusStreakFromAnalytics(analytics: FocusSessionAnalytics[], now = new Date()) {
@@ -336,7 +352,7 @@ async function fetchRecentAnalytics(
     }
 ) {
     const since = new Date();
-    since.setDate(since.getDate() - (options?.sinceDays ?? 45));
+    since.setDate(since.getDate() - (options?.sinceDays ?? 60));
 
     let query = supabase
         .from("focus_session_analytics")
@@ -366,18 +382,29 @@ async function recomputeDailyMetricsFromAnalytics(
     const targetDateStr = targetDateObj.toISOString().slice(0, 10);
     const dayStart = startOfDayIso(targetDateObj);
     const dayEnd = endOfDayIso(targetDateObj);
+    const consistencyWindowStart = new Date(targetDateObj);
+    consistencyWindowStart.setDate(consistencyWindowStart.getDate() - 6);
 
-    const { data: analyticsRows } = await supabase
-        .from("focus_session_analytics")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("ended_at", dayStart)
-        .lte("ended_at", dayEnd);
+    const [{ data: analyticsRows }, { data: consistencyWindowRows }] = await Promise.all([
+        supabase
+            .from("focus_session_analytics")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("ended_at", dayStart)
+            .lte("ended_at", dayEnd),
+        supabase
+            .from("focus_session_analytics")
+            .select("*")
+            .eq("user_id", userId)
+            .gte("ended_at", startOfDayIso(consistencyWindowStart))
+            .lte("ended_at", dayEnd),
+    ]);
 
     const dayAnalytics = (analyticsRows ?? []).map(mapAnalyticsRow);
+    const consistencyWindowAnalytics = (consistencyWindowRows ?? []).map(mapAnalyticsRow);
     const progressScore = Math.round(average(dayAnalytics.map((item) => item.progressScore)));
     const frictionScore = Math.round(average(dayAnalytics.map((item) => item.frictionScore)));
-    const consistencyScore = Math.round(average(dayAnalytics.map((item) => item.consistencyScore)));
+    const consistencyScore = calculateHistoricalConsistencyScore(consistencyWindowAnalytics);
     const behaviorScore = Math.round(average(dayAnalytics.map((item) => item.behaviorScore)));
     const sessionCount = dayAnalytics.length;
     const completedSessions = dayAnalytics.filter((item) => item.closureType === "completed").length;
@@ -385,7 +412,7 @@ async function recomputeDailyMetricsFromAnalytics(
     const activeDurationMs = dayAnalytics.reduce((total, item) => total + item.activeDurationMs, 0);
     const pauseDurationMs = dayAnalytics.reduce((total, item) => total + item.pauseDurationMs, 0);
     const inactivityDurationMs = dayAnalytics.reduce((total, item) => total + item.inactivityDurationMs, 0);
-    const momentumDay = calculateMomentumDay(progressScore, consistencyScore, frictionScore, behaviorScore);
+    const momentumDay = calculateDailyCompositeSignal(progressScore, consistencyScore, frictionScore, behaviorScore);
 
     const since = new Date(targetDateObj);
     since.setDate(since.getDate() - 30);
@@ -401,11 +428,11 @@ async function recomputeDailyMetricsFromAnalytics(
         .filter((metric: { date: string; momentum_day?: number | null }) => metric.date !== targetDateStr)
         .map((metric: { date: string; momentum_day?: number | null }) => ({
             date: metric.date,
-            momentum_day: Number(metric.momentum_day ?? 0),
+            composite_signal: Number(metric.momentum_day ?? 0),
         }));
 
-    pastMetrics.unshift({ date: targetDateStr, momentum_day: momentumDay });
-    const momentumTotal = calculateMomentumTotal(pastMetrics);
+    pastMetrics.unshift({ date: targetDateStr, composite_signal: momentumDay });
+    const momentumTotal = calculateCompositeTrajectory(pastMetrics);
 
     const payload = {
         user_id: userId,
@@ -413,7 +440,7 @@ async function recomputeDailyMetricsFromAnalytics(
         progress_score: progressScore,
         friction_score: frictionScore,
         consistency_score: consistencyScore,
-        emotion_score: behaviorScore,
+        emotion_score: null,
         behavior_score: behaviorScore,
         momentum_day: momentumDay,
         momentum_total: momentumTotal,
@@ -485,7 +512,7 @@ async function consolidateBehaviorProfile(
     scope: PersonalIntelligenceScope
 ) {
     const currentProfile = await fetchProfileRow(supabase, userId);
-    const analytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 45 });
+    const analytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 60 });
     const now = new Date();
     const nowIso = now.toISOString();
 
@@ -750,9 +777,9 @@ export async function getInsightsDashboardData(
         date: metric.date,
         progressScore: metric.progressScore ?? null,
         frictionScore: metric.frictionScore ?? null,
-        consistencyScore: metric.consistencyScore ?? null,
-        behaviorScore: metric.behaviorScore ?? metric.emotionScore ?? null,
-        momentumTotal: metric.momentumTotal ?? null,
+        historicalConsistencyScore: metric.consistencyScore ?? null,
+        behaviorScore: metric.behaviorScore ?? null,
+        compositeSignalScore: metric.momentumTotal ?? null,
     }));
 
     const latestMetric = [...timeline].reverse()[0];
@@ -772,9 +799,9 @@ export async function getInsightsDashboardData(
         averageStability: weeklyAnalytics.length === 0
             ? 0
             : Math.round(average(weeklyAnalytics.map((item) => item.stabilityRatio * 100))),
-        momentumCurrent: latestMetric?.momentumTotal ?? 0,
-        momentumDeltaWeek: latestMetric?.momentumTotal && sevenDayReference?.momentumTotal
-            ? Math.round((latestMetric.momentumTotal ?? 0) - (sevenDayReference.momentumTotal ?? 0))
+        compositeSignalCurrent: latestMetric?.compositeSignalScore ?? 0,
+        compositeSignalDeltaWeek: latestMetric?.compositeSignalScore && sevenDayReference?.compositeSignalScore
+            ? Math.round((latestMetric.compositeSignalScore ?? 0) - (sevenDayReference.compositeSignalScore ?? 0))
             : 0,
     };
 }
@@ -791,21 +818,47 @@ export async function getHomeSummaryData(supabase: SupabaseClient, userId: strin
             ? "positive"
             : "neutral";
 
-    let softRecommendation = "Seguí sumando sesiones para que el perfil pueda acompañarte con más claridad.";
+    let softRecommendation = "A bit more consistent use will make this read sharper.";
     if (dashboard.profile.bestFocusWindow) {
-        softRecommendation = `Si podés, cuidá un bloque importante en la ${getFocusWindowLabel(dashboard.profile.bestFocusWindow.data.window)}.`;
+        softRecommendation = `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window)} when you can.`;
     } else if (dashboard.profile.optimalSessionLength) {
-        softRecommendation = `Probá sostener tus bloques ${dashboard.profile.optimalSessionLength.data.bucket === "medium" ? "en sesiones medias" : "dentro del rango que hoy te viene funcionando mejor"}.`;
+        softRecommendation = dashboard.profile.optimalSessionLength.data.bucket === "medium"
+            ? "Medium-length sessions look like your cleanest rhythm right now."
+            : "Stay closer to the session range that has been holding best lately.";
     } else if (dashboard.profile.topFrictionSources[0]) {
-        softRecommendation = `Cuando aparece ${dashboard.profile.topFrictionSources[0].data.label}, puede ayudarte entrar con un primer paso más chico.`;
+        softRecommendation = `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`;
     }
 
+    void softRecommendation;
+
+    const calibrationProgress = Math.max(12, Math.min(100, Math.round(
+        (dashboard.profile.confidenceOverview.overall * 60)
+        + (Math.min(recentAnalytics.length, 14) / 14) * 40
+    )));
+
+    const homeMainInsight = dashboard.profile.warmupStage !== "ready"
+        ? "Your profile is still calibrating."
+        : mainCard?.title ?? summary;
+
+    const homeSoftRecommendation = dashboard.profile.bestFocusWindow
+        ? `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window)} when you can.`
+        : dashboard.profile.optimalSessionLength
+            ? (
+                dashboard.profile.optimalSessionLength.data.bucket === "medium"
+                    ? "Medium-length sessions look like your cleanest rhythm right now."
+                    : "Stay closer to the session range that has been holding best lately."
+            )
+            : dashboard.profile.topFrictionSources[0]
+                ? `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`
+                : "A bit more consistent use will make this read sharper.";
+
     return {
-        momentum_current: dashboard.momentumCurrent,
-        momentum_delta_week: dashboard.momentumDeltaWeek,
-        main_insight: mainCard?.description ?? summary,
+        momentum_current: dashboard.compositeSignalCurrent,
+        momentum_delta_week: dashboard.compositeSignalDeltaWeek,
+        main_insight: homeMainInsight,
         progress_signal: progressSignal,
-        soft_recommendation: softRecommendation,
+        soft_recommendation: homeSoftRecommendation,
+        profile_calibration_progress: calibrationProgress,
         focus_streak: calculateFocusStreakFromAnalytics(recentAnalytics),
         weekly_sessions_count: dashboard.weeklySessions,
         best_focus_window: dashboard.profile.bestFocusWindow?.data.window ?? null,

@@ -24,6 +24,7 @@ import { FocusInterventionModal } from './FocusInterventionModal';
 import { FocusEntryRitual } from './FocusEntryRitual';
 import { GlassButton } from '@/components/ui/glass-button';
 import { useFocusNow } from '@/hooks/useFocusNow';
+import { useFocusRuntimeSignals } from '@/hooks/useFocusRuntimeSignals';
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
     deep_work: "Deep Work",
@@ -120,6 +121,7 @@ export function FocusOverlay() {
         extendBlock,
         openIntervention,
         recordIntervention,
+        recordSessionInteraction,
         recordInactivityDetected,
         recordStabilityRecovered,
         markClosureBridgeShown,
@@ -151,65 +153,9 @@ export function FocusOverlay() {
     const [activeCarouselCardId, setActiveCarouselCardId] = React.useState<string | null>(null);
     const [activeEngineToastId, setActiveEngineToastId] = React.useState<string | null>(null);
 
-    const prevToastIdRef = React.useRef<string | null>(null);
-    const foregroundExposureTimeoutRef = React.useRef<number | null>(null);
-
     React.useEffect(() => {
         requestNotificationPermission();
     }, []);
-
-    const trackedSessionId = session?.id ?? null;
-    const trackedSessionPaused = session?.isPaused ?? false;
-    const trackedSessionEndedAt = session?.endedAt ?? null;
-
-    React.useEffect(() => {
-        if (!trackedSessionId || isEntryRitualActive || trackedSessionPaused || trackedSessionEndedAt) return;
-
-        let lastActivityAt = Date.now();
-        let inactivityRaised = false;
-
-        const handleActivity = () => {
-            lastActivityAt = Date.now();
-
-            if (inactivityRaised) {
-                inactivityRaised = false;
-                recordStabilityRecovered();
-            }
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === "visible") {
-                handleActivity();
-            }
-        };
-
-        const interval = window.setInterval(() => {
-            if (!inactivityRaised && Date.now() - lastActivityAt >= 90_000) {
-                inactivityRaised = true;
-                recordInactivityDetected();
-            }
-        }, 15_000);
-
-        window.addEventListener("pointerdown", handleActivity, { passive: true });
-        window.addEventListener("keydown", handleActivity);
-        window.addEventListener("touchstart", handleActivity, { passive: true });
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-
-        return () => {
-            window.clearInterval(interval);
-            window.removeEventListener("pointerdown", handleActivity);
-            window.removeEventListener("keydown", handleActivity);
-            window.removeEventListener("touchstart", handleActivity);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-        };
-    }, [
-        isEntryRitualActive,
-        recordInactivityDetected,
-        recordStabilityRecovered,
-        trackedSessionEndedAt,
-        trackedSessionId,
-        trackedSessionPaused,
-    ]);
 
     const context = React.useMemo(() => {
         if (!session || isEntryRitualActive) return null;
@@ -264,45 +210,19 @@ export function FocusOverlay() {
         return () => window.clearTimeout(timeout);
     }, [exitGuardArmed]);
 
-    React.useEffect(() => {
-        if (foregroundExposureTimeoutRef.current !== null) {
-            window.clearTimeout(foregroundExposureTimeoutRef.current);
-            foregroundExposureTimeoutRef.current = null;
-        }
-
-        if (!activeCarouselCardId) return;
-
-        foregroundExposureTimeoutRef.current = window.setTimeout(() => {
-            markCardShown(activeCarouselCardId, Date.now());
-        }, CARD_FOREGROUND_EXPOSURE_MS);
-
-        return () => {
-            if (foregroundExposureTimeoutRef.current !== null) {
-                window.clearTimeout(foregroundExposureTimeoutRef.current);
-                foregroundExposureTimeoutRef.current = null;
-            }
-        };
-    }, [activeCarouselCardId, markCardShown]);
-
-    React.useEffect(() => {
-        const toastIds = engineResult.toastCards.map((toast) => toast.id);
-        if (toastIds.length === 0) {
-            setActiveEngineToastId(null);
-            return;
-        }
-
-        if (!activeEngineToastId || !toastIds.includes(activeEngineToastId)) {
-            setActiveEngineToastId(toastIds[0]);
-        }
-    }, [activeEngineToastId, engineResult.toastCards]);
-
-    React.useEffect(() => {
-        const toastId = activeEngineToastId;
-        if (toastId && toastId !== prevToastIdRef.current) {
-            markCardShown(toastId, Date.now());
-        }
-        prevToastIdRef.current = toastId;
-    }, [activeEngineToastId, markCardShown]);
+    useFocusRuntimeSignals({
+        session,
+        isEntryRitualActive,
+        activeCarouselCardId,
+        activeEngineToastId,
+        toastCards: engineResult.toastCards,
+        foregroundExposureMs: CARD_FOREGROUND_EXPOSURE_MS,
+        setActiveEngineToastId,
+        markCardShown,
+        recordSessionInteraction,
+        recordInactivityDetected,
+        recordStabilityRecovered,
+    });
 
     if (!session || (!session.isActive && !session.endedAt)) return null;
 

@@ -42,7 +42,13 @@ function makeEvent(type: FocusSessionEvent["type"], timestamp: string): FocusSes
         id: `${type}-${timestamp}`,
         sessionId: "session-1",
         type,
-        runtimeState: type === "inactivity_detected" ? "friction_detected" : "active",
+        runtimeState: type === "session_abandoned"
+            ? "abandoned"
+            : type === "session_completed"
+                ? "completed"
+                : type === "inactivity_detected"
+                    ? "friction_detected"
+                    : "active",
         timestamp,
         relativeMs: 0,
     };
@@ -80,7 +86,7 @@ function makeRecentAnalytics(): FocusSessionAnalytics[] {
             startDelayMs: 20_000,
             progressScore: 84,
             frictionScore: 18,
-            consistencyScore: 66,
+            contextualConsistencyScore: 66,
             behaviorScore: 83,
             timeWindow: "morning",
             durationBucket: "medium",
@@ -97,7 +103,7 @@ function makeRecentAnalytics(): FocusSessionAnalytics[] {
                 scoreBreakdown: {
                     progress: 84,
                     friction: 18,
-                    consistency: 66,
+                    contextualConsistency: 66,
                     behavior: 83,
                 },
             },
@@ -134,7 +140,7 @@ function makeRecentAnalytics(): FocusSessionAnalytics[] {
             startDelayMs: 45_000,
             progressScore: 77,
             frictionScore: 29,
-            consistencyScore: 61,
+            contextualConsistencyScore: 61,
             behaviorScore: 74,
             timeWindow: "morning",
             durationBucket: "medium",
@@ -151,7 +157,7 @@ function makeRecentAnalytics(): FocusSessionAnalytics[] {
                 scoreBreakdown: {
                     progress: 77,
                     friction: 29,
-                    consistency: 61,
+                    contextualConsistency: 61,
                     behavior: 74,
                 },
             },
@@ -173,7 +179,7 @@ describe("deriveSessionAnalytics", () => {
         expect(analytics.progressScore).toBeGreaterThan(analytics.frictionScore);
         expect(analytics.timeWindow).toBe("morning");
         expect(analytics.durationBucket).toBe("medium");
-        expect(analytics.consistencyScore).toBeGreaterThanOrEqual(50);
+        expect(analytics.contextualConsistencyScore).toBeGreaterThanOrEqual(50);
     });
 
     it("marks a short unstable session with unresolved inactivity as abandoned", () => {
@@ -202,5 +208,23 @@ describe("deriveSessionAnalytics", () => {
         expect(analytics.inactivityDurationMs).toBeGreaterThan(0);
         expect(analytics.frictionScore).toBeGreaterThanOrEqual(60);
         expect(analytics.behaviorScore).toBeLessThan(analytics.progressScore);
+    });
+
+    it("respects an explicit runtime abandoned terminal event over heuristics", () => {
+        const analytics = deriveSessionAnalytics({
+            userId: "user-1",
+            session: makeSession({
+                endedAt: "2026-03-16T09:46:00.000Z",
+                plannedDurationMs: 50 * 60 * 1000,
+                progressFeelingAfter: 4,
+                exitCount: 0,
+            }),
+            events: [
+                makeEvent("session_abandoned", "2026-03-16T09:46:00.000Z"),
+            ],
+            recentAnalytics: makeRecentAnalytics(),
+        });
+
+        expect(analytics.closureType).toBe("abandoned");
     });
 });

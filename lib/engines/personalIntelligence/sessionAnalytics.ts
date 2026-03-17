@@ -85,6 +85,49 @@ function sortEvents(events: FocusSessionEvent[] = []) {
     return [...events].sort((left, right) => toTimestamp(left.timestamp) - toTimestamp(right.timestamp));
 }
 
+function inferAbandonedClosure(args: {
+    completionRatio: number;
+    subjectiveProgress: number;
+    exitCount: number;
+    inactivityCount: number;
+    sustainedWorkRatio: number;
+}) {
+    return args.completionRatio < 0.45 &&
+        args.subjectiveProgress < 0.7 &&
+        (args.exitCount >= 2 || args.inactivityCount >= 1 || args.sustainedWorkRatio < 0.35);
+}
+
+export function resolveSessionClosureType(args: {
+    events?: FocusSessionEvent[];
+    completionRatio: number;
+    subjectiveProgress: number;
+    exitCount: number;
+    inactivityCount: number;
+    sustainedWorkRatio: number;
+}): FocusSessionAnalytics["closureType"] {
+    const explicitTerminalEvent = [...sortEvents(args.events)].reverse().find((event) => (
+        event.type === "session_abandoned" || event.type === "session_completed"
+    ));
+
+    if (explicitTerminalEvent?.type === "session_abandoned") {
+        return "abandoned";
+    }
+
+    if (explicitTerminalEvent?.type === "session_completed") {
+        return "completed";
+    }
+
+    return inferAbandonedClosure({
+        completionRatio: args.completionRatio,
+        subjectiveProgress: args.subjectiveProgress,
+        exitCount: args.exitCount,
+        inactivityCount: args.inactivityCount,
+        sustainedWorkRatio: args.sustainedWorkRatio,
+    })
+        ? "abandoned"
+        : "completed";
+}
+
 function deriveInactivitySummary(events: FocusSessionEvent[], endedAt: string) {
     let inactiveSince = 0;
     let inactivityCount = 0;
@@ -248,10 +291,14 @@ export function deriveSessionAnalytics({
         ? Math.min(0.16, recoveryRatio * 0.16)
         : 0.08;
 
-    const likelyAbandoned = completionRatio < 0.45 &&
-        subjectiveProgress < 0.7 &&
-        (exitCount >= 2 || inactivitySummary.inactivityCount >= 1 || sustainedWorkRatio < 0.35);
-    const closureType = likelyAbandoned ? "abandoned" : "completed";
+    const closureType = resolveSessionClosureType({
+        events,
+        completionRatio,
+        subjectiveProgress,
+        exitCount,
+        inactivityCount: inactivitySummary.inactivityCount,
+        sustainedWorkRatio,
+    });
 
     const stabilityRatio = clampUnit(activeRatio - interruptionPenalty - inactivityPenalty + recoveryBonus);
     const continuityRatio = clampUnit(
@@ -281,7 +328,7 @@ export function deriveSessionAnalytics({
         (frictionEvents > 0 ? (1 - recoveryRatio) * 0.14 : 0)
     ) * 100;
 
-    const consistencyScore = calculateConsistencyContextScore(
+    const contextualConsistencyScore = calculateConsistencyContextScore(
         session,
         recentAnalytics,
         timeWindow,
@@ -327,7 +374,7 @@ export function deriveSessionAnalytics({
         startDelayMs,
         progressScore: Math.round(progressScore),
         frictionScore: Math.round(frictionScore),
-        consistencyScore,
+        contextualConsistencyScore,
         behaviorScore: Math.round(behaviorScore),
         timeWindow,
         durationBucket,
@@ -344,7 +391,7 @@ export function deriveSessionAnalytics({
             scoreBreakdown: {
                 progress: Math.round(progressScore),
                 friction: Math.round(frictionScore),
-                consistency: consistencyScore,
+                contextualConsistency: contextualConsistencyScore,
                 behavior: Math.round(behaviorScore),
             },
         },

@@ -33,6 +33,7 @@ import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { BlockType } from '@/lib/types/blocks';
 import { focusCardCooldowns } from '@/lib/engines/cardsEngine';
 import { persistCompletedSession } from '@/lib/services/focusService';
+import { resolveSessionClosureType } from '@/lib/engines/personalIntelligence/sessionAnalytics';
 
 type StudyTechniqueLayerConfig = {
     state?: {
@@ -380,6 +381,7 @@ interface FocusState {
         result?: string | null;
         payload?: Record<string, unknown>;
     }) => void;
+    recordSessionInteraction: (source?: string, now?: number) => void;
     recordInactivityDetected: (source?: string) => void;
     recordStabilityRecovered: (source?: string) => void;
 
@@ -718,10 +720,11 @@ export const useFocusStore = create<FocusState>()(
             finish: async () => {
                 const { session, interventions } = get();
                 if (!session) return;
-                const now = new Date().toISOString();
+                const finishedAtMs = Date.now();
+                const now = new Date(finishedAtMs).toISOString();
                 let finalTotalPausedMs = session.totalPausedMs;
                 if (session.isPaused && session.pausedAt) {
-                    finalTotalPausedMs += new Date().getTime() - new Date(session.pausedAt).getTime();
+                    finalTotalPausedMs += finishedAtMs - new Date(session.pausedAt).getTime();
                 }
 
                 const finishedSessionBase: FocusSession = {
@@ -740,13 +743,37 @@ export const useFocusStore = create<FocusState>()(
                     persistenceStatus: "pending",
                     history: [...(session.history || []), 'Finished']
                 };
+                const actualDurationMs = Math.max(
+                    0,
+                    new Date(now).getTime() - new Date(finishedSessionBase.startedAt).getTime()
+                );
+                const plannedDurationMs = Math.max(
+                    actualDurationMs || (25 * 60 * 1000),
+                    finishedSessionBase.plannedDurationMs ?? 0
+                );
+                const activeDurationMs = Math.max(0, actualDurationMs - finalTotalPausedMs);
+                const closureType = resolveSessionClosureType({
+                    events: finishedSessionBase.events,
+                    completionRatio: plannedDurationMs > 0 ? Math.min(1, actualDurationMs / plannedDurationMs) : 1,
+                    subjectiveProgress: finishedSessionBase.progressFeelingAfter
+                        ? Math.min(1, Math.max(0, (finishedSessionBase.progressFeelingAfter - 1) / 4))
+                        : 0.5,
+                    exitCount: finishedSessionBase.exitCount ?? 0,
+                    inactivityCount: (finishedSessionBase.events ?? []).filter((event) => event.type === "inactivity_detected").length,
+                    sustainedWorkRatio: plannedDurationMs > 0
+                        ? Math.min(1, Math.max(0, activeDurationMs / plannedDurationMs))
+                        : 1,
+                });
+                const terminalEventType = closureType === "abandoned" ? "session_abandoned" : "session_completed";
+                const terminalRuntimeState = closureType === "abandoned" ? "abandoned" : "completed";
                 const finishedSession = appendRuntimeEvent(
                     finishedSessionBase,
-                    "session_completed",
-                    "completed",
-                    Date.now(),
+                    terminalEventType,
+                    terminalRuntimeState,
+                    finishedAtMs,
                     {
                         plannedDurationMs: finishedSessionBase.plannedDurationMs ?? null,
+                        closureType,
                     }
                 );
 
@@ -1272,6 +1299,35 @@ export const useFocusStore = create<FocusState>()(
             },
 
             // ── GYM ACTIONS ────────────────────────────────────────────────
+
+            recordSessionInteraction: (source = "focus_runtime_activity", now = Date.now()) => {
+                const { session } = get();
+                if (!session || session.isPaused || session.endedAt) return;
+
+                const lastInteractionAtMs = session.lastInteractionAt
+                    ? new Date(session.lastInteractionAt).getTime()
+                    : 0;
+                const interactionState = noteSessionInteraction(session, now);
+
+                if (lastInteractionAtMs > 0 && (now - lastInteractionAtMs) < 15_000) {
+                    set({
+                        session: {
+                            ...session,
+                            ...interactionState,
+                        }
+                    });
+                    return;
+                }
+
+                set({
+                    session: appendRuntimeEvent({
+                        ...session,
+                        ...interactionState,
+                    }, "session_interaction", session.runtimeState ?? "active", now, {
+                        source,
+                    })
+                });
+            },
 
             recordInactivityDetected: (source = "focus_overlay_idle") => {
                 const { session } = get();

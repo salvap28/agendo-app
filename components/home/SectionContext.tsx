@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block } from "@/lib/types/blocks";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Play, Flame, Activity, Clock } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Play, Flame, Activity, Clock, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -16,6 +16,16 @@ import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
 import { sendNotification } from "@/lib/utils/notifications";
 
 import { createClient, getClientUser } from "@/lib/supabase/client";
+import { PlanningRecommendation } from "@/lib/types/planning";
+import {
+    acceptPlanningRecommendation,
+    applyPlanningRecommendation,
+    canApplyRecommendation,
+    dismissPlanningRecommendation,
+    fetchDayPlanning,
+} from "@/lib/services/planningService";
+import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
+import { GuidedPlanningSheet } from "@/components/planning/GuidedPlanningSheet";
 
 const BLOCK_LABELS: Record<string, string> = {
     deep_work: "Deep Work",
@@ -37,18 +47,78 @@ interface HomeSummaryData {
     main_insight: string;
     progress_signal: "positive" | "quiet" | "neutral";
     soft_recommendation: string;
+    profile_calibration_progress: number;
     focus_streak: number;
     weekly_sessions_count: number;
     best_focus_window: "morning" | "afternoon" | "evening" | "night" | null;
 }
 
+const FOCUS_WINDOW_LABELS: Record<NonNullable<HomeSummaryData["best_focus_window"]>, string> = {
+    morning: "Morning",
+    afternoon: "Afternoon",
+    evening: "Evening",
+    night: "Night",
+};
+
+function ProfileCalibrationRing({ value }: { value: number }) {
+    const size = 58;
+    const strokeWidth = 5;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const safeValue = Math.max(0, Math.min(100, value));
+    const dashOffset = circumference - ((safeValue / 100) * circumference);
+
+    return (
+        <div className="relative flex h-[58px] w-[58px] items-center justify-center">
+            <svg
+                width={size}
+                height={size}
+                viewBox={`0 0 ${size} ${size}`}
+                className="-rotate-90"
+            >
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth={strokeWidth}
+                />
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="url(#profile-calibration-gradient)"
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                />
+                <defs>
+                    <linearGradient id="profile-calibration-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="rgba(255,216,145,1)" />
+                        <stop offset="100%" stopColor="rgba(131,176,255,1)" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold tracking-tight text-white/88">
+                {safeValue}%
+            </div>
+        </div>
+    );
+}
+
 export function SectionContext({ onNext }: SectionContextProps) {
-    const { blocks } = useBlocksStore();
+    const { blocks, fetchBlocks } = useBlocksStore();
     const { session, returnToFocus, openFree } = useFocusStore();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [summaryData, setSummaryData] = useState<HomeSummaryData | null>(null);
+    const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
+    const [planningOpen, setPlanningOpen] = useState(false);
+    const [applyingRecommendationId, setApplyingRecommendationId] = useState<string | null>(null);
     const { settings } = useSettingsStore();
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
@@ -58,6 +128,22 @@ export function SectionContext({ onNext }: SectionContextProps) {
         if (hour < 18) return "Good afternoon";
         return "Good evening";
     }, [currentTime]);
+
+    const planningSignature = useMemo(() => (
+        blocks
+            .filter((block) => isSameDay(block.startAt, currentTime))
+            .map((block) => [
+                block.id,
+                block.startAt.toISOString(),
+                block.endAt.toISOString(),
+                block.type,
+                block.priority ?? "",
+                block.flexibility ?? "",
+                block.intensity ?? "",
+                block.optional ?? "",
+            ].join(":"))
+            .join("|")
+    ), [blocks, currentTime]);
 
     const nextBlock = useMemo(() => {
         const todayBlocks = blocks.filter((block) => isSameDay(block.startAt, currentTime));
@@ -96,11 +182,11 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     if (!sentNotificationsRef.current.has(notifId)) {
                         sentNotificationsRef.current.add(notifId);
 
-                        let bodyMsg = `Empezando en ${offset} minutos.`;
-                        if (offset === 0) bodyMsg = "¡Tu bloque empieza ahora!";
-                        else if (offset === 60) bodyMsg = "Tu bloque empieza en 1 hora.";
+                        let bodyMsg = `Starts in ${offset} minutes.`;
+                        if (offset === 0) bodyMsg = "Your block starts now.";
+                        else if (offset === 60) bodyMsg = "Your block starts in 1 hour.";
 
-                        sendNotification(block.title || "Recordatorio de bloque", {
+                        sendNotification(block.title || "Block reminder", {
                             body: bodyMsg,
                             icon: "/favicon.ico"
                         });
@@ -123,8 +209,8 @@ export function SectionContext({ onNext }: SectionContextProps) {
             if (hour >= 6 && hour < 12 && blocks.length > 0) {
                 const todayBlocks = blocks.filter(b => isSameDay(b.startAt, new Date()));
                 if (todayBlocks.length > 0) {
-                    sendNotification("☀️ Daily Briefing", {
-                        body: `Buen día Salva, tenés ${todayBlocks.length} bloques programados para hoy. ¡A darle con todo!`,
+                    sendNotification("Daily Briefing", {
+                        body: `You have ${todayBlocks.length} blocks lined up for today.`,
                         icon: "/favicon.ico"
                     });
                     localStorage.setItem('agendo:lastBriefing', todayStr);
@@ -170,6 +256,40 @@ export function SectionContext({ onNext }: SectionContextProps) {
         const interval = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(interval);
     }, []);
+
+    const refreshPlanning = useCallback(async () => {
+        try {
+            const guide = await fetchDayPlanning(currentTime.toISOString().slice(0, 10));
+            setPlanningRecommendations(guide.recommendations.slice(0, 2));
+        } catch (error) {
+            console.error("Failed to refresh planning", error);
+        }
+    }, [currentTime]);
+
+    useEffect(() => {
+        void refreshPlanning();
+    }, [planningSignature, refreshPlanning]);
+
+    const handleDismissRecommendation = async (recommendation: PlanningRecommendation) => {
+        await dismissPlanningRecommendation(recommendation.id);
+        await refreshPlanning();
+    };
+
+    const handleAcceptRecommendation = async (recommendation: PlanningRecommendation) => {
+        await acceptPlanningRecommendation(recommendation.id);
+        await refreshPlanning();
+    };
+
+    const handleApplyRecommendation = async (recommendation: PlanningRecommendation) => {
+        setApplyingRecommendationId(recommendation.id);
+        try {
+            await applyPlanningRecommendation(recommendation.id);
+            await fetchBlocks();
+            await refreshPlanning();
+        } finally {
+            setApplyingRecommendationId(null);
+        }
+    };
 
     return (
         <section
@@ -247,7 +367,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                             color: '#FFFFFF'
                                         }}
                                     >
-                                        Your schedule is clear. Plan your day.
+                                        Your schedule is clear.
+                                    </p>
+                                    <p className="mt-2 max-w-[420px] text-center text-sm text-white/48">
+                                        Use the dock below to plan or start a clean focus block.
                                     </p>
                                 </div>
                             );
@@ -270,7 +393,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     }}
                                     className={isSessionPaused ? "animate-pulse" : ""}
                                 >
-                                    {isSessionPaused ? "SESIÓN PAUSADA - CLICK PARA CONTINUAR" : isFocusCardActive ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
+                                    {isSessionPaused ? "FOCUS PAUSED - TAP TO RETURN" : isFocusCardActive ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
                                 </span>
 
                                 {/* Glass Pill for Block */}
@@ -352,67 +475,127 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     })()}
                 </div>
 
-                {/* V1 Insight Summary Card */}
+                {/* Home Summary Card */}
                 {summaryData && (
-                    <div className="mt-8 w-full max-w-[420px] rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5 backdrop-blur-md flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                        <div className="flex justify-between items-center text-white/50 text-[10px] uppercase tracking-[0.15em] font-semibold mb-1">
-                            <span>
-                                {summaryData.progress_signal === 'positive' ? 'Fluyendo' : summaryData.progress_signal === 'quiet' ? 'En pausa' : 'Construyendo'}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                IMPULSO <span className="text-white/80">{summaryData.momentum_current}</span>
-                                {summaryData.momentum_delta_week > 0 && <span className="text-emerald-400">+{summaryData.momentum_delta_week}</span>}
-                                {summaryData.momentum_delta_week < 0 && <span className="text-rose-400">{summaryData.momentum_delta_week}</span>}
-                            </span>
+                    <div className="mt-8 w-full max-w-[420px] rounded-[28px] border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                                    {summaryData.progress_signal === "positive"
+                                        ? "Sharper"
+                                        : summaryData.progress_signal === "quiet"
+                                            ? "Quiet"
+                                            : "Calibrating"}
+                                </p>
+                                <p className="mt-2 text-base font-semibold tracking-tight text-white/90">
+                                    {summaryData.main_insight}
+                                </p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center">
+                                <ProfileCalibrationRing value={summaryData.profile_calibration_progress} />
+                                <span className="text-[10px] uppercase tracking-[0.16em] text-white/38">
+                                    Profile fill
+                                </span>
+                            </div>
                         </div>
-                        <p className="text-white/80 text-sm leading-relaxed font-medium">
-                            {summaryData.main_insight}
-                        </p>
-                        <p className="text-white/40 text-xs">
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
+                            <span className="rounded-full border border-white/10 px-2.5 py-1">
+                                Composite {summaryData.momentum_current}
+                            </span>
+                            {summaryData.momentum_delta_week > 0 && (
+                                <span className="rounded-full border border-emerald-400/15 bg-emerald-400/8 px-2.5 py-1 text-emerald-300">
+                                    +{summaryData.momentum_delta_week} vs last week
+                                </span>
+                            )}
+                            {summaryData.momentum_delta_week < 0 && (
+                                <span className="rounded-full border border-rose-400/15 bg-rose-400/8 px-2.5 py-1 text-rose-300">
+                                    {summaryData.momentum_delta_week} vs last week
+                                </span>
+                            )}
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-white/56">
                             {summaryData.soft_recommendation}
                         </p>
 
-                        {/* Extra Context Row */}
-                        <div className="flex items-center gap-4 mt-2 pt-3 border-t border-white/[0.05] text-white/40 text-[11px] font-medium tracking-wide uppercase">
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[0.05] pt-3 text-[11px] font-medium text-white/46">
                             {(summaryData.focus_streak || 0) > 0 && (
-                                <div className="flex items-center gap-1.5 text-orange-400/80">
+                                <div className="flex items-center gap-1.5 rounded-full border border-orange-400/15 bg-orange-400/8 px-2.5 py-1 text-orange-200/82">
                                     <Flame className="w-3.5 h-3.5" />
-                                    <span>{summaryData.focus_streak} DÍAS</span>
+                                    <span>{summaryData.focus_streak} day streak</span>
                                 </div>
                             )}
-                            <div className="flex items-center gap-1.5 text-indigo-400/80">
+                            <div className="flex items-center gap-1.5 rounded-full border border-indigo-400/15 bg-indigo-400/8 px-2.5 py-1 text-indigo-100/82">
                                 <Activity className="w-3.5 h-3.5" />
-                                <span>{summaryData.weekly_sessions_count || 0} SEMANA</span>
+                                <span>{summaryData.weekly_sessions_count || 0} this week</span>
                             </div>
                             {summaryData.best_focus_window && (
-                                <div className="flex items-center gap-1.5 ml-auto text-white/50">
+                                <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-white/56">
                                     <Clock className="w-3.5 h-3.5" />
-                                    <span>{summaryData.best_focus_window === "morning" ? "Mañana" : summaryData.best_focus_window === "afternoon" ? "Tarde" : summaryData.best_focus_window === "evening" ? "Tardecita" : "Noche"}</span>
+                                    <span>Best {FOCUS_WINDOW_LABELS[summaryData.best_focus_window]}</span>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
 
-                {/* Actions Group */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 mt-7">
-                    {/* Open Calendar CTA */}
-                    <GlassButton onClick={onNext} variant="default">
-                        <Calendar className="w-4 h-4 opacity-70" />
-                        Open Calendar
-                    </GlassButton>
+                <div className="mt-6 w-full max-w-[760px] rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-2xl">
+                    <div className="mb-4 flex flex-col gap-2">
+                        <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+                                Planning assist
+                            </p>
+                            <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">
+                                A few useful moves. Real context only.
+                            </h3>
+                        </div>
+                    </div>
 
-                    {/* Focus Interactions */}
-                    {session && !session.isActive ? (
-                        <GlassButton onClick={returnToFocus} variant="primary">
-                            Return to Focus
+                    <div className="grid gap-3">
+                        {planningRecommendations.length === 0 ? (
+                            <div className="rounded-[24px] border border-white/[0.08] bg-black/20 px-4 py-5 text-sm leading-6 text-white/55">
+                                No strong adjustment stands out right now. If the day tightens, Agendo will surface it here.
+                            </div>
+                        ) : (
+                            planningRecommendations.map((recommendation) => (
+                                <PlanningRecommendationCard
+                                    key={recommendation.id}
+                                    compact
+                                    recommendation={recommendation}
+                                    onAccept={handleAcceptRecommendation}
+                                    onDismiss={handleDismissRecommendation}
+                                    onApply={canApplyRecommendation(recommendation) ? handleApplyRecommendation : undefined}
+                                    applying={applyingRecommendationId === recommendation.id}
+                                />
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                <div className="mt-7 w-full max-w-[760px] rounded-[30px] border border-white/[0.1] bg-black/30 p-3 backdrop-blur-2xl shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)]">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        <GlassButton onClick={() => setPlanningOpen(true)} variant="default" className="justify-center">
+                            <Sparkles className="h-4 w-4 opacity-80" />
+                            Plan
                         </GlassButton>
-                    ) : !session ? (
-                        <GlassButton onClick={openFree} variant="default">
-                            <Play className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                            Free Focus
+                        <GlassButton onClick={onNext} variant="default" className="justify-center">
+                            <Calendar className="w-4 h-4 opacity-70" />
+                            Open Calendar
                         </GlassButton>
-                    ) : null}
+                        {session && !session.isActive ? (
+                            <GlassButton onClick={returnToFocus} variant="primary" className="justify-center">
+                                Return to Focus
+                            </GlassButton>
+                        ) : session ? (
+                            <GlassButton onClick={returnToFocus} variant="primary" className="justify-center">
+                                Back to Focus
+                            </GlassButton>
+                        ) : (
+                            <GlassButton onClick={openFree} variant="default" className="justify-center">
+                                <Play className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+                                Free Focus
+                            </GlassButton>
+                        )}
+                    </div>
                 </div>
 
             </div>
@@ -423,6 +606,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     onClose={() => setSelectedBlockId(null)}
                 />
             )}
+
+            <GuidedPlanningSheet
+                open={planningOpen}
+                onOpenChange={setPlanningOpen}
+                date={currentTime.toISOString().slice(0, 10)}
+            />
 
         </section>
     );

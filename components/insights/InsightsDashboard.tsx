@@ -32,7 +32,7 @@ function formatWarmup(stage: WarmupStage) {
 function formatWindow(window?: string | null) {
     switch (window) {
         case "morning":
-            return "Mañana";
+            return "Manana";
         case "afternoon":
             return "Tarde";
         case "evening":
@@ -61,10 +61,50 @@ function formatRelativeDate(value: string | null) {
     }).format(new Date(value));
 }
 
+function buildRecentNarrative(data: InsightsDashboardData) {
+    const { profile } = data;
+    const recentImprovement = profile.recentImprovements[0];
+    const consistencyTrend = profile.consistencyTrend;
+
+    if (data.cards[0]) {
+        return data.cards[0].description;
+    }
+
+    if (recentImprovement) {
+        if (recentImprovement.data.area === "friction") {
+            return "La friccion reciente viene aflojando frente a la ventana anterior.";
+        }
+        if (recentImprovement.data.area === "stability") {
+            return "Las sesiones recientes se estan sosteniendo con una base mas firme.";
+        }
+        if (recentImprovement.data.area === "recovery") {
+            return "La recuperacion despues de una ruptura viene mejorando.";
+        }
+        return "La consistencia reciente subio frente a la ventana previa.";
+    }
+
+    if (consistencyTrend) {
+        if (consistencyTrend.data.direction === "improving") {
+            return "La continuidad reciente se ve mas firme que en la ventana anterior.";
+        }
+        if (consistencyTrend.data.direction === "declining") {
+            return "La continuidad reciente se ve mas fragil y conviene leerla con cuidado.";
+        }
+        return "La continuidad reciente se mantiene bastante estable.";
+    }
+
+    return profile.warmupStage === "ready"
+        ? "El perfil esta consolidado, pero hoy no hay un hallazgo dominante para forzar una conclusion."
+        : "Agendo sigue separando senal util de ruido antes de consolidar patrones persistentes.";
+}
+
 export function InsightsDashboard({ data }: InsightsDashboardProps) {
     const { profile, cards, timeline } = data;
     const visibleTimeline = timeline.slice(-14);
     const topFriction = profile.topFrictionSources[0];
+    const leadCard = cards[0] ?? null;
+    const recentImprovement = profile.recentImprovements[0] ?? null;
+    const consistencyTrend = profile.consistencyTrend;
 
     return (
         <div className="relative min-h-screen overflow-hidden bg-[#020205] text-white">
@@ -105,10 +145,10 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                         <div className="mt-5 max-w-3xl space-y-4">
                             <h1 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-5xl">
-                                Lo que Agendo va aprendiendo sobre tu manera de enfocarte.
+                                Lo que Agendo ya puede sostener sobre tu manera de enfocarte.
                             </h1>
                             <p className="max-w-2xl text-sm leading-7 text-white/60 sm:text-base">
-                                Esta capa no intenta diagnosticarte ni adivinarte. Observa tu historial, cuida la evidencia y te devuelve hallazgos personales para acompañarte con más cercanía, memoria persistente y señales trazables.
+                                Esta capa no intenta adivinarte. Toma tu historial de Focus Mode, valida evidencia y te devuelve lecturas personales que puedan rastrearse a sesiones reales.
                             </p>
                         </div>
 
@@ -116,7 +156,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                             <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-2 text-white/40">
                                     <Clock3 className="h-4 w-4" />
-                                    <span className="text-[11px] uppercase tracking-[0.18em]">Mejor Franja</span>
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Mejor franja</span>
                                 </div>
                                 <p className="mt-3 text-xl font-semibold text-white">
                                     {formatWindow(profile.bestFocusWindow?.data.window)}
@@ -124,14 +164,14 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 <p className="mt-1 text-sm text-white/40">
                                     {profile.bestFocusWindow
                                         ? `${profile.bestFocusWindow.sampleSize} sesiones con evidencia suficiente`
-                                        : "Todavía no hay evidencia mínima"}
+                                        : "Todavia no hay evidencia minima"}
                                 </p>
                             </div>
 
                             <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-2 text-white/40">
                                     <Gauge className="h-4 w-4" />
-                                    <span className="text-[11px] uppercase tracking-[0.18em]">Duración</span>
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Duracion</span>
                                 </div>
                                 <p className="mt-3 text-xl font-semibold text-white">
                                     {profile.optimalSessionLength
@@ -148,15 +188,15 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                             <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-2 text-white/40">
                                     <ShieldAlert className="h-4 w-4" />
-                                    <span className="text-[11px] uppercase tracking-[0.18em]">Fricción</span>
+                                    <span className="text-[11px] uppercase tracking-[0.18em]">Friccion</span>
                                 </div>
                                 <p className="mt-3 text-xl font-semibold text-white">
                                     {topFriction ? topFriction.data.label : "Sin fuente dominante"}
                                 </p>
                                 <p className="mt-1 text-sm text-white/40">
                                     {topFriction
-                                        ? `${topFriction.data.averageFrictionScore} pts de fricción media`
-                                        : "Todavía no hay un patrón estable"}
+                                        ? `${topFriction.data.averageFrictionScore} pts de friccion media`
+                                        : "Todavia no hay un patron estable"}
                                 </p>
                             </div>
                         </div>
@@ -165,7 +205,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                     <section className="grid gap-4">
                         <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-6 backdrop-blur-3xl">
                             <div className="flex items-center justify-between text-white/40">
-                                <span className="text-[11px] uppercase tracking-[0.18em]">Semana reciente</span>
+                                <span className="text-[11px] uppercase tracking-[0.18em]">Estado reciente</span>
                                 <Sparkles className="h-4 w-4 text-violet-200" />
                             </div>
                             <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
@@ -175,7 +215,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 </div>
                                 <div>
                                     <p className="text-3xl font-semibold text-white">{data.completionRate}%</p>
-                                    <p className="mt-1 text-sm text-white/40">cierres consistentes</p>
+                                    <p className="mt-1 text-sm text-white/40">cierres sostenidos</p>
                                 </div>
                                 <div>
                                     <p className="text-3xl font-semibold text-white">{data.averageStability}</p>
@@ -186,18 +226,32 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                         <div className="rounded-[30px] border border-white/10 bg-white/[0.05] p-6 backdrop-blur-3xl">
                             <div className="flex items-center justify-between text-white/40">
-                                <span className="text-[11px] uppercase tracking-[0.18em]">Pulso reciente</span>
+                                <span className="text-[11px] uppercase tracking-[0.18em]">Lectura principal</span>
                                 <TrendingUp className="h-4 w-4 text-emerald-300" />
                             </div>
-                            <div className="mt-5 flex items-end gap-3">
-                                <p className="text-4xl font-semibold text-white">{data.momentumCurrent}</p>
-                                <span className={`mb-1 text-sm ${data.momentumDeltaWeek >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                                    {data.momentumDeltaWeek >= 0 ? "+" : ""}{data.momentumDeltaWeek} vs semana
-                                </span>
+                            <div className="mt-5 space-y-4">
+                                <p className="text-xl font-semibold text-white">
+                                    {leadCard?.title ?? "Todavia no conviene fijar una verdad persistente"}
+                                </p>
+                                <p className="text-sm leading-6 text-white/45">
+                                    {buildRecentNarrative(data)}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-white/35">
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        evidencia {Math.round((leadCard?.confidence ?? profile.confidenceOverview.overall ?? 0) * 100)}%
+                                    </span>
+                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                                        senal compuesta {data.compositeSignalCurrent}
+                                    </span>
+                                    <span className={`rounded-full border px-3 py-1 ${
+                                        data.compositeSignalDeltaWeek >= 0
+                                            ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"
+                                            : "border-rose-300/20 bg-rose-400/10 text-rose-200"
+                                    }`}>
+                                        {data.compositeSignalDeltaWeek >= 0 ? "+" : ""}{data.compositeSignalDeltaWeek} vs semana
+                                    </span>
+                                </div>
                             </div>
-                            <p className="mt-3 text-sm leading-6 text-white/45">
-                                La lectura combina progreso, consistencia, fricción y estado conductual. No busca exigirte más: intenta darte una señal compuesta y amable de tu propio historial.
-                            </p>
                         </div>
                     </section>
                 </div>
@@ -206,10 +260,10 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
-                                Señales activas
+                                Hallazgos activos
                             </p>
                             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                                Lo que hoy ya se deja ver con claridad
+                                Lo que hoy ya se sostiene con evidencia
                             </h2>
                         </div>
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/45">
@@ -219,7 +273,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
 
                     {cards.length === 0 ? (
                         <div className="mt-6 rounded-[24px] border border-dashed border-white/12 bg-black/20 p-6 text-sm leading-7 text-white/50">
-                            Agendo ya está registrando datos, pero todavía necesita un poco más de evidencia antes de devolverte patrones persistentes. En esta etapa prefiere acompañarte con prudencia antes que llenarte de conclusiones flojas.
+                            Agendo ya esta registrando datos, pero todavia necesita mas repeticion antes de devolverte patrones persistentes. En esta etapa prefiere prudencia antes que conclusiones flojas.
                         </div>
                     ) : (
                         <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -236,7 +290,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                                     ? "border border-amber-300/25 bg-amber-400/10 text-amber-200"
                                                     : "border border-violet-300/25 bg-violet-400/10 text-violet-200"
                                         }`}>
-                                            {card.tone === "positive" ? "Mejora" : card.tone === "caution" ? "Fricción" : "Patrón"}
+                                            {card.tone === "positive" ? "Mejora" : card.tone === "caution" ? "Friccion" : "Patron"}
                                         </span>
                                         <span className="text-xs text-white/35">
                                             conf. {Math.round(card.confidence * 100)}%
@@ -262,7 +316,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                     Tendencia reciente
                                 </p>
                                 <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                                    Evolución de la capa analítica
+                                    Como se movio tu ritmo estas ultimas dos semanas
                                 </h2>
                             </div>
                             <Flame className="h-5 w-5 text-violet-300" />
@@ -295,7 +349,7 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                         <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-white/40">
                             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-violet-300/80" /> progreso</span>
                             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-300/70" /> estado conductual</span>
-                            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-300/70" /> fricción</span>
+                            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-300/70" /> friccion</span>
                         </div>
                     </div>
 
@@ -315,16 +369,24 @@ export function InsightsDashboard({ data }: InsightsDashboardProps) {
                                 </p>
                             </div>
 
+                            {(recentImprovement || consistencyTrend) && (
+                                <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/55">
+                                    {recentImprovement
+                                        ? `Cambio reciente: ${recentImprovement.data.area === "friction" ? "la friccion bajo" : recentImprovement.data.area === "stability" ? "la estabilidad subio" : recentImprovement.data.area === "recovery" ? "la recuperacion mejoro" : "la consistencia subio"} frente a la ventana anterior.`
+                                        : `Constancia reciente: ${consistencyTrend?.data.direction === "declining" ? "mas fragil" : consistencyTrend?.data.direction === "improving" ? "mas firme" : "estable"} en comparacion con la semana previa.`}
+                                </div>
+                            )}
+
                             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/55">
                                 {profile.warmupStage === "ready"
-                                    ? "El perfil ya usa patrones persistentes y no necesita releer toda la historia cruda en cada request. La idea es acompañarte con memoria, no con ruido."
-                                    : "El perfil ya existe, pero Agendo todavía necesita un poco más de muestra antes de devolverte conclusiones más firmes."}
+                                    ? "El perfil ya usa patrones persistentes y no necesita releer toda la historia cruda en cada request. La idea es acompanarte con memoria, no con ruido."
+                                    : "El perfil ya existe, pero Agendo todavia necesita mas muestra y repeticion antes de devolverte conclusiones firmes."}
                             </div>
 
                             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/55">
-                                Última consolidación diaria: <span className="text-white/75">{formatRelativeDate(profile.lastDailyConsolidatedAt)}</span>
+                                Ultima consolidacion diaria: <span className="text-white/75">{formatRelativeDate(profile.lastDailyConsolidatedAt)}</span>
                                 <br />
-                                Última consolidación semanal: <span className="text-white/75">{formatRelativeDate(profile.lastWeeklyConsolidatedAt)}</span>
+                                Ultima consolidacion semanal: <span className="text-white/75">{formatRelativeDate(profile.lastWeeklyConsolidatedAt)}</span>
                             </div>
                         </div>
                     </div>

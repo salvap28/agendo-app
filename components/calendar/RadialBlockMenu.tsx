@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Block, BlockType, BlockStatus, RecurrencePattern } from "@/lib/types/blocks";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import {
-    Copy,
     Trash2,
     Play,
     CheckCircle2,
@@ -18,20 +17,27 @@ import {
     Briefcase,
     BookOpen,
     Zap,
-    Tag,
     Clock,
     X,
     Bell,
-    Type,
     ArrowLeft,
     Repeat,
-    Layers
+    Layers,
+    type LucideIcon
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
-import { GlassButton } from "@/components/ui/glass-button";
 import { CircularTimePicker } from "@/components/focus/CircularTimePicker";
 import { Input } from "@/components/ui/input";
+import { PlanningRecommendation } from "@/lib/types/planning";
+import {
+    acceptPlanningRecommendation,
+    applyPlanningRecommendation,
+    canApplyRecommendation,
+    dismissPlanningRecommendation,
+    fetchBlockPlanning,
+} from "@/lib/services/planningService";
+import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -45,7 +51,7 @@ import {
 
 // ─── CONFIGURATION ──────────────────────────────────────────────────────────
 
-const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: string; bg: string; hoverBg: string }[] = [
+const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: LucideIcon; color: string; bg: string; hoverBg: string }[] = [
     { value: "deep_work", label: "Deep Work", icon: Layers, color: "text-indigo-400", bg: "bg-indigo-400/20", hoverBg: "hover:bg-indigo-500" },
     { value: "meeting", label: "Meeting", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/20", hoverBg: "hover:bg-blue-500" },
     { value: "gym", label: "Gym", icon: Dumbbell, color: "text-emerald-400", bg: "bg-emerald-400/20", hoverBg: "hover:bg-emerald-500" },
@@ -55,7 +61,7 @@ const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: strin
     { value: "other", label: "Other", icon: MoreHorizontal, color: "text-neutral-400", bg: "bg-neutral-400/20", hoverBg: "hover:bg-neutral-500" },
 ];
 
-const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string; bg: string }[] = [
+const STATUS_OPTS: { value: BlockStatus; label: string; icon: LucideIcon; color: string; bg: string }[] = [
     { value: "planned", label: "Planificado", icon: MoreHorizontal, color: "text-white/50", bg: "bg-white/10" },
     { value: "active", label: "En progreso", icon: Play, color: "text-green-400", bg: "bg-green-400/20" },
     { value: "completed", label: "Completado", icon: CheckCircle2, color: "text-indigo-400", bg: "bg-indigo-400/20" },
@@ -87,7 +93,7 @@ const PRIMARY_ORBIT_RADIUS_DESKTOP = 168;
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { blockId: string; isNewBlock?: boolean; onClose: () => void }) {
-    const { blocks, updateBlock, deleteBlock, deleteBlockSeries, duplicateBlock, setStatus, applyRecurrence } = useBlocksStore();
+    const { blocks, updateBlock, deleteBlock, deleteBlockSeries, setStatus, applyRecurrence, fetchBlocks } = useBlocksStore();
     const { openFromBlock } = useFocusStore();
 
     const block = blocks.find(b => b.id === blockId);
@@ -107,6 +113,28 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [primaryRadius, setPrimaryRadius] = useState(PRIMARY_ORBIT_RADIUS_DESKTOP);
     const [isAddingNotification, setIsAddingNotification] = useState(false);
     const [customNotificationMins, setCustomNotificationMins] = useState("");
+    const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
+    const [planningApplyingId, setPlanningApplyingId] = useState<string | null>(null);
+    const [planningLoading, setPlanningLoading] = useState(false);
+    const planningBlockId = block?.id ?? null;
+    const planningDate = block?.startAt ? block.startAt.toISOString().slice(0, 10) : null;
+    const planningSignature = React.useMemo(() => {
+        if (!planningDate) return "";
+        return blocks
+            .filter((entry) => entry.startAt.toISOString().slice(0, 10) === planningDate)
+            .map((entry) => [
+                entry.id,
+                entry.startAt.toISOString(),
+                entry.endAt.toISOString(),
+                entry.type,
+                entry.priority ?? "",
+                entry.difficulty ?? "",
+                entry.flexibility ?? "",
+                entry.intensity ?? "",
+                entry.optional ?? "",
+            ].join(":"))
+            .join("|");
+    }, [blocks, planningDate]);
 
     useEffect(() => {
         setMounted(true);
@@ -127,6 +155,45 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
+    const refreshPlanning = useCallback(async () => {
+        if (!planningBlockId || !planningDate) return;
+        setPlanningLoading(true);
+        try {
+            const guide = await fetchBlockPlanning(planningBlockId, planningDate);
+            setPlanningRecommendations(guide.recommendations.slice(0, 3));
+        } catch (error) {
+            console.error("Failed to fetch block planning", error);
+        } finally {
+            setPlanningLoading(false);
+        }
+    }, [planningBlockId, planningDate]);
+
+    useEffect(() => {
+        if (!planningBlockId || !planningDate) return;
+        void refreshPlanning();
+    }, [planningSignature, planningBlockId, planningDate, refreshPlanning]);
+
+    const handleDismissPlanning = async (recommendation: PlanningRecommendation) => {
+        await dismissPlanningRecommendation(recommendation.id);
+        await refreshPlanning();
+    };
+
+    const handleAcceptPlanning = async (recommendation: PlanningRecommendation) => {
+        await acceptPlanningRecommendation(recommendation.id);
+        await refreshPlanning();
+    };
+
+    const handleApplyPlanning = async (recommendation: PlanningRecommendation) => {
+        setPlanningApplyingId(recommendation.id);
+        try {
+            await applyPlanningRecommendation(recommendation.id);
+            await fetchBlocks();
+            await refreshPlanning();
+        } finally {
+            setPlanningApplyingId(null);
+        }
+    };
+
     // Guided initialization pass
     const [guidedStep, setGuidedStep] = useState<"center" | "time" | "type" | null>(isNewBlock ? "center" : null);
 
@@ -145,9 +212,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     // Fast local state for 60fps radial dragging without entire WeekView re-rendering
     const [localTime, setLocalTime] = useState({ start: block?.startAt, end: block?.endAt });
-    const localStartMs = localTime.start?.getTime() ?? 0;
-    const localEndMs = localTime.end?.getTime() ?? 0;
-
     useEffect(() => {
         if (activePrimaryNode === "center") {
             setDraftRecurrence(block?.recurrencePattern);
@@ -155,7 +219,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         if (block?.startAt && block?.endAt) {
             setLocalTime({ start: block.startAt, end: block.endAt });
         }
-    }, [activePrimaryNode, block?.recurrencePattern, block?.startAt, block?.endAt]);
+    }, [activePrimaryNode, block, block?.recurrencePattern, block?.startAt, block?.endAt]);
 
     const setOrbitPosition = (el: HTMLElement, x: number, y: number) => {
         // Use transform3d for strict GPU hardware acceleration, critical for mobile 60fps
@@ -350,49 +414,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
     }, [activePrimaryNode, isMobile, primaryRadius, getFocusZoom]);
-
-
-    const isCurrentBlock = useMemo(() => {
-        if (!block) return false;
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        const startMins = block.startAt.getHours() * 60 + block.startAt.getMinutes();
-        const endMins = block.endAt.getHours() * 60 + block.endAt.getMinutes();
-
-        const crossesMidnight = startMins > endMins;
-
-        // Is time within window?
-        let timeMatch = false;
-        if (!crossesMidnight) {
-            timeMatch = nowMins >= startMins && nowMins < endMins;
-        } else {
-            timeMatch = nowMins >= startMins || nowMins < endMins;
-        }
-
-        if (!timeMatch) return false;
-
-        // Is day a match?
-        // Which day should we check against the pattern? 
-        // If it crosses midnight and now is past midnight (nowMins < endMins), the block's "logical" day is yesterday.
-        const logicalDate = new Date(now);
-        if (crossesMidnight && nowMins < endMins) {
-            logicalDate.setDate(logicalDate.getDate() - 1);
-        }
-
-        if (block.recurrencePattern) {
-            if (block.recurrencePattern.type === 'daily') return true;
-            if (block.recurrencePattern.type === 'weekly') {
-                return block.recurrencePattern.days?.includes(logicalDate.getDay()) || false;
-            }
-        }
-
-        // Exact date match for single block
-        const blockLogicalDate = new Date(block.startAt);
-        return logicalDate.getFullYear() === blockLogicalDate.getFullYear() &&
-            logicalDate.getMonth() === blockLogicalDate.getMonth() &&
-            logicalDate.getDate() === blockLogicalDate.getDate();
-
-    }, [block]);
 
     const handleClose = () => {
         setIsClosing(true);
@@ -628,6 +649,87 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 />
                             </div>
 
+                            <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">
+                                    Planning metadata
+                                </span>
+                                <div className="space-y-2 rounded-2xl border border-white/8 bg-black/20 p-3">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[1, 2, 3, 4, 5].map((priority) => (
+                                            <button
+                                                key={`priority-${priority}`}
+                                                onClick={() => updateBlock(block.id, { priority: priority as Block["priority"] })}
+                                                className={cn(
+                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
+                                                    (block.priority ?? 3) === priority
+                                                        ? "bg-indigo-500/25 text-indigo-100"
+                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
+                                                )}
+                                            >
+                                                P{priority}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {(["light", "medium", "high"] as const).map((intensity) => (
+                                            <button
+                                                key={intensity}
+                                                onClick={() => updateBlock(block.id, {
+                                                    intensity,
+                                                    cognitivelyHeavy: intensity === "high" ? true : block.cognitivelyHeavy,
+                                                })}
+                                                className={cn(
+                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
+                                                    (block.intensity ?? "medium") === intensity
+                                                        ? "bg-amber-500/20 text-amber-100"
+                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
+                                                )}
+                                            >
+                                                {intensity === "light" ? "Liviano" : intensity === "medium" ? "Medio" : "Intenso"}
+                                            </button>
+                                        ))}
+                                        {(["fixed", "moderate", "flexible"] as const).map((flexibility) => (
+                                            <button
+                                                key={flexibility}
+                                                onClick={() => updateBlock(block.id, { flexibility })}
+                                                className={cn(
+                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
+                                                    (block.flexibility ?? "moderate") === flexibility
+                                                        ? "bg-sky-500/20 text-sky-100"
+                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
+                                                )}
+                                            >
+                                                {flexibility === "fixed" ? "Fijo" : flexibility === "moderate" ? "Moderado" : "Flexible"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => updateBlock(block.id, { splittable: !(block.splittable ?? true) })}
+                                            className={cn(
+                                                "rounded-2xl border px-3 py-2 text-left text-xs transition-all",
+                                                (block.splittable ?? true)
+                                                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                                                    : "border-white/8 bg-white/[0.03] text-white/48",
+                                            )}
+                                        >
+                                            {(block.splittable ?? true) ? "Divisible" : "No divisible"}
+                                        </button>
+                                        <button
+                                            onClick={() => updateBlock(block.id, { optional: !(block.optional ?? false) })}
+                                            className={cn(
+                                                "rounded-2xl border px-3 py-2 text-left text-xs transition-all",
+                                                (block.optional ?? false)
+                                                    ? "border-white/20 bg-white/[0.08] text-white"
+                                                    : "border-white/8 bg-white/[0.03] text-white/48",
+                                            )}
+                                        >
+                                            {(block.optional ?? false) ? "Opcional" : "Obligatorio"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Recurrence Selector */}
                             <div className="flex flex-col gap-1.5">
                                 <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">Repetición</span>
@@ -646,7 +748,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         setDraftRecurrence(undefined);
                                                     } else {
                                                         setDraftRecurrence({
-                                                            type: opt.value as any,
+                                                            type: opt.value as Exclude<RecurrencePattern["type"], "custom">,
                                                             endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
                                                         });
                                                     }
@@ -894,8 +996,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         const isFocused = activePrimaryNode === pn.id;
                         const isDimmed = activePrimaryNode && activePrimaryNode !== pn.id;
 
-                        // Se calculan solo para el primer frame. Luego rAF asume el control
-                        const pos = calculateNodePosition(i, primaryNodes.length, PRIMARY_RADIUS, 0);
                         const PIcon = pn.icon;
 
                         return (
@@ -1265,6 +1365,49 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 </button>
                             );
                         })}
+                    </div>
+                </div>
+            )}
+
+            {!isNewBlock && block && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-5 z-[410] flex justify-center px-4">
+                    <div className="pointer-events-auto w-full max-w-xl rounded-[30px] border border-white/10 bg-black/55 p-3 backdrop-blur-2xl shadow-[0_20px_80px_-30px_rgba(0,0,0,0.8)]">
+                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+                            <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">
+                                    Sugerencias de Agendo
+                                </p>
+                                <p className="mt-1 text-sm text-white/58">
+                                    Ajustes tacticos para este bloque segun tu perfil y el dia.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => void refreshPlanning()}
+                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/46 transition-colors hover:text-white/80"
+                            >
+                                {planningLoading ? "Analizando..." : "Revisar"}
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            {!planningLoading && planningRecommendations.length === 0 && (
+                                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52">
+                                    Este bloque no necesita una intervencion fuerte por ahora.
+                                </div>
+                            )}
+
+                            {planningRecommendations.map((recommendation) => (
+                                <PlanningRecommendationCard
+                                    key={recommendation.id}
+                                    compact
+                                    recommendation={recommendation}
+                                    onAccept={handleAcceptPlanning}
+                                    onDismiss={handleDismissPlanning}
+                                    onApply={canApplyRecommendation(recommendation) ? handleApplyPlanning : undefined}
+                                    applying={planningApplyingId === recommendation.id}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

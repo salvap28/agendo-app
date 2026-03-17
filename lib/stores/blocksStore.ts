@@ -14,6 +14,15 @@ interface BlockRow {
     notes: string | null;
     tag: string | null;
     color: string | null;
+    priority: number | null;
+    estimated_duration_minutes: number | null;
+    difficulty: number | null;
+    flexibility: Block["flexibility"] | null;
+    intensity: Block["intensity"] | null;
+    deadline: string | null;
+    cognitively_heavy: boolean | null;
+    splittable: boolean | null;
+    optional: boolean | null;
     recurrence_id: string | null;
     recurrence_pattern: Block["recurrencePattern"] | null;
     notifications: number[] | null;
@@ -30,6 +39,15 @@ type BlockInsertPayload = {
     notes?: string;
     tag?: string;
     color?: string;
+    priority?: number;
+    estimated_duration_minutes?: number;
+    difficulty?: number;
+    flexibility?: Block["flexibility"];
+    intensity?: Block["intensity"];
+    deadline?: string;
+    cognitively_heavy?: boolean;
+    splittable?: boolean;
+    optional?: boolean;
     recurrence_id?: string;
     recurrence_pattern?: Block["recurrencePattern"];
     notifications?: number[];
@@ -44,6 +62,15 @@ type BlockUpdatePayload = Partial<{
     notes: string | null;
     tag: string | null;
     color: string | null;
+    priority: number | null;
+    estimated_duration_minutes: number | null;
+    difficulty: number | null;
+    flexibility: Block["flexibility"] | null;
+    intensity: Block["intensity"] | null;
+    deadline: string | null;
+    cognitively_heavy: boolean | null;
+    splittable: boolean | null;
+    optional: boolean | null;
     notifications: number[] | null;
 }>;
 
@@ -92,6 +119,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             notes: b.notes ?? undefined,
             tag: b.tag ?? undefined,
             color: b.color ?? undefined,
+            priority: b.priority == null ? undefined : b.priority as Block["priority"],
+            estimatedDurationMinutes: b.estimated_duration_minutes ?? undefined,
+            difficulty: b.difficulty ?? undefined,
+            flexibility: b.flexibility ?? undefined,
+            intensity: b.intensity ?? undefined,
+            deadline: b.deadline ? new Date(b.deadline) : undefined,
+            cognitivelyHeavy: b.cognitively_heavy ?? undefined,
+            splittable: b.splittable ?? undefined,
+            optional: b.optional ?? undefined,
             recurrenceId: b.recurrence_id ?? undefined,
             recurrencePattern: b.recurrence_pattern ?? undefined,
             notifications: b.notifications || [5],
@@ -175,6 +211,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
             notes: partial.notes,
             tag: partial.tag,
             color: partial.color,
+            priority: partial.priority,
+            estimatedDurationMinutes: partial.estimatedDurationMinutes ?? Math.round((partial.endAt.getTime() - partial.startAt.getTime()) / 60000),
+            difficulty: partial.difficulty,
+            flexibility: partial.flexibility,
+            intensity: partial.intensity,
+            deadline: partial.deadline,
+            cognitivelyHeavy: partial.cognitivelyHeavy,
+            splittable: partial.splittable,
+            optional: partial.optional,
             recurrenceId,
             recurrencePattern: partial.recurrencePattern,
             notifications: partial.notifications || [5],
@@ -246,6 +291,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 if (b.notes) payload.notes = b.notes;
                 if (b.tag) payload.tag = b.tag;
                 if (b.color) payload.color = b.color;
+                if (b.priority != null) payload.priority = b.priority;
+                if (b.estimatedDurationMinutes != null) payload.estimated_duration_minutes = b.estimatedDurationMinutes;
+                if (b.difficulty != null) payload.difficulty = b.difficulty;
+                if (b.flexibility) payload.flexibility = b.flexibility;
+                if (b.intensity) payload.intensity = b.intensity;
+                if (b.deadline) payload.deadline = b.deadline.toISOString();
+                if (b.cognitivelyHeavy != null) payload.cognitively_heavy = b.cognitivelyHeavy;
+                if (b.splittable != null) payload.splittable = b.splittable;
+                if (b.optional != null) payload.optional = b.optional;
                 if (b.recurrenceId) payload.recurrence_id = b.recurrenceId;
                 if (b.recurrencePattern) payload.recurrence_pattern = b.recurrencePattern;
                 if (b.notifications) payload.notifications = b.notifications;
@@ -280,6 +334,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
         if (patch.notes !== undefined) updateData.notes = patch.notes ?? null;
         if (patch.tag !== undefined) updateData.tag = patch.tag ?? null;
         if (patch.color !== undefined) updateData.color = patch.color ?? null;
+        if (patch.priority !== undefined) updateData.priority = patch.priority ?? null;
+        if (patch.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = patch.estimatedDurationMinutes ?? null;
+        if (patch.difficulty !== undefined) updateData.difficulty = patch.difficulty ?? null;
+        if (patch.flexibility !== undefined) updateData.flexibility = patch.flexibility ?? null;
+        if (patch.intensity !== undefined) updateData.intensity = patch.intensity ?? null;
+        if (patch.deadline !== undefined) updateData.deadline = patch.deadline ? patch.deadline.toISOString() : null;
+        if (patch.cognitivelyHeavy !== undefined) updateData.cognitively_heavy = patch.cognitivelyHeavy ?? null;
+        if (patch.splittable !== undefined) updateData.splittable = patch.splittable ?? null;
+        if (patch.optional !== undefined) updateData.optional = patch.optional ?? null;
         if (patch.notifications !== undefined) updateData.notifications = patch.notifications ?? null;
 
         const { error } = await supabase.from('blocks').update(updateData).eq('id', id);
@@ -345,6 +408,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 notes: copy.notes,
                 tag: copy.tag,
                 color: copy.color,
+                priority: copy.priority ?? null,
+                estimated_duration_minutes: copy.estimatedDurationMinutes ?? null,
+                difficulty: copy.difficulty ?? null,
+                flexibility: copy.flexibility ?? null,
+                intensity: copy.intensity ?? null,
+                deadline: copy.deadline?.toISOString() ?? null,
+                cognitively_heavy: copy.cognitivelyHeavy ?? null,
+                splittable: copy.splittable ?? null,
+                optional: copy.optional ?? null,
                 notifications: copy.notifications
             });
             if (error) console.error('Error duplicating block:', error);
@@ -462,6 +534,15 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
                 notes: b.notes,
                 tag: b.tag,
                 color: b.color,
+                priority: b.priority ?? null,
+                estimated_duration_minutes: b.estimatedDurationMinutes ?? null,
+                difficulty: b.difficulty ?? null,
+                flexibility: b.flexibility ?? null,
+                intensity: b.intensity ?? null,
+                deadline: b.deadline?.toISOString() ?? null,
+                cognitively_heavy: b.cognitivelyHeavy ?? null,
+                splittable: b.splittable ?? null,
+                optional: b.optional ?? null,
                 recurrence_id: b.recurrenceId,
                 recurrence_pattern: b.recurrencePattern,
                 notifications: b.notifications
