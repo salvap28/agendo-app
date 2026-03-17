@@ -8,6 +8,10 @@ function encodeRecommendationId(recommendationId: string) {
     return encodeURIComponent(recommendationId);
 }
 
+function hasString(value: unknown): value is string {
+    return typeof value === "string" && value.length > 0;
+}
+
 async function readJson<T>(response: Response): Promise<T> {
     if (!response.ok) {
         const payload = await response.json().catch(() => ({ error: "Request failed" }));
@@ -72,5 +76,27 @@ export async function applyPlanningRecommendation(recommendationId: string) {
 }
 
 export function canApplyRecommendation(recommendation: PlanningRecommendation) {
-    return recommendation.applyability.mode === "auto";
+    if (recommendation.applyability.mode !== "auto") return false;
+
+    if (recommendation.suggestedAction.kind === "move") {
+        return Boolean(
+            recommendation.targetBlockId
+            && hasString(recommendation.suggestedAction.payload.suggestedStart)
+            && hasString(recommendation.suggestedAction.payload.suggestedEnd)
+        );
+    }
+
+    if (
+        recommendation.suggestedAction.kind === "shorten"
+        || recommendation.suggestedAction.kind === "split"
+        || recommendation.suggestedAction.kind === "mark_optional"
+    ) {
+        return Boolean(recommendation.targetBlockId);
+    }
+
+    if (recommendation.suggestedAction.kind === "insert_break") {
+        return hasString(recommendation.suggestedAction.payload.suggestedStart);
+    }
+
+    return false;
 }

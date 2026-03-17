@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { Block } from "@/lib/types/blocks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Play, Flame, Activity, Clock, Sparkles } from "lucide-react";
+import { Calendar, Play, Flame, Activity, Clock, Sparkles, CheckCircle2, MinusCircle, SkipForward, BatteryCharging, BatteryMedium, BatteryWarning } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -14,6 +15,8 @@ import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { getBlockColors } from "@/lib/utils/blockColors";
 import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
 import { sendNotification } from "@/lib/utils/notifications";
+import { ActivityOutcome, EnergyImpact, PerceivedValue } from "@/lib/types/activity";
+import { getDefaultActivityCheckoutOutcome, shouldPromptActivityCheckout } from "@/lib/engines/activityExperience";
 
 import { createClient, getClientUser } from "@/lib/supabase/client";
 import { PlanningRecommendation } from "@/lib/types/planning";
@@ -110,7 +113,11 @@ function ProfileCalibrationRing({ value }: { value: number }) {
 }
 
 export function SectionContext({ onNext }: SectionContextProps) {
-    const { blocks, fetchBlocks } = useBlocksStore();
+    const blocks = useBlocksStore((state) => state.blocks);
+    const fetchBlocks = useBlocksStore((state) => state.fetchBlocks);
+    const activityExperiences = useActivityExperienceStore((state) => state.experiences);
+    const fetchDayExperiences = useActivityExperienceStore((state) => state.fetchDayExperiences);
+    const recordCheckout = useActivityExperienceStore((state) => state.recordCheckout);
     const { session, returnToFocus, openFree } = useFocusStore();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("Salva");
@@ -119,6 +126,11 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
     const [planningOpen, setPlanningOpen] = useState(false);
     const [applyingRecommendationId, setApplyingRecommendationId] = useState<string | null>(null);
+    const [checkoutSaving, setCheckoutSaving] = useState(false);
+    const [checkoutOutcome, setCheckoutOutcome] = useState<ActivityOutcome>("completed");
+    const [checkoutEnergyImpact, setCheckoutEnergyImpact] = useState<EnergyImpact>("neutral");
+    const [checkoutPerceivedValue, setCheckoutPerceivedValue] = useState<PerceivedValue>("medium");
+    const [dismissedCheckoutBlockIds, setDismissedCheckoutBlockIds] = useState<string[]>([]);
     const { settings } = useSettingsStore();
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
@@ -144,6 +156,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
             ].join(":"))
             .join("|")
     ), [blocks, currentTime]);
+    const currentDayKey = useMemo(
+        () => currentTime.toISOString().slice(0, 10),
+        [currentTime],
+    );
 
     const nextBlock = useMemo(() => {
         const todayBlocks = blocks.filter((block) => isSameDay(block.startAt, currentTime));
@@ -220,6 +236,60 @@ export function SectionContext({ onNext }: SectionContextProps) {
     }, [blocks, settings.notify_daily_briefing]);
 
     useEffect(() => {
+        void fetchDayExperiences(currentDayKey);
+    }, [currentDayKey, fetchDayExperiences]);
+
+    useEffect(() => {
+        setDismissedCheckoutBlockIds([]);
+    }, [currentDayKey]);
+
+    const pendingCheckoutBlock = useMemo(() => {
+        const candidates = blocks
+            .filter((block) => isSameDay(block.endAt, currentTime))
+            .filter((block) => !dismissedCheckoutBlockIds.includes(block.id))
+            .map((block) => ({
+                block,
+                experience: activityExperiences.find((experience) => experience.sourceBlockId === block.id) ?? null,
+            }))
+            .filter(({ block, experience }) => shouldPromptActivityCheckout({
+                block,
+                experience,
+                now: currentTime,
+            }))
+            .sort((left, right) => right.block.endAt.getTime() - left.block.endAt.getTime());
+
+        return candidates[0] ?? null;
+    }, [activityExperiences, blocks, currentTime, dismissedCheckoutBlockIds]);
+
+    useEffect(() => {
+        if (!pendingCheckoutBlock) return;
+
+        const reminderId = `activity-ended:${pendingCheckoutBlock.block.id}`;
+        const msSinceEnd = currentTime.getTime() - pendingCheckoutBlock.block.endAt.getTime();
+
+        if (
+            settings.notify_block_reminders
+            && msSinceEnd >= 0
+            && msSinceEnd <= 15 * 60 * 1000
+            && !sentNotificationsRef.current.has(reminderId)
+        ) {
+            sentNotificationsRef.current.add(reminderId);
+            void sendNotification(`${pendingCheckoutBlock.block.title} ended`, {
+                body: "Leave a quick check-in in Agendo while it is still fresh.",
+                icon: "/favicon.ico",
+                tag: reminderId,
+            });
+        }
+    }, [currentTime, pendingCheckoutBlock, settings.notify_block_reminders]);
+
+    useEffect(() => {
+        if (!pendingCheckoutBlock) return;
+        setCheckoutOutcome(getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block));
+        setCheckoutEnergyImpact("neutral");
+        setCheckoutPerceivedValue("medium");
+    }, [pendingCheckoutBlock]);
+
+    useEffect(() => {
         const fetchUser = async () => {
             const supabase = createClient();
             const user = await getClientUser(supabase);
@@ -286,9 +356,36 @@ export function SectionContext({ onNext }: SectionContextProps) {
             await applyPlanningRecommendation(recommendation.id);
             await fetchBlocks();
             await refreshPlanning();
+        } catch (error) {
+            console.error("Failed to apply planning recommendation", error);
+            await refreshPlanning();
         } finally {
             setApplyingRecommendationId(null);
         }
+    };
+
+    const handleSaveQuickCheckout = async () => {
+        if (!pendingCheckoutBlock) return;
+        setCheckoutSaving(true);
+        try {
+            await recordCheckout(pendingCheckoutBlock.block.id, {
+                outcome: checkoutOutcome,
+                energyImpact: checkoutEnergyImpact,
+                perceivedValue: checkoutPerceivedValue,
+            });
+            setDismissedCheckoutBlockIds((current) => current.filter((id) => id !== pendingCheckoutBlock.block.id));
+        } finally {
+            setCheckoutSaving(false);
+        }
+    };
+
+    const handleDismissQuickCheckout = () => {
+        if (!pendingCheckoutBlock) return;
+        setDismissedCheckoutBlockIds((current) => (
+            current.includes(pendingCheckoutBlock.block.id)
+                ? current
+                : [...current, pendingCheckoutBlock.block.id]
+        ));
     };
 
     return (
@@ -570,6 +667,142 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         )}
                     </div>
                 </div>
+
+                {pendingCheckoutBlock && (
+                    <div className="mt-6 w-full max-w-[760px] rounded-[30px] border border-amber-300/12 bg-[linear-gradient(180deg,rgba(255,214,153,0.08),rgba(0,0,0,0.22))] p-4 backdrop-blur-2xl shadow-[0_20px_80px_-44px_rgba(255,196,94,0.55)]">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/45">
+                                        Quick check-in
+                                    </p>
+                                    <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">
+                                        {pendingCheckoutBlock.block.title} just ended
+                                    </h3>
+                                    <p className="mt-1 text-sm leading-6 text-white/58">
+                                        Mark how it went in a few taps so Agendo can learn from the real outcome.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedBlockId(pendingCheckoutBlock.block.id)}
+                                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/62 transition hover:bg-white/[0.08] hover:text-white"
+                                >
+                                    Open block
+                                </button>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                                        Outcome
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {([
+                                            {
+                                                value: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block),
+                                                label: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block) === "attended" ? "Attended" : "Done",
+                                                icon: CheckCircle2,
+                                            },
+                                            { value: "partial" as ActivityOutcome, label: "Partial", icon: MinusCircle },
+                                            { value: "skipped" as ActivityOutcome, label: "Skipped", icon: SkipForward },
+                                        ]).map((option) => {
+                                            const Icon = option.icon;
+                                            const active = checkoutOutcome === option.value;
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setCheckoutOutcome(option.value)}
+                                                    className={cn(
+                                                        "flex flex-col items-start gap-1 rounded-2xl border px-3 py-2 text-left text-[11px] transition",
+                                                        active
+                                                            ? "border-amber-300/30 bg-amber-300/12 text-amber-100"
+                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
+                                                    )}
+                                                >
+                                                    <Icon className="h-3.5 w-3.5" />
+                                                    {option.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                                        Energy
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {([
+                                            { value: "restorative" as EnergyImpact, label: "Restorative", icon: BatteryCharging },
+                                            { value: "neutral" as EnergyImpact, label: "Neutral", icon: BatteryMedium },
+                                            { value: "draining" as EnergyImpact, label: "Draining", icon: BatteryWarning },
+                                        ]).map((option) => {
+                                            const Icon = option.icon;
+                                            const active = checkoutEnergyImpact === option.value;
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    onClick={() => setCheckoutEnergyImpact(option.value)}
+                                                    className={cn(
+                                                        "flex flex-col items-start gap-1 rounded-2xl border px-3 py-2 text-left text-[11px] transition",
+                                                        active
+                                                            ? "border-sky-300/25 bg-sky-300/10 text-sky-100"
+                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
+                                                    )}
+                                                >
+                                                    <Icon className="h-3.5 w-3.5" />
+                                                    {option.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                                        Value
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {(["low", "medium", "high"] as PerceivedValue[]).map((value) => {
+                                            const active = checkoutPerceivedValue === value;
+                                            return (
+                                                <button
+                                                    key={value}
+                                                    onClick={() => setCheckoutPerceivedValue(value)}
+                                                    className={cn(
+                                                        "rounded-2xl border px-3 py-2 text-[11px] capitalize transition",
+                                                        active
+                                                            ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
+                                                    )}
+                                                >
+                                                    {value}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                <button
+                                    onClick={handleDismissQuickCheckout}
+                                    className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-white/56 transition hover:bg-white/[0.05] hover:text-white/78"
+                                >
+                                    Later
+                                </button>
+                                <GlassButton
+                                    onClick={handleSaveQuickCheckout}
+                                    variant="default"
+                                    className="justify-center"
+                                    disabled={checkoutSaving}
+                                >
+                                    {checkoutSaving ? "Saving..." : "Save check-in"}
+                                </GlassButton>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="mt-7 w-full max-w-[760px] rounded-[30px] border border-white/[0.1] bg-black/30 p-3 backdrop-blur-2xl shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)]">
                     <div className="grid gap-3 sm:grid-cols-3">

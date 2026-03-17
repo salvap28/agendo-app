@@ -45,6 +45,10 @@ import {
 import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import {
+    getDefaultActivityCheckoutOutcome,
+    shouldPromptActivityCheckout,
+} from "@/lib/engines/activityExperience";
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -206,7 +210,9 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     useEffect(() => {
         if (!blockType) return;
-        setActivityOutcome(blockType === "meeting" ? "attended" : "completed");
+        setActivityOutcome(getDefaultActivityCheckoutOutcome({
+            type: blockType,
+        }));
     }, [blockType]);
 
     const handleDismissPlanning = async (recommendation: PlanningRecommendation) => {
@@ -225,20 +231,20 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             await applyPlanningRecommendation(recommendation.id);
             await fetchBlocks();
             await refreshPlanning();
+        } catch (error) {
+            console.error("Failed to apply planning recommendation", error);
+            await refreshPlanning();
         } finally {
             setPlanningApplyingId(null);
         }
     };
 
-    const shouldPromptActivityCheckout = Boolean(
+    const shouldPromptCheckout = Boolean(
         block
-        && !(block.requiresFocusMode ?? false)
-        && (block.generatesExperienceRecord ?? true)
-        && block.endAt.getTime() <= Date.now()
-        && (
-            !activityExperience
-            || (!activityExperience.wasUserConfirmed && (activityExperience.confidence ?? 0) < 0.8)
-        )
+        && shouldPromptActivityCheckout({
+            block,
+            experience: activityExperience,
+        })
         && (
             (block.estimatedDurationMinutes ?? Math.round((block.endAt.getTime() - block.startAt.getTime()) / 60000)) >= 40
             || (block.priority ?? 0) >= 3
@@ -1486,7 +1492,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 </div>
                             )}
 
-                            {shouldPromptActivityCheckout && (
+                            {shouldPromptCheckout && (
                                 <div className="mt-4 space-y-3">
                                     <div className="grid gap-2 sm:grid-cols-4">
                                         {(["completed", "attended", "partial", "skipped"] as ActivityOutcome[]).map((option) => (

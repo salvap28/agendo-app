@@ -83,6 +83,9 @@ export function GuidedPlanningSheet({ open, onOpenChange, date }: GuidedPlanning
             await applyPlanningRecommendation(recommendation.id);
             await fetchBlocks();
             await refresh();
+        } catch (error) {
+            console.error("Failed to apply planning recommendation", error);
+            await refresh();
         } finally {
             setApplyingId(null);
         }

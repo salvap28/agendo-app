@@ -1,8 +1,10 @@
 import {
     applyCheckoutToExperience,
+    getDefaultActivityCheckoutOutcome,
     inferActivityExperienceFromBlock,
     inferRescheduledActivityExperience,
     mapFocusSessionToActivityExperience,
+    shouldPromptActivityCheckout,
 } from "@/lib/engines/activityExperience";
 import { FocusSessionAnalytics } from "@/lib/types/behavior";
 import { Block } from "@/lib/types/blocks";
@@ -170,5 +172,48 @@ describe("activity experience domain", () => {
         expect(confirmed.wasSystemInferred).toBe(false);
         expect(confirmed.outcome).toBe("partial");
         expect(confirmed.energyImpact).toBe("draining");
+    });
+
+    it("prompts a checkout for ended non-focus blocks until confirmation exists", () => {
+        const block = makeBlock({
+            endAt: new Date("2026-03-18T11:00:00.000Z"),
+        });
+        const inferred = inferActivityExperienceFromBlock({
+            userId: "user-1",
+            block,
+            now: new Date("2026-03-18T12:00:00.000Z"),
+        });
+
+        expect(shouldPromptActivityCheckout({
+            block,
+            experience: inferred,
+            now: new Date("2026-03-18T12:00:00.000Z"),
+        })).toBe(true);
+
+        const confirmed = applyCheckoutToExperience(inferred!, {
+            outcome: "attended",
+            perceivedValue: "high",
+        });
+
+        expect(shouldPromptActivityCheckout({
+            block,
+            experience: confirmed,
+            now: new Date("2026-03-18T12:00:00.000Z"),
+        })).toBe(false);
+    });
+
+    it("does not prompt checkout for focus-required blocks and derives sensible defaults", () => {
+        const block = makeBlock({
+            type: "deep_work",
+            requiresFocusMode: true,
+            endAt: new Date("2026-03-18T11:00:00.000Z"),
+        });
+
+        expect(shouldPromptActivityCheckout({
+            block,
+            now: new Date("2026-03-18T12:00:00.000Z"),
+        })).toBe(false);
+        expect(getDefaultActivityCheckoutOutcome(makeBlock())).toBe("attended");
+        expect(getDefaultActivityCheckoutOutcome(makeBlock({ type: "admin" }))).toBe("completed");
     });
 });

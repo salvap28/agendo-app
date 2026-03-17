@@ -247,6 +247,32 @@ function inferCompletedReason(block: Block): ActivityOutcomeReason {
     return "completed_as_planned";
 }
 
+export function getDefaultActivityCheckoutOutcome(block: Pick<Block, "type" | "engagementMode">): ActivityOutcome {
+    const engagementMode = resolveBlockEngagementMode(block);
+    return engagementMode === "passive_attendance" || engagementMode === "collaborative"
+        ? "attended"
+        : "completed";
+}
+
+export function shouldPromptActivityCheckout(args: {
+    block: Block;
+    experience?: ActivityExperience | null;
+    now?: Date;
+}) {
+    if (resolveBlockRequiresFocusMode(args.block) || !resolveBlockGeneratesExperienceRecord(args.block)) {
+        return false;
+    }
+
+    if (args.block.status === "canceled") return false;
+
+    const now = args.now ?? new Date();
+    if (args.block.endAt.getTime() > now.getTime()) return false;
+
+    if (args.experience?.wasUserConfirmed) return false;
+
+    return true;
+}
+
 export function inferActivityExperienceFromBlock(args: {
     userId: string;
     block: Block;
