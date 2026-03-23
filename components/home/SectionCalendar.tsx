@@ -6,53 +6,98 @@ import { DailyAgendaView } from "@/components/calendar/DailyAgendaView";
 import { GlassCalendarDashboard } from "@/components/calendar/GlassCalendarDashboard";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
-import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
+import { findNextFreeSlot, isOverlapping, snapTo15 } from "@/lib/utils/scheduling";
+import { OverlapResolutionModal, OverlapResolutionType } from "@/components/calendar/OverlapResolutionModal";
+import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
 import { isSameDay, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
+import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 
 export function SectionCalendar() {
     const { blocks, createBlock } = useBlocksStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [mobileSelectedDate, setMobileSelectedDate] = useState<Date>(startOfDay(new Date()));
-    const [isCreatingFromFab, setIsCreatingFromFab] = useState(false);
+    const [pendingConflict, setPendingConflict] = useState<any>(null);
 
-    const handleMobilePlusCreate = async () => {
-        if (isCreatingFromFab) return;
-        setIsCreatingFromFab(true);
+    const handleMobilePlusCreate = () => {
+        const selectedDay = startOfDay(mobileSelectedDate);
+        const now = new Date();
+        const durationMinutes = 60;
+        const desiredStart = new Date(selectedDay);
 
-        try {
-            const selectedDay = startOfDay(mobileSelectedDate);
-            const now = new Date();
-            const durationMinutes = 60;
-            const desiredStart = new Date(selectedDay);
+        if (isSameDay(selectedDay, now)) {
+            const snappedNow = snapTo15(now);
+            desiredStart.setHours(snappedNow.getHours(), snappedNow.getMinutes(), 0, 0);
+        } else {
+            desiredStart.setHours(9, 0, 0, 0);
+        }
 
-            if (isSameDay(selectedDay, now)) {
-                const snappedNow = snapTo15(now);
-                desiredStart.setHours(snappedNow.getHours(), snappedNow.getMinutes(), 0, 0);
-            } else {
-                desiredStart.setHours(9, 0, 0, 0);
-            }
+        const dayBlocks = blocks.filter((block) => isSameDay(block.startAt, selectedDay) && block.status !== "canceled");
+        const endAt = new Date(desiredStart.getTime() + durationMinutes * 60000);
+        
+        const overlaps = dayBlocks.filter(b => isOverlapping(desiredStart, endAt, b.startAt, b.endAt));
 
-            const dayBlocks = blocks.filter((block) => isSameDay(block.startAt, selectedDay) && block.status !== "canceled");
-            const nextSlot = findNextFreeSlot(dayBlocks, desiredStart, durationMinutes);
-            const startAt = nextSlot?.startAt ?? desiredStart;
-            const endAt = nextSlot?.endAt ?? new Date(startAt.getTime() + durationMinutes * 60000);
+        const enriched = enrichNewBlockWithPlanningMetadata({
+            startAt: desiredStart,
+            endAt,
+            title: "",
+            type: "other"
+        });
 
-            const newBlock = await createBlock({
-                startAt,
-                endAt,
-                title: ""
-            });
-
+        if (overlaps.length > 0) {
+            setPendingConflict({ newBlock: enriched, overlaps });
+        } else {
+            const newBlock = createBlock(enriched);
             if (newBlock) {
-                setIsNewBlock(true);
                 setSelectedBlockId(newBlock.id);
+                setIsNewBlock(true);
             }
-        } finally {
-            setIsCreatingFromFab(false);
         }
     };
+
+    
+    const handleResolveConflict = (resolution: OverlapResolutionType) => {
+        if (!pendingConflict) return;
+        const { newBlock, overlaps } = pendingConflict;
+        
+        let resultingId = newBlock.id;
+        let isCreation = !newBlock.id;
+
+        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
+
+        if (resolution === 'slice_underlying') {
+            const result = resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
+            if (result && isCreation) resultingId = result.id;
+        } 
+        else if (resolution === 'shrink_new') {
+            const result = resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock);
+            if (result && isCreation) resultingId = result.id;
+        }
+        else if (resolution === 'move_forward') {
+            const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
+            const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
+            
+            if (slot) {
+                newBlock.startAt = slot.startAt;
+                newBlock.endAt = slot.endAt;
+                const result = createBlock(newBlock);
+                if (result && isCreation) resultingId = result.id;
+            }
+        }
+        else if (resolution === 'keep_overlap') {
+            const result = createBlock(newBlock);
+            if (result && isCreation) resultingId = result.id;
+        }
+
+        if (isCreation && resultingId) {
+            setSelectedBlockId(resultingId);
+            setIsNewBlock(true);
+        }
+        
+        setPendingConflict(null);
+    };
+
 
     const openDesktopBlockEditor = (blockId: string, shouldGuideCreation = false) => {
         setSelectedBlockId(blockId);
@@ -62,10 +107,6 @@ export function SectionCalendar() {
     return (
         <section className="w-full min-h-[100dvh] snap-start flex flex-col items-center justify-start py-8 px-4 md:px-8 bg-transparent">
 
-            {/* Optional subtle header */}
-            <div className="w-full max-w-[1400px] mb-4 opacity-50 select-none pointer-events-none">
-                <span className="text-xs font-semibold text-white/50 uppercase tracking-widest">Calendar</span>
-            </div>
 
             {/* Mobile View: Zero-Gravity Daily Agenda */}
             {/* Wrapper is relative so the FAB can be positioned inside it but outside overflow-hidden card */}
@@ -87,7 +128,6 @@ export function SectionCalendar() {
                 <div className="flex justify-center py-4 z-20">
                     <button
                         onClick={handleMobilePlusCreate}
-                        disabled={isCreatingFromFab}
                         className={cn(
                             "flex items-center justify-center h-12 w-20 rounded-full",
                             "bg-white/[0.08] backdrop-blur-md border border-white/15",
@@ -128,6 +168,14 @@ export function SectionCalendar() {
                 />
             )}
 
+        
+            <OverlapResolutionModal
+                isOpen={!!pendingConflict}
+                onClose={() => setPendingConflict(null)}
+                pendingBlock={pendingConflict?.newBlock || null}
+                overlappingCount={pendingConflict?.overlaps?.length || 0}
+                onResolve={handleResolveConflict}
+            />
         </section>
     );
 }

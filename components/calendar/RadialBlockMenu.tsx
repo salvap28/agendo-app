@@ -31,8 +31,6 @@ import { CircularTimePicker } from "@/components/focus/CircularTimePicker";
 import { Input } from "@/components/ui/input";
 import { PlanningRecommendation } from "@/lib/types/planning";
 import {
-    ActivityOutcome,
-    EnergyImpact,
     PerceivedValue,
 } from "@/lib/types/activity";
 import {
@@ -45,10 +43,6 @@ import {
 import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import {
-    getDefaultActivityCheckoutOutcome,
-    shouldPromptActivityCheckout,
-} from "@/lib/engines/activityExperience";
-import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -58,6 +52,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { OverlapResolutionModal, OverlapResolutionType } from "@/components/calendar/OverlapResolutionModal";
+import { isOverlapping, findNextFreeSlot } from "@/lib/utils/scheduling";
+import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
 
 // ─── CONFIGURATION ──────────────────────────────────────────────────────────
 
@@ -103,7 +100,7 @@ const PRIMARY_ORBIT_RADIUS_DESKTOP = 168;
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { blockId: string; isNewBlock?: boolean; onClose: () => void }) {
-    const { blocks, updateBlock, deleteBlock, deleteBlockSeries, setStatus, applyRecurrence, fetchBlocks } = useBlocksStore();
+    const { blocks, updateBlock, createBlock, deleteBlock, deleteBlockSeries, setStatus, applyRecurrence, fetchBlocks } = useBlocksStore();
     const { openFromBlock } = useFocusStore();
     const {
         experiences,
@@ -132,10 +129,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
     const [planningApplyingId, setPlanningApplyingId] = useState<string | null>(null);
     const [planningLoading, setPlanningLoading] = useState(false);
-    const [activitySaving, setActivitySaving] = useState(false);
-    const [activityOutcome, setActivityOutcome] = useState<ActivityOutcome>("completed");
-    const [activityEnergyImpact, setActivityEnergyImpact] = useState<EnergyImpact>("unknown");
-    const [activityPerceivedValue, setActivityPerceivedValue] = useState<PerceivedValue>("unknown");
+    const [isAgendoOptionsOpen, setIsAgendoOptionsOpen] = useState(false);
+    const [pendingConflict, setPendingConflict] = useState<{ newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt" | "id">, overlaps: Block[] } | null>(null);
     const planningBlockId = block?.id ?? null;
     const planningDate = block?.startAt ? block.startAt.toISOString().slice(0, 10) : null;
     const planningSignature = React.useMemo(() => {
@@ -208,12 +203,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         });
     }, [block?.id, block?.status, block?.startAt, block?.endAt, block?.requiresFocusMode, refreshBlockExperience, inferBlockExperience]);
 
-    useEffect(() => {
-        if (!blockType) return;
-        setActivityOutcome(getDefaultActivityCheckoutOutcome({
-            type: blockType,
-        }));
-    }, [blockType]);
+
 
     const handleDismissPlanning = async (recommendation: PlanningRecommendation) => {
         await dismissPlanningRecommendation(recommendation.id);
@@ -239,32 +229,35 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         }
     };
 
-    const shouldPromptCheckout = Boolean(
-        block
-        && shouldPromptActivityCheckout({
-            block,
-            experience: activityExperience,
-        })
-        && (
-            (block.estimatedDurationMinutes ?? Math.round((block.endAt.getTime() - block.startAt.getTime()) / 60000)) >= 40
-            || (block.priority ?? 0) >= 3
-            || block.status === "completed"
-        )
-    );
 
-    const handleSaveActivityCheckout = async () => {
-        if (!block) return;
-        setActivitySaving(true);
-        try {
-            await recordCheckout(block.id, {
-                outcome: activityOutcome,
-                energyImpact: activityEnergyImpact === "unknown" ? undefined : activityEnergyImpact,
-                perceivedValue: activityPerceivedValue === "unknown" ? undefined : activityPerceivedValue,
-            });
-        } finally {
-            setActivitySaving(false);
+
+    const handleResolveConflict = (resolution: OverlapResolutionType) => {
+        if (!pendingConflict || !block) return;
+        const { newBlock, overlaps } = pendingConflict;
+
+        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
+
+        if (resolution === 'slice_underlying') {
+            resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
+        } 
+        else if (resolution === 'shrink_new') {
+            resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock, updateBlock);
         }
+        else if (resolution === 'move_forward') {
+            const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
+            const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
+            
+            if (slot) {
+                updateBlock(newBlock.id!, { startAt: slot.startAt, endAt: slot.endAt });
+            }
+        }
+        else if (resolution === 'keep_overlap') {
+            updateBlock(newBlock.id!, { startAt: newBlock.startAt, endAt: newBlock.endAt });
+        }
+
+        setPendingConflict(null);
     };
+
 
     // Guided initialization pass
     const [guidedStep, setGuidedStep] = useState<"center" | "time" | "type" | null>(isNewBlock ? "center" : null);
@@ -1325,7 +1318,20 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             newEnd.setDate(newEnd.getDate() - 1);
                                                         }
 
-                                                        updateBlock(block.id, { startAt: newStart, endAt: newEnd });
+                                                        const newBlockData = { ...block, startAt: newStart, endAt: newEnd };
+                                                        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== block.id);
+                                                        
+                                                        const actualOverlaps = _currentBlocks.filter(b =>
+                                                            isOverlapping(newStart, newEnd, b.startAt, b.endAt)
+                                                        );
+                                                        const hasOverlap = actualOverlaps.length > 0;
+
+                                                        if (hasOverlap) {
+                                                            setPendingConflict({ newBlock: newBlockData, overlaps: actualOverlaps });
+                                                            setActivePrimaryNode(null);
+                                                        } else {
+                                                            updateBlock(block.id, { startAt: newStart, endAt: newEnd });
+                                                        }
                                                     }}
                                                 />
                                                 {(guidedStep === "time" || isNewBlock) && (
@@ -1441,139 +1447,48 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                 </div>
             )}
 
+            {/* Opciones de Agendo Button */}
             {!isNewBlock && block && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-5 z-[410] flex justify-center px-4">
-                    <div className="pointer-events-auto w-full max-w-xl rounded-[30px] border border-white/10 bg-black/55 p-3 backdrop-blur-2xl shadow-[0_20px_80px_-30px_rgba(0,0,0,0.8)]">
-                        <div className="mb-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-                            <div className="flex items-start justify-between gap-3">
-                                <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">
-                                        Experiencia real
-                                    </p>
-                                    <p className="mt-1 text-sm text-white/58">
-                                        {activityExperience
-                                            ? "Lo que Agendo pudo registrar de este bloque mas alla del plan."
-                                            : "Todavia no hay lectura confirmada de como se vivio este bloque."}
-                                    </p>
-                                </div>
-                                {activityExperience && (
-                                    <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                                        activityExperience.wasUserConfirmed
-                                            ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"
-                                            : "border-white/10 bg-white/[0.05] text-white/50"
-                                    }`}>
-                                        {activityExperience.wasUserConfirmed ? "Confirmada" : "Inferida"}
-                                    </span>
-                                )}
-                            </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-8 z-[410] flex justify-center px-4">
+                    <button
+                        onClick={() => setIsAgendoOptionsOpen(true)}
+                        className="pointer-events-auto px-6 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all font-semibold text-xs uppercase tracking-widest backdrop-blur-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)]"
+                    >
+                        Opciones de Agendo
+                    </button>
+                </div>
+            )}
 
-                            {activityExperience && (
-                                <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/70">
-                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                        outcome {activityExperience.outcome.replace(/_/g, " ")}
-                                    </span>
-                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                        energy {activityExperience.energyImpact}
-                                    </span>
-                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                        load {activityExperience.cognitiveLoad}
-                                    </span>
-                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                        value {activityExperience.perceivedValue}
-                                    </span>
-                                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                        planned {block.startAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}-{block.endAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                    </span>
-                                    {activityExperience.actualDurationMin != null && (
-                                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
-                                            actual {activityExperience.actualDurationMin} min
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-
-                            {shouldPromptCheckout && (
-                                <div className="mt-4 space-y-3">
-                                    <div className="grid gap-2 sm:grid-cols-4">
-                                        {(["completed", "attended", "partial", "skipped"] as ActivityOutcome[]).map((option) => (
-                                            <button
-                                                key={option}
-                                                onClick={() => setActivityOutcome(option)}
-                                                className={cn(
-                                                    "rounded-2xl border px-3 py-2 text-xs uppercase tracking-[0.18em] transition-colors",
-                                                    activityOutcome === option
-                                                        ? "border-violet-300/30 bg-violet-400/12 text-violet-100"
-                                                        : "border-white/10 bg-black/20 text-white/50 hover:text-white/75"
-                                                )}
-                                            >
-                                                {option.replace(/_/g, " ")}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="grid gap-2 sm:grid-cols-5">
-                                        {(["unknown", "restorative", "energizing", "neutral", "draining"] as EnergyImpact[]).map((option) => (
-                                            <button
-                                                key={option}
-                                                onClick={() => setActivityEnergyImpact(option)}
-                                                className={cn(
-                                                    "rounded-2xl border px-3 py-2 text-[11px] uppercase tracking-[0.16em] transition-colors",
-                                                    activityEnergyImpact === option
-                                                        ? "border-cyan-300/30 bg-cyan-400/12 text-cyan-100"
-                                                        : "border-white/10 bg-black/20 text-white/45"
-                                                )}
-                                            >
-                                                {option}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="grid gap-2 sm:grid-cols-4">
-                                        {(["unknown", "low", "medium", "high"] as PerceivedValue[]).map((option) => (
-                                            <button
-                                                key={option}
-                                                onClick={() => setActivityPerceivedValue(option)}
-                                                className={cn(
-                                                    "rounded-2xl border px-3 py-2 text-[11px] uppercase tracking-[0.16em] transition-colors",
-                                                    activityPerceivedValue === option
-                                                        ? "border-emerald-300/30 bg-emerald-400/12 text-emerald-100"
-                                                        : "border-white/10 bg-black/20 text-white/45"
-                                                )}
-                                            >
-                                                {option}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <button
-                                        onClick={() => void handleSaveActivityCheckout()}
-                                        disabled={activitySaving}
-                                        className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/78 transition-colors hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        {activitySaving ? "Guardando..." : "Guardar checkout"}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+            {/* Opciones de Agendo Overlay */}
+            {isAgendoOptionsOpen && !isNewBlock && block && (
+                <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                    <div className="w-full max-w-md bg-[#09090b] border border-white/10 rounded-[2rem] p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                        <div className="flex justify-between items-start mb-6">
                             <div>
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">
-                                    Sugerencias de Agendo
-                                </p>
-                                <p className="mt-1 text-sm text-white/58">
-                                    Ajustes tacticos para este bloque segun tu perfil y el dia.
-                                </p>
+                                <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">Sugerencias de Agendo</h3>
+                                <p className="text-xs text-white/50 mt-1">Ajustes tácticos recomendados por IA para este bloque.</p>
                             </div>
                             <button
-                                onClick={() => void refreshPlanning()}
-                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/46 transition-colors hover:text-white/80"
+                                onClick={() => setIsAgendoOptionsOpen(false)}
+                                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-colors flex-shrink-0 ml-4"
                             >
-                                {planningLoading ? "Analizando..." : "Revisar"}
+                                <X size={16} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex justify-between mb-4">
+                            <button
+                                onClick={() => void refreshPlanning()}
+                                className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white w-full"
+                            >
+                                {planningLoading ? "Analizando..." : "Refrescar Sugerencias"}
                             </button>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {!planningLoading && planningRecommendations.length === 0 && (
-                                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52">
-                                    Este bloque no necesita una intervencion fuerte por ahora.
+                                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52 text-center">
+                                    Este bloque está bien estructurado y no requiere intervención por ahora.
                                 </div>
                             )}
 
@@ -1592,6 +1507,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     </div>
                 </div>
             )}
+
 
             {/* Global Styles for the spring animation */}
             <style>{`
@@ -1646,6 +1562,15 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* ─── OVERLAP RESOLUTION MODAL ─── */}
+            <OverlapResolutionModal
+                isOpen={!!pendingConflict}
+                onClose={() => setPendingConflict(null)}
+                pendingBlock={pendingConflict?.newBlock || null}
+                overlappingCount={pendingConflict?.overlaps.length || 0}
+                onResolve={handleResolveConflict}
+            />
         </div>,
         document.body
     );

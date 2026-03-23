@@ -4,12 +4,15 @@ import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { Block } from "@/lib/types/blocks";
 import { BlockItem } from "./BlockItem";
 import { RadialBlockMenu } from "./RadialBlockMenu";
-import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
+import { findNextFreeSlot, isOverlapping, snapTo15 } from "@/lib/utils/scheduling";
+import { OverlapResolutionModal, OverlapResolutionType } from "./OverlapResolutionModal";
+import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { ChevronLeft, ChevronRight, Grid } from "lucide-react";
 import { FocusPlannerModal } from "../focus/FocusPlannerModal";
 import { sortBlocksByStart } from "@/lib/utils/blockState";
+import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 
 // Constants
 const PIXELS_PER_HOUR = 80;
@@ -69,6 +72,7 @@ export function WeekView() {
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+    const [pendingConflict, setPendingConflict] = useState<{ newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt">, overlaps: Block[] } | null>(null);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -184,12 +188,13 @@ export function WeekView() {
 
         const finalEnd = new Date(finalStart.getTime() + 60 * 60000); // 1 hr default
 
-        const newBlock = await createBlock({
+        const enriched = enrichNewBlockWithPlanningMetadata({
             startAt: finalStart,
             endAt: finalEnd,
-            title: ""
+            title: "",
+            type: "other"
         });
-
+        const newBlock = createBlock(enriched);
         if (newBlock) {
             setIsNewBlock(true);
             setSelectedBlockId(newBlock.id);
@@ -353,8 +358,13 @@ export function WeekView() {
             if (interaction.type === "create") {
                 // If create was just a click, we still create a default 1h block?
                 // Logic above sets isDragging=true for create immediately, so it always falls here.
-                const newBlock = await createBlock({ startAt: startToUse, endAt: endToUse });
-                // Also open drawer for new block?
+                const enriched = enrichNewBlockWithPlanningMetadata({
+                    startAt: startToUse,
+                    endAt: endToUse,
+                    title: "",
+                    type: "other"
+                });
+                const newBlock = createBlock(enriched);
                 if (newBlock) {
                     setIsNewBlock(true);
                     setSelectedBlockId(newBlock.id);

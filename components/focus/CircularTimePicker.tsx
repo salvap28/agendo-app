@@ -209,7 +209,6 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 if (dur < 0) dur += 1440;
                 if (dur < 5) newEnd = newStart + 5;
 
-                if (checkCollision(newStart, newEnd)) return;
 
             } else if (dragging === 'end') {
                 newEnd += delta;
@@ -220,7 +219,6 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 if (dur < 0) dur += 1440;
                 if (dur < 5) newStart = newEnd - 5;
 
-                if (checkCollision(newStart, newEnd)) return;
 
             } else if (dragging === 'arc') {
                 newStart += delta;
@@ -230,7 +228,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 newStart %= 1440;
                 newEnd %= 1440;
 
-                if (checkCollision(newStart, newEnd)) return;
+
             }
 
             // Update smooth local visual state instantly

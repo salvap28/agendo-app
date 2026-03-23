@@ -23,9 +23,13 @@ import {
     X,
 } from "lucide-react";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
+import { Block } from "@/lib/types/blocks";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { sortBlocksByStart } from "@/lib/utils/blockState";
-import { findNextFreeSlot, snapTo15 } from "@/lib/utils/scheduling";
+import { findNextFreeSlot, isOverlapping, snapTo15 } from "@/lib/utils/scheduling";
+import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
+import { OverlapResolutionModal, OverlapResolutionType } from "./OverlapResolutionModal";
+import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
 import { MonthDayCell } from "./glass-calendar-dashboard/MonthDayCell";
 import { ScheduledEventCard } from "./glass-calendar-dashboard/ScheduledEventCard";
 import { CalendarEvent } from "./glass-calendar-dashboard/types";
@@ -67,13 +71,14 @@ interface GlassCalendarDashboardProps {
 }
 
 export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardProps) {
-    const { blocks, createBlock } = useBlocksStore();
+    const { blocks, createBlock, updateBlock } = useBlocksStore();
     const { session, openFromBlock } = useFocusStore();
 
     const [currentTime, setCurrentTime] = useState(() => new Date());
     const [displayMonth, setDisplayMonth] = useState(() => startOfMonth(new Date()));
     const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
     const [searchQuery, setSearchQuery] = useState("");
+    const [pendingConflict, setPendingConflict] = useState<{ newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt">, overlaps: Block[] } | null>(null);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -189,31 +194,72 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         const dayBlocks = blocks.filter(
             (block) => getDayKey(block.startAt) === getDayKey(effectiveSelectedDate) && block.status !== "canceled"
         );
-        const nextSlot = findNextFreeSlot(dayBlocks, desiredStart, durationMinutes);
-        const startAt = nextSlot?.startAt ?? desiredStart;
-        const endAt = nextSlot?.endAt ?? addMinutes(startAt, durationMinutes);
+        const endAt = addMinutes(desiredStart, durationMinutes);
+        
+        const overlaps = dayBlocks.filter(b => isOverlapping(desiredStart, endAt, b.startAt, b.endAt));
 
-        const createdBlock = createBlock({
-            startAt,
+        const enriched = enrichNewBlockWithPlanningMetadata({
+            startAt: desiredStart,
             endAt,
             title: "",
+            type: "other"
         });
 
-        if (createdBlock) {
-            setSelectedDate(startOfDay(createdBlock.startAt));
-            setDisplayMonth(startOfMonth(createdBlock.startAt));
-            onOpenBlock(createdBlock.id, true);
+        if (overlaps.length > 0) {
+            setPendingConflict({ newBlock: enriched, overlaps });
+        } else {
+            const newBlock = createBlock(enriched);
+            if (newBlock) onOpenBlock(newBlock.id, true);
         }
+    };
+
+    
+    const handleResolveConflict = (resolution: OverlapResolutionType) => {
+        if (!pendingConflict) return;
+        const { newBlock, overlaps } = pendingConflict;
+        
+        let resultingId = newBlock.id;
+        let isCreation = !newBlock.id;
+
+        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
+
+        if (resolution === 'slice_underlying') {
+            const result = resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
+            if (result && isCreation) resultingId = result.id;
+        } 
+        else if (resolution === 'shrink_new') {
+            const result = resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock);
+            if (result && isCreation) resultingId = result.id;
+        }
+        else if (resolution === 'move_forward') {
+            const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
+            const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
+            
+            if (slot) {
+                newBlock.startAt = slot.startAt;
+                newBlock.endAt = slot.endAt;
+                const result = createBlock(newBlock);
+                if (result && isCreation) resultingId = result.id;
+            }
+        }
+        else if (resolution === 'keep_overlap') {
+            const result = createBlock(newBlock);
+            if (result && isCreation) resultingId = result.id;
+        }
+
+        if (isCreation && resultingId) {
+            onOpenBlock(resultingId, true);
+        }
+        
+        setPendingConflict(null);
     };
 
     return (
         <div className="relative h-full w-full overflow-hidden rounded-[inherit]">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(124,58,237,0.18),transparent_38%),radial-gradient(circle_at_70%_30%,rgba(99,102,241,0.12),transparent_26%)]" />
             <div className="relative z-10 flex h-full flex-col p-5 lg:p-6">
-                <div className="flex items-start justify-between gap-4 pb-5 lg:pb-6">
+                <div className="flex items-center justify-between gap-4 pb-5 lg:pb-6">
                     <div className="space-y-1">
-                        <p className="text-sm text-white/50">Agendo calendar</p>
-                        <h2 className="text-3xl font-semibold tracking-tight text-white/90">Good morning, Salva.</h2>
                         <p className="text-sm text-white/40">
                             {normalizedSearch
                                 ? `${visibleEvents.length} matching blocks, ${totalMonthEvents} in ${format(effectiveDisplayMonth, "MMMM")}.`
@@ -402,6 +448,14 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     }
                 }
             `}</style>
+        
+            <OverlapResolutionModal
+                isOpen={!!pendingConflict}
+                onClose={() => setPendingConflict(null)}
+                pendingBlock={pendingConflict?.newBlock || null}
+                overlappingCount={pendingConflict?.overlaps.length || 0}
+                onResolve={handleResolveConflict}
+            />
         </div>
     );
 }

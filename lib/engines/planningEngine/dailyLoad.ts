@@ -139,24 +139,26 @@ export function computeDailyLoad(
             ? 7
             : 0;
 
+    const noBreakPenalty = snapshots.length > 2 ? ((1 - breakCoverageRatio) * 12) : 0;
+
     const score = Math.round(
         Math.min(100,
-            (snapshots.length * 7) +
-            (totalPlannedMinutes / 14) +
-            (intenseBlocks.length * 10) +
-            (longBlocks.length * 8) +
+            (Math.min(25, snapshots.length * 5)) +
+            (totalPlannedMinutes / 18) +
+            (intenseBlocks.length * 8) +
+            (longBlocks.length * 6) +
             (intenseSequences * 10) +
-            (deadlinePressureCount * 8) +
-            ((1 - breakCoverageRatio) * 14) +
-            (activityLoad.passiveAttendanceLoad / 18) +
-            (activityLoad.collaborativeLoad / 16) +
-            (activityLoad.logisticsLoad / 24) +
-            (activityLoad.transitionCost * 0.8) +
-            Math.max(0, (50 - activityLoad.residualEnergyEstimate) * 0.35) +
-            Math.max(0, activityLoad.planRealityVariance / 12) -
+            (deadlinePressureCount * 6) +
+            noBreakPenalty +
+            (activityLoad.passiveAttendanceLoad / 20) +
+            (activityLoad.collaborativeLoad / 18) +
+            (activityLoad.logisticsLoad / 26) +
+            (activityLoad.transitionCost * 0.6) +
+            Math.max(0, (50 - activityLoad.residualEnergyEstimate) * 0.3) +
+            Math.max(0, activityLoad.planRealityVariance / 15) -
             Math.min(12, activityLoad.recoveryEffect / 14) +
-            historicalMinutesPenalty +
-            historicalDemandPenalty
+            (historicalMinutesPenalty * 0.9) +
+            (historicalDemandPenalty * 0.9)
         )
     );
 

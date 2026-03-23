@@ -152,6 +152,13 @@ function renderCopy(reasonCode: ReasonCode, payload: Record<string, unknown>) {
                 reason: `Demanding sessions have been holding better in the ${String(payload.bestWindowLabel)} than in the ${String(payload.currentWindowLabel)}.`,
             };
         case "SESSION_TOO_LONG":
+            if (payload.unsplittable) {
+                return {
+                    title: "This long block needs immediate recovery",
+                    message: `Since this ${String(payload.currentMinutes)}m task can't be split, your brain will need a ${String(payload.breakMinutes)}m restorative reset right after to clear working memory.`,
+                    reason: "Ultradian rhythms dictate a 20-30m nervous system reset after intense unsplittable exertion to prevent deep cognitive fatigue.",
+                };
+            }
             return {
                 title: "This duration looks too ambitious",
                 message: `${String(payload.recommendedRange)} looks more sustainable for you right now than ${String(payload.currentMinutes)} straight minutes.`,
@@ -379,50 +386,80 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                 if (confidence < 0.58) {
                     continue;
                 }
-                recommendations.push(buildRecommendation({
-                    id: getStableRecommendationId(input.userId, "shorten_block", "block", block.id),
-                    type: snapshot.splittable ? "split_block" : "shorten_block",
-                    scope: "block",
-                    targetBlockId: block.id,
-                    targetDate: input.targetDate,
-                    priority: snapshot.splittable ? "high" : "medium",
-                    confidence,
-                    reasonCode: "SESSION_TOO_LONG",
-                    reasonPayload: {
-                        recommendedRange: `${optimalRange.minMinutes}-${optimalRange.maxMinutes} min`,
-                        currentMinutes: snapshot.durationMinutes,
-                    },
-                    evidence: buildEvidence({
-                        confidence: profile.optimalSessionLength.confidence,
-                        sampleSize: profile.optimalSessionLength.sampleSize,
-                        hypothesisStrength: "stable",
-                        lastUpdated: profile.optimalSessionLength.updatedAt,
-                        appliesTo: [block.id],
-                        signals: ["optimal_session_length", "planned_duration", ...activityApplicability.signals],
-                    }),
-                    applyability: {
-                        mode: "auto",
-                        helperText: snapshot.splittable
-                            ? "Agendo can split it without breaking the rest of the plan."
-                            : "Agendo can shorten the block safely.",
-                    },
-                    suggestedAction: snapshot.splittable
-                        ? {
+                if (snapshot.splittable) {
+                    recommendations.push(buildRecommendation({
+                        id: getStableRecommendationId(input.userId, "shorten_block", "block", block.id),
+                        type: "split_block",
+                        scope: "block",
+                        targetBlockId: block.id,
+                        targetDate: input.targetDate,
+                        priority: "high",
+                        confidence,
+                        reasonCode: "SESSION_TOO_LONG",
+                        reasonPayload: {
+                            recommendedRange: `${optimalRange.minMinutes}-${optimalRange.maxMinutes} min`,
+                            currentMinutes: snapshot.durationMinutes,
+                        },
+                        evidence: buildEvidence({
+                            confidence: profile.optimalSessionLength.confidence,
+                            sampleSize: profile.optimalSessionLength.sampleSize,
+                            hypothesisStrength: "stable",
+                            lastUpdated: profile.optimalSessionLength.updatedAt,
+                            appliesTo: [block.id],
+                            signals: ["optimal_session_length", "planned_duration", ...activityApplicability.signals],
+                        }),
+                        applyability: {
+                            mode: "auto",
+                            helperText: "Agendo can split it without breaking the rest of the plan.",
+                        },
+                        suggestedAction: {
                             kind: "split",
                             label: "Split into two blocks",
                             payload: {
                                 firstDurationMinutes: splitTargetMinutes,
                                 secondDurationMinutes: snapshot.durationMinutes - splitTargetMinutes,
                             },
-                        }
-                        : {
-                            kind: "shorten",
-                            label: "Shorten block",
+                        },
+                    }));
+                } else {
+                    const breakMinutes = snapshot.durationMinutes >= 180 ? 30 : 20;
+                    recommendations.push(buildRecommendation({
+                        id: getStableRecommendationId(input.userId, "insert_break", "block", block.id),
+                        type: "insert_break",
+                        scope: "block",
+                        targetBlockId: block.id,
+                        targetDate: input.targetDate,
+                        priority: "medium",
+                        confidence,
+                        reasonCode: "SESSION_TOO_LONG",
+                        reasonPayload: {
+                            recommendedRange: `${optimalRange.minMinutes}-${optimalRange.maxMinutes} min`,
+                            currentMinutes: snapshot.durationMinutes,
+                            unsplittable: true,
+                            breakMinutes,
+                        },
+                        evidence: buildEvidence({
+                            confidence: profile.optimalSessionLength.confidence,
+                            sampleSize: profile.optimalSessionLength.sampleSize,
+                            hypothesisStrength: "stable",
+                            lastUpdated: profile.optimalSessionLength.updatedAt,
+                            appliesTo: [block.id],
+                            signals: ["optimal_session_length", "planned_duration", "unsplittable_block", ...activityApplicability.signals],
+                        }),
+                        applyability: {
+                            mode: "auto",
+                            helperText: `Agendo can schedule a ${breakMinutes}m restorative break right after this block.`,
+                        },
+                        suggestedAction: {
+                            kind: "insert_break",
+                            label: `Programar descanso (${breakMinutes}m)`,
                             payload: {
-                                recommendedDurationMinutes: recommendedMax,
+                                suggestedStart: block.endAt.toISOString(),
+                                durationMinutes: breakMinutes,
                             },
                         },
-                }));
+                    }));
+                }
             }
         }
 

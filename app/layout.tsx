@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
+    <html lang="es" className="dark" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} bg-background font-sans text-foreground antialiased overflow-x-hidden`}
+        suppressHydrationWarning
       >
         {children}
         <FocusOverlay />

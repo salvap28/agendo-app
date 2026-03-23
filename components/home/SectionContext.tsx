@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { Block } from "@/lib/types/blocks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Play, Flame, Activity, Clock, Sparkles, CheckCircle2, MinusCircle, SkipForward, BatteryCharging, BatteryMedium, BatteryWarning } from "lucide-react";
+import { Calendar, Play, Flame, Activity, Clock, Sparkles, CheckCircle2, MinusCircle, SkipForward, BatteryCharging, BatteryMedium, BatteryWarning, Info } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -63,28 +63,40 @@ const FOCUS_WINDOW_LABELS: Record<NonNullable<HomeSummaryData["best_focus_window
     night: "Night",
 };
 
-function ProfileCalibrationRing({ value }: { value: number }) {
-    const size = 58;
-    const strokeWidth = 5;
+function ProfileCalibrationRing({ value, large }: { value: number; large?: boolean }) {
+    const size = large ? 110 : 58;
+    const strokeWidth = large ? 6 : 5;
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
     const safeValue = Math.max(0, Math.min(100, value));
     const dashOffset = circumference - ((safeValue / 100) * circumference);
 
     return (
-        <div className="relative flex h-[58px] w-[58px] items-center justify-center">
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            {/* Ambient glow behind the ring */}
+            {large && (
+                <div
+                    className="absolute inset-0 animate-pulse"
+                    style={{
+                        background: 'radial-gradient(circle, rgba(193,167,255,0.15) 0%, rgba(131,176,255,0.08) 40%, transparent 70%)',
+                        filter: 'blur(18px)',
+                        transform: 'scale(1.6)',
+                    }}
+                />
+            )}
             <svg
                 width={size}
                 height={size}
                 viewBox={`0 0 ${size} ${size}`}
                 className="-rotate-90"
+                style={{ filter: large ? 'drop-shadow(0 0 8px rgba(193,167,255,0.3))' : undefined }}
             >
                 <circle
                     cx={size / 2}
                     cy={size / 2}
                     r={radius}
                     fill="none"
-                    stroke="rgba(255,255,255,0.1)"
+                    stroke="rgba(255,255,255,0.06)"
                     strokeWidth={strokeWidth}
                 />
                 <circle
@@ -97,15 +109,25 @@ function ProfileCalibrationRing({ value }: { value: number }) {
                     strokeLinecap="round"
                     strokeDasharray={circumference}
                     strokeDashoffset={dashOffset}
+                    style={{ transition: 'stroke-dashoffset 1.4s cubic-bezier(0.4, 0, 0.2, 1)' }}
                 />
                 <defs>
                     <linearGradient id="profile-calibration-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(255,216,145,1)" />
-                        <stop offset="100%" stopColor="rgba(131,176,255,1)" />
+                        <stop offset="0%" stopColor="rgba(193,167,255,1)" />
+                        <stop offset="50%" stopColor="rgba(131,176,255,1)" />
+                        <stop offset="100%" stopColor="rgba(110,231,183,0.8)" />
                     </linearGradient>
                 </defs>
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold tracking-tight text-white/88">
+            <div className={cn(
+                "absolute inset-0 flex items-center justify-center font-bold tracking-tight",
+                large ? "text-[20px]" : "text-[11px]"
+            )}
+            style={large ? {
+                background: 'linear-gradient(135deg, rgba(193,167,255,1), rgba(131,176,255,1))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+            } : { color: 'rgba(255,255,255,0.88)' }}>
                 {safeValue}%
             </div>
         </div>
@@ -131,6 +153,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [checkoutEnergyImpact, setCheckoutEnergyImpact] = useState<EnergyImpact>("neutral");
     const [checkoutPerceivedValue, setCheckoutPerceivedValue] = useState<PerceivedValue>("medium");
     const [dismissedCheckoutBlockIds, setDismissedCheckoutBlockIds] = useState<string[]>([]);
+    const [showProfileInfo, setShowProfileInfo] = useState(false);
     const { settings } = useSettingsStore();
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
@@ -357,7 +380,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
             await fetchBlocks();
             await refreshPlanning();
         } catch (error) {
-            console.error("Failed to apply planning recommendation", error);
+            // "requires manual review" is an expected server guard, not a real error
+            if (error instanceof Error && error.message.includes("manual review")) {
+                console.info("[Planning] Recommendation requires manual review, skipping auto-apply.");
+            } else {
+                console.error("Failed to apply planning recommendation", error);
+            }
             await refreshPlanning();
         } finally {
             setApplyingRecommendationId(null);
@@ -390,19 +418,21 @@ export function SectionContext({ onNext }: SectionContextProps) {
 
     return (
         <section
-            className="relative w-full min-h-[100dvh] snap-start flex flex-col items-center justify-center p-6"
+            className="relative w-full h-[100dvh] snap-start flex flex-col items-center justify-center p-4 md:p-6 overflow-hidden"
         >
-            <div className="flex flex-col items-center w-full z-20">
+            <div className="flex flex-col items-center w-full z-20 gap-4 md:gap-5">
 
                 {/* Greeting */}
                 <h2
                     className="text-center"
                     style={{
-                        fontWeight: 600,
-                        fontSize: 'clamp(28px, 4vw, 40px)',
-                        letterSpacing: '-0.01em',
-                        color: 'rgba(255,255,255,0.9)',
-                        marginBottom: '32px'
+                        fontWeight: 700,
+                        fontSize: 'clamp(22px, 3vw, 34px)',
+                        letterSpacing: '-0.02em',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(193,167,255,0.85) 50%, rgba(131,176,255,0.8) 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        marginBottom: '0'
                     }}
                 >
                     {greeting}, {userName}.
@@ -572,85 +602,102 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     })()}
                 </div>
 
-                {/* Home Summary Card */}
+                {/* Profile Calibration Ring */}
                 {summaryData && (
-                    <div className="mt-8 w-full max-w-[420px] rounded-[28px] border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                                    {summaryData.progress_signal === "positive"
-                                        ? "Sharper"
-                                        : summaryData.progress_signal === "quiet"
-                                            ? "Quiet"
-                                            : "Calibrating"}
-                                </p>
-                                <p className="mt-2 text-base font-semibold tracking-tight text-white/90">
-                                    {summaryData.main_insight}
-                                </p>
-                            </div>
-                            <div className="flex flex-col items-center gap-1 text-center">
-                                <ProfileCalibrationRing value={summaryData.profile_calibration_progress} />
-                                <span className="text-[10px] uppercase tracking-[0.16em] text-white/38">
-                                    Profile fill
-                                </span>
-                            </div>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
-                            <span className="rounded-full border border-white/10 px-2.5 py-1">
-                                Composite {summaryData.momentum_current}
+                    <div className="relative flex flex-col items-center gap-1.5 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                        <ProfileCalibrationRing value={summaryData.profile_calibration_progress} large />
+                        <div className="flex items-center gap-1">
+                            <span
+                                className="text-[9px] font-bold uppercase tracking-[0.2em]"
+                                style={{
+                                    background: 'linear-gradient(90deg, rgba(193,167,255,0.6), rgba(131,176,255,0.5))',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                }}
+                            >
+                                Profile fill
                             </span>
-                            {summaryData.momentum_delta_week > 0 && (
-                                <span className="rounded-full border border-emerald-400/15 bg-emerald-400/8 px-2.5 py-1 text-emerald-300">
-                                    +{summaryData.momentum_delta_week} vs last week
-                                </span>
-                            )}
-                            {summaryData.momentum_delta_week < 0 && (
-                                <span className="rounded-full border border-rose-400/15 bg-rose-400/8 px-2.5 py-1 text-rose-300">
-                                    {summaryData.momentum_delta_week} vs last week
-                                </span>
-                            )}
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-white/56">
-                            {summaryData.soft_recommendation}
-                        </p>
+                            <div
+                                className="relative"
+                                onMouseEnter={() => setShowProfileInfo(true)}
+                                onMouseLeave={() => setShowProfileInfo(false)}
+                            >
+                                <div
+                                    className="flex h-[14px] w-[14px] items-center justify-center rounded-full cursor-help opacity-45 hover:opacity-75 transition-opacity"
+                                    style={{
+                                        background: 'rgba(193,167,255,0.12)',
+                                        border: '1px solid rgba(193,167,255,0.1)',
+                                    }}
+                                >
+                                    <Info className="h-[8px] w-[8px] text-[#c1a7ff]" />
+                                </div>
 
-                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/[0.05] pt-3 text-[11px] font-medium text-white/46">
-                            {(summaryData.focus_streak || 0) > 0 && (
-                                <div className="flex items-center gap-1.5 rounded-full border border-orange-400/15 bg-orange-400/8 px-2.5 py-1 text-orange-200/82">
-                                    <Flame className="w-3.5 h-3.5" />
-                                    <span>{summaryData.focus_streak} day streak</span>
-                                </div>
-                            )}
-                            <div className="flex items-center gap-1.5 rounded-full border border-indigo-400/15 bg-indigo-400/8 px-2.5 py-1 text-indigo-100/82">
-                                <Activity className="w-3.5 h-3.5" />
-                                <span>{summaryData.weekly_sessions_count || 0} this week</span>
+                                {/* Hover tooltip — side panel */}
+                                {showProfileInfo && (
+                                    <div
+                                        className="absolute left-full top-1/2 -translate-y-1/2 ml-3 w-[260px] rounded-[18px] overflow-hidden z-20 pointer-events-none animate-in fade-in slide-in-from-left-2 duration-200"
+                                        style={{
+                                            background: 'linear-gradient(135deg, rgba(15,12,28,0.92), rgba(8,6,18,0.95))',
+                                            border: '1px solid rgba(193,167,255,0.1)',
+                                            boxShadow: '0 12px 40px -8px rgba(0,0,0,0.6), 0 0 20px -6px rgba(193,167,255,0.08)',
+                                            backdropFilter: 'blur(20px)',
+                                        }}
+                                    >
+                                        {/* Top shimmer */}
+                                        <div className="h-[1px] w-full" style={{
+                                            background: 'linear-gradient(90deg, transparent, rgba(193,167,255,0.2), rgba(131,176,255,0.2), transparent)',
+                                        }} />
+                                        <div className="px-4 py-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{
+                                                background: 'linear-gradient(90deg, rgba(193,167,255,0.7), rgba(131,176,255,0.6))',
+                                                WebkitBackgroundClip: 'text',
+                                                WebkitTextFillColor: 'transparent',
+                                            }}>
+                                                Profile Fill
+                                            </p>
+                                            <p className="text-[11px] leading-[1.55] text-white/45">
+                                                Se calibra con cada check-in, sesión de focus y bloque completado.
+                                            </p>
+                                            <p className="mt-1.5 text-[11px] leading-[1.55] text-white/35">
+                                                Más lleno → mejores recomendaciones y predicciones más precisas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                            {summaryData.best_focus_window && (
-                                <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-white/56">
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span>Best {FOCUS_WINDOW_LABELS[summaryData.best_focus_window]}</span>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
 
-                <div className="mt-6 w-full max-w-[760px] rounded-[30px] border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-2xl">
-                    <div className="mb-4 flex flex-col gap-2">
-                        <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
-                                Planning assist
-                            </p>
-                            <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">
-                                A few useful moves. Real context only.
-                            </h3>
-                        </div>
+                {/* Planning Assist */}
+                <div className="relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4 backdrop-blur-2xl"
+                    style={{
+                        background: 'linear-gradient(180deg, rgba(193,167,255,0.04) 0%, rgba(131,176,255,0.02) 50%, rgba(0,0,0,0.2) 100%)',
+                        border: '1px solid rgba(193,167,255,0.12)',
+                    }}
+                >
+                    {/* Subtle shimmer line at top */}
+                    <div className="absolute top-0 left-[10%] right-[10%] h-[1px]" style={{
+                        background: 'linear-gradient(90deg, transparent, rgba(193,167,255,0.3), rgba(131,176,255,0.3), transparent)',
+                    }} />
+                    <div className="mb-3 flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-[#c1a7ff]/60" />
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{
+                            background: 'linear-gradient(90deg, rgba(193,167,255,0.7), rgba(131,176,255,0.6))',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                        }}>
+                            Planning assist
+                        </p>
                     </div>
+                    <p className="mb-3 text-[13px] font-medium tracking-tight text-white/55">
+                        Smart adjustments based on your real patterns.
+                    </p>
 
-                    <div className="grid gap-3">
+                    <div className="grid gap-2">
                         {planningRecommendations.length === 0 ? (
-                            <div className="rounded-[24px] border border-white/[0.08] bg-black/20 px-4 py-5 text-sm leading-6 text-white/55">
-                                No strong adjustment stands out right now. If the day tightens, Agendo will surface it here.
+                            <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-[13px] leading-6 text-white/45 italic">
+                                Nothing to adjust right now. Keep going.
                             </div>
                         ) : (
                             planningRecommendations.map((recommendation) => (
@@ -669,35 +716,51 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 </div>
 
                 {pendingCheckoutBlock && (
-                    <div className="mt-6 w-full max-w-[760px] rounded-[30px] border border-amber-300/12 bg-[linear-gradient(180deg,rgba(255,214,153,0.08),rgba(0,0,0,0.22))] p-4 backdrop-blur-2xl shadow-[0_20px_80px_-44px_rgba(255,196,94,0.55)]">
-                        <div className="flex flex-col gap-4">
+                    <div className="relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4 backdrop-blur-2xl"
+                        style={{
+                            background: 'linear-gradient(180deg, rgba(255,214,153,0.06) 0%, rgba(251,191,36,0.03) 40%, rgba(0,0,0,0.25) 100%)',
+                            border: '1px solid rgba(251,191,36,0.15)',
+                            boxShadow: '0 20px 80px -44px rgba(251,191,36,0.4), inset 0 1px 0 rgba(251,191,36,0.1)',
+                        }}
+                    >
+                        {/* Top shimmer for checkout */}
+                        <div className="absolute top-0 left-[10%] right-[10%] h-[1px]" style={{
+                            background: 'linear-gradient(90deg, transparent, rgba(251,191,36,0.35), rgba(255,214,153,0.35), transparent)',
+                        }} />
+                        <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/45">
-                                        Quick check-in
-                                    </p>
-                                    <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-amber-400/80 animate-pulse" />
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{
+                                            background: 'linear-gradient(90deg, rgba(251,191,36,0.7), rgba(255,214,153,0.6))',
+                                            WebkitBackgroundClip: 'text',
+                                            WebkitTextFillColor: 'transparent',
+                                        }}>
+                                            Quick check-in
+                                        </p>
+                                    </div>
+                                    <h3 className="mt-1.5 text-[15px] font-semibold tracking-tight text-white">
                                         {pendingCheckoutBlock.block.title} just ended
                                     </h3>
-                                    <p className="mt-1 text-sm leading-6 text-white/58">
-                                        Mark how it went in a few taps so Agendo can learn from the real outcome.
+                                    <p className="mt-1 text-[13px] leading-5 text-white/50">
+                                        A few taps to capture the real outcome.
                                     </p>
                                 </div>
                                 <button
                                     onClick={() => setSelectedBlockId(pendingCheckoutBlock.block.id)}
-                                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/62 transition hover:bg-white/[0.08] hover:text-white"
+                                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/55 transition-all hover:bg-white/[0.08] hover:text-white hover:border-white/20 hover:scale-105"
                                 >
                                     Open block
                                 </button>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-3">
-                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
-                                        Outcome
-                                    </p>
-                                    <div className="mt-3 grid grid-cols-3 gap-2">
-                                        {([
+                            <div className="flex flex-col gap-3">
+                                {/* Outcome — segmented pill */}
+                                <div>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Outcome</p>
+                                    {(() => {
+                                        const outcomeOptions = [
                                             {
                                                 value: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block),
                                                 label: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block) === "attended" ? "Attended" : "Done",
@@ -705,107 +768,168 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                             },
                                             { value: "partial" as ActivityOutcome, label: "Partial", icon: MinusCircle },
                                             { value: "skipped" as ActivityOutcome, label: "Skipped", icon: SkipForward },
-                                        ]).map((option) => {
-                                            const Icon = option.icon;
-                                            const active = checkoutOutcome === option.value;
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    onClick={() => setCheckoutOutcome(option.value)}
-                                                    className={cn(
-                                                        "flex flex-col items-start gap-1 rounded-2xl border px-3 py-2 text-left text-[11px] transition",
-                                                        active
-                                                            ? "border-amber-300/30 bg-amber-300/12 text-amber-100"
-                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
-                                                    )}
-                                                >
-                                                    <Icon className="h-3.5 w-3.5" />
-                                                    {option.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                        ];
+                                        const activeIdx = outcomeOptions.findIndex(o => o.value === checkoutOutcome);
+                                        return (
+                                            <div className="relative flex h-[36px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                                {/* Sliding indicator */}
+                                                <div
+                                                    className="absolute top-[3px] bottom-[3px] rounded-full pointer-events-none"
+                                                    style={{
+                                                        width: `calc(${100 / outcomeOptions.length}% - 4px)`,
+                                                        left: `calc(${(activeIdx >= 0 ? activeIdx : 0) * (100 / outcomeOptions.length)}% + 2px)`,
+                                                        background: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(255,214,153,0.12))',
+                                                        border: '1px solid rgba(251,191,36,0.25)',
+                                                        boxShadow: '0 0 12px rgba(251,191,36,0.15)',
+                                                        transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                    }}
+                                                />
+                                                {outcomeOptions.map((option) => {
+                                                    const Icon = option.icon;
+                                                    const active = checkoutOutcome === option.value;
+                                                    return (
+                                                        <div
+                                                            key={option.value}
+                                                            onClick={() => setCheckoutOutcome(option.value)}
+                                                            className="relative z-10 flex-1 flex items-center justify-center gap-1.5 cursor-pointer select-none transition-colors duration-200"
+                                                            style={{ color: active ? 'rgba(255,214,153,0.95)' : 'rgba(255,255,255,0.4)' }}
+                                                        >
+                                                            <Icon className="h-3 w-3" />
+                                                            <span className="text-[10px] font-semibold">{option.label}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
-                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
-                                        Energy
-                                    </p>
-                                    <div className="mt-3 grid grid-cols-3 gap-2">
-                                        {([
-                                            { value: "restorative" as EnergyImpact, label: "Restorative", icon: BatteryCharging },
-                                            { value: "neutral" as EnergyImpact, label: "Neutral", icon: BatteryMedium },
-                                            { value: "draining" as EnergyImpact, label: "Draining", icon: BatteryWarning },
-                                        ]).map((option) => {
-                                            const Icon = option.icon;
-                                            const active = checkoutEnergyImpact === option.value;
-                                            return (
-                                                <button
-                                                    key={option.value}
-                                                    onClick={() => setCheckoutEnergyImpact(option.value)}
-                                                    className={cn(
-                                                        "flex flex-col items-start gap-1 rounded-2xl border px-3 py-2 text-left text-[11px] transition",
-                                                        active
-                                                            ? "border-sky-300/25 bg-sky-300/10 text-sky-100"
-                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
-                                                    )}
-                                                >
-                                                    <Icon className="h-3.5 w-3.5" />
-                                                    {option.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                                {checkoutOutcome !== "skipped" && (
+                                    <>
+                                        {/* Energy — segmented pill */}
+                                        <div className="animate-in fade-in zoom-in-95 duration-300">
+                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Energy</p>
+                                            {(() => {
+                                                const energyOptions = [
+                                                    { value: "restorative" as EnergyImpact, label: "Restored", icon: BatteryCharging, color: 'rgba(110,231,183,' },
+                                                    { value: "neutral" as EnergyImpact, label: "Neutral", icon: BatteryMedium, color: 'rgba(131,176,255,' },
+                                                    { value: "draining" as EnergyImpact, label: "Drained", icon: BatteryWarning, color: 'rgba(251,113,133,' },
+                                                ];
+                                                const activeIdx = energyOptions.findIndex(o => o.value === checkoutEnergyImpact);
+                                                const activeColor = activeIdx >= 0 ? energyOptions[activeIdx].color : energyOptions[1].color;
+                                                return (
+                                                    <div className="relative flex h-[36px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                                        <div
+                                                            className="absolute top-[3px] bottom-[3px] rounded-full pointer-events-none"
+                                                            style={{
+                                                                width: `calc(${100 / energyOptions.length}% - 4px)`,
+                                                                left: `calc(${(activeIdx >= 0 ? activeIdx : 1) * (100 / energyOptions.length)}% + 2px)`,
+                                                                background: `linear-gradient(135deg, ${activeColor}0.2), ${activeColor}0.1))`,
+                                                                border: `1px solid ${activeColor}0.3)`,
+                                                                boxShadow: `0 0 12px ${activeColor}0.15)`,
+                                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                            }}
+                                                        />
+                                                        {energyOptions.map((option) => {
+                                                            const Icon = option.icon;
+                                                            const active = checkoutEnergyImpact === option.value;
+                                                            return (
+                                                                <div
+                                                                    key={option.value}
+                                                                    onClick={() => setCheckoutEnergyImpact(option.value)}
+                                                                    className="relative z-10 flex-1 flex items-center justify-center gap-1.5 cursor-pointer select-none transition-colors duration-200"
+                                                                    style={{ color: active ? `${option.color}0.95)` : 'rgba(255,255,255,0.4)' }}
+                                                                >
+                                                                    <Icon className="h-3 w-3" />
+                                                                    <span className="text-[10px] font-semibold">{option.label}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
 
-                                <div className="rounded-[22px] border border-white/[0.08] bg-black/18 p-3">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">
-                                        Value
-                                    </p>
-                                    <div className="mt-3 grid grid-cols-3 gap-2">
-                                        {(["low", "medium", "high"] as PerceivedValue[]).map((value) => {
-                                            const active = checkoutPerceivedValue === value;
-                                            return (
-                                                <button
-                                                    key={value}
-                                                    onClick={() => setCheckoutPerceivedValue(value)}
-                                                    className={cn(
-                                                        "rounded-2xl border px-3 py-2 text-[11px] capitalize transition",
-                                                        active
-                                                            ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
-                                                            : "border-white/8 bg-white/[0.03] text-white/58 hover:bg-white/[0.06] hover:text-white/80",
-                                                    )}
-                                                >
-                                                    {value}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                                        {/* Value — segmented pill */}
+                                        <div className="animate-in fade-in zoom-in-95 duration-300 delay-75">
+                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Value</p>
+                                            {(() => {
+                                                const valueOptions = [
+                                                    { value: "low" as PerceivedValue, label: "Low", color: 'rgba(255,255,255,' },
+                                                    { value: "medium" as PerceivedValue, label: "Medium", color: 'rgba(131,176,255,' },
+                                                    { value: "high" as PerceivedValue, label: "High", color: 'rgba(110,231,183,' },
+                                                ];
+                                                const activeIdx = valueOptions.findIndex(o => o.value === checkoutPerceivedValue);
+                                                const activeColor = activeIdx >= 0 ? valueOptions[activeIdx].color : valueOptions[1].color;
+                                                return (
+                                                    <div className="relative flex h-[36px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                                        <div
+                                                            className="absolute top-[3px] bottom-[3px] rounded-full pointer-events-none"
+                                                            style={{
+                                                                width: `calc(${100 / valueOptions.length}% - 4px)`,
+                                                                left: `calc(${(activeIdx >= 0 ? activeIdx : 1) * (100 / valueOptions.length)}% + 2px)`,
+                                                                background: `linear-gradient(135deg, ${activeColor}0.18), ${activeColor}0.08))`,
+                                                                border: `1px solid ${activeColor}0.25)`,
+                                                                boxShadow: `0 0 12px ${activeColor}0.12)`,
+                                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                            }}
+                                                        />
+                                                        {valueOptions.map((option) => {
+                                                            const active = checkoutPerceivedValue === option.value;
+                                                            return (
+                                                                <div
+                                                                    key={option.value}
+                                                                    onClick={() => setCheckoutPerceivedValue(option.value)}
+                                                                    className="relative z-10 flex-1 flex items-center justify-center cursor-pointer select-none transition-colors duration-200"
+                                                                    style={{ color: active ? `${option.color}0.95)` : 'rgba(255,255,255,0.4)' }}
+                                                                >
+                                                                    <span className="text-[10px] font-semibold">{option.label}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
-                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                            <div className="flex items-center gap-2 justify-end">
                                 <button
                                     onClick={handleDismissQuickCheckout}
-                                    className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-white/56 transition hover:bg-white/[0.05] hover:text-white/78"
+                                    className="rounded-full border border-white/[0.08] px-4 py-1.5 text-[12px] font-medium text-white/45 transition-all hover:bg-white/[0.04] hover:text-white/70 hover:scale-[1.02]"
                                 >
                                     Later
                                 </button>
-                                <GlassButton
+                                <button
                                     onClick={handleSaveQuickCheckout}
-                                    variant="default"
-                                    className="justify-center"
                                     disabled={checkoutSaving}
+                                    className="rounded-full px-5 py-1.5 text-[12px] font-semibold text-black transition-all hover:scale-[1.03] disabled:opacity-50"
+                                    style={{
+                                        background: 'linear-gradient(135deg, rgba(251,191,36,0.9), rgba(255,214,153,0.85))',
+                                        boxShadow: '0 4px 20px -4px rgba(251,191,36,0.4)',
+                                    }}
                                 >
                                     {checkoutSaving ? "Saving..." : "Save check-in"}
-                                </GlassButton>
+                                </button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                <div className="mt-7 w-full max-w-[760px] rounded-[30px] border border-white/[0.1] bg-black/30 p-3 backdrop-blur-2xl shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)]">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                {/* Bottom Dock */}
+                <div className="relative w-full max-w-[760px] rounded-[22px] overflow-hidden p-2 backdrop-blur-2xl"
+                    style={{
+                        background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.35) 100%)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: '0 24px 80px -40px rgba(0,0,0,0.9)',
+                    }}
+                >
+                    <div className="absolute top-0 left-[15%] right-[15%] h-[1px]" style={{
+                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
+                    }} />
+                    <div className="grid gap-2 sm:grid-cols-3">
                         <GlassButton onClick={() => setPlanningOpen(true)} variant="default" className="justify-center">
                             <Sparkles className="h-4 w-4 opacity-80" />
                             Plan

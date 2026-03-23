@@ -42,7 +42,8 @@ export async function updateSession(request: NextRequest) {
         if (
             !user &&
             !pathname.startsWith('/login') &&
-            !pathname.startsWith('/auth')
+            !pathname.startsWith('/auth') &&
+            !pathname.startsWith('/sw.js')
         ) {
             const url = request.nextUrl.clone()
             url.pathname = '/login'

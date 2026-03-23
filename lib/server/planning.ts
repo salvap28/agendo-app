@@ -864,7 +864,7 @@ export async function applyPlanningRecommendation(
         const secondStart = new Date(firstEnd.getTime() + (15 * 60000));
         const secondEnd = new Date(secondStart.getTime() + (secondDurationMinutes * 60000));
         const secondId = crypto.randomUUID();
-        await assertNoCalendarConflict(supabase, userId, secondStart.toISOString(), secondEnd.toISOString(), block.id);
+        await assertNoCalendarConflict(supabase, userId, firstEnd.toISOString(), secondEnd.toISOString(), block.id);
 
         const { error: updateError } = await supabase
             .from("blocks")
@@ -904,6 +904,31 @@ export async function applyPlanningRecommendation(
             });
 
         if (insertError) throw insertError;
+        
+        const breakId = crypto.randomUUID();
+        const { error: breakError } = await supabase
+            .from("blocks")
+            .insert({
+                id: breakId,
+                user_id: userId,
+                title: "Break",
+                type: "break",
+                status: "planned",
+                start_at: firstEnd.toISOString(),
+                end_at: secondStart.toISOString(),
+                priority: 1,
+                estimated_duration_minutes: 15,
+                flexibility: "moderate",
+                intensity: "light",
+                cognitively_heavy: false,
+                splittable: false,
+                optional: false,
+                notifications: [5]
+            });
+
+        if (breakError) console.warn("Could not insert break in split", breakError);
+        else createdBlockIds.push(breakId);
+
         changedBlockIds.push(block.id);
         createdBlockIds.push(secondId);
     } else if (action.kind === "insert_break") {
