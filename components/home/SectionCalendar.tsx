@@ -14,7 +14,7 @@ import { Plus } from "lucide-react";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 
 export function SectionCalendar() {
-    const { blocks, createBlock } = useBlocksStore();
+    const { blocks, createBlock, updateBlock } = useBlocksStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [mobileSelectedDate, setMobileSelectedDate] = useState<Date>(startOfDay(new Date()));
