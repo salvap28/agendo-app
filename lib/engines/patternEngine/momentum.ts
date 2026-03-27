@@ -9,11 +9,11 @@ export function calculateMomentumDay(
     // Current weighting as per V1 specs: 
     // 40% progress, 25% consistency, -20% friction, 15% emotion
     // Note: since friction is negative, we add a base offset to balance it
-    let momentum = (progressScore * 0.40) + 
-                   (consistencyScore * 0.25) - 
-                   (frictionScore * 0.20) + 
-                   (emotionScore * 0.15) + 
-                   15; // Base offset to recover from strict friction penalty
+    const momentum = (progressScore * 0.40) + 
+                     (consistencyScore * 0.25) - 
+                     (frictionScore * 0.20) + 
+                     (emotionScore * 0.15) + 
+                     15; // Base offset to recover from strict friction penalty
                    
     return Math.min(100, Math.max(0, Math.round(momentum)));
 }

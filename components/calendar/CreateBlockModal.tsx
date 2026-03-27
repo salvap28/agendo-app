@@ -1,18 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Repeat, ChevronUp, ChevronDown } from "lucide-react";
+import { X, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { RecurrencePattern } from "@/lib/types/blocks";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 import { addMinutes } from "date-fns";
-
-/* ────────────────────────────────────────────────────────────
-   Inline Time Digit — a minimal scroll-digit for HH : MM
-   ──────────────────────────────────────────────────────────── */
 
 function TimeDigit({
     value,
@@ -35,23 +31,20 @@ function TimeDigit({
     };
 
     return (
-        <div
-            className="flex flex-col items-center select-none"
-            onWheel={handleWheel}
-        >
+        <div className="flex flex-col items-center select-none" onWheel={handleWheel}>
             <button
                 onClick={dec}
-                className="w-8 h-5 flex items-center justify-center text-white/15 hover:text-white/50 transition-colors"
+                className="flex h-5 w-8 items-center justify-center text-white/15 transition-colors hover:text-white/50"
                 tabIndex={-1}
             >
                 <ChevronUp size={14} />
             </button>
-            <span className="text-[28px] font-mono font-semibold text-white tabular-nums leading-none tracking-tight">
+            <span className="font-mono text-[28px] font-semibold leading-none tracking-tight text-white tabular-nums">
                 {String(value).padStart(2, "0")}
             </span>
             <button
                 onClick={inc}
-                className="w-8 h-5 flex items-center justify-center text-white/15 hover:text-white/50 transition-colors"
+                className="flex h-5 w-8 items-center justify-center text-white/15 transition-colors hover:text-white/50"
                 tabIndex={-1}
             >
                 <ChevronDown size={14} />
@@ -59,10 +52,6 @@ function TimeDigit({
         </div>
     );
 }
-
-/* ────────────────────────────────────────────────────────────
-   Inline Time Row — HH : MM  with label
-   ──────────────────────────────────────────────────────────── */
 
 function InlineTimePicker({
     date,
@@ -76,15 +65,15 @@ function InlineTimePicker({
     const h = date.getHours();
     const m = date.getMinutes();
 
-    const setHour = (v: number) => {
-        const d = new Date(date);
-        d.setHours(v);
-        onChange(d);
+    const setHour = (value: number) => {
+        const nextDate = new Date(date);
+        nextDate.setHours(value);
+        onChange(nextDate);
     };
-    const setMinute = (v: number) => {
-        const d = new Date(date);
-        d.setMinutes(v);
-        onChange(d);
+    const setMinute = (value: number) => {
+        const nextDate = new Date(date);
+        nextDate.setMinutes(value);
+        onChange(nextDate);
     };
 
     return (
@@ -94,16 +83,12 @@ function InlineTimePicker({
             </span>
             <div className="flex items-center gap-0.5">
                 <TimeDigit value={h} max={23} onChange={setHour} />
-                <span className="text-white/15 text-lg font-bold pb-0.5 mx-0.5">:</span>
+                <span className="mx-0.5 pb-0.5 text-lg font-bold text-white/15">:</span>
                 <TimeDigit value={m} max={55} step={5} onChange={setMinute} />
             </div>
         </div>
     );
 }
-
-/* ────────────────────────────────────────────────────────────
-   CreateBlockModal
-   ──────────────────────────────────────────────────────────── */
 
 interface CreateBlockModalProps {
     isOpen: boolean;
@@ -112,42 +97,35 @@ interface CreateBlockModalProps {
     initialEnd?: Date;
 }
 
-export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: CreateBlockModalProps) {
+function getInitialTimes(initialStart?: Date, initialEnd?: Date) {
+    if (initialStart) {
+        return {
+            startAt: initialStart,
+            endAt: initialEnd ?? addMinutes(initialStart, 60),
+        };
+    }
+
+    const now = new Date();
+    const next15 = new Date(Math.ceil(now.getTime() / (15 * 60000)) * (15 * 60000));
+
+    return {
+        startAt: next15,
+        endAt: addMinutes(next15, 60),
+    };
+}
+
+function CreateBlockModalContent({
+    onClose,
+    initialStart,
+    initialEnd,
+}: Omit<CreateBlockModalProps, "isOpen">) {
     const { createBlock } = useBlocksStore();
-    const [mounted, setMounted] = useState(false);
-    const [isClosing, setIsClosing] = useState(false);
+    const initialTimes = getInitialTimes(initialStart, initialEnd);
 
     const [title, setTitle] = useState("");
-    const [startAt, setStartAt] = useState<Date>(new Date());
-    const [endAt, setEndAt] = useState<Date>(new Date());
+    const [startAt, setStartAt] = useState<Date>(initialTimes.startAt);
+    const [endAt, setEndAt] = useState<Date>(initialTimes.endAt);
     const [recurrence, setRecurrence] = useState<RecurrencePattern | undefined>();
-
-    useEffect(() => {
-        if (isOpen) {
-            setMounted(true);
-            setIsClosing(false);
-            setTitle("");
-            setRecurrence(undefined);
-
-            if (initialStart) {
-                setStartAt(initialStart);
-                setEndAt(initialEnd ?? addMinutes(initialStart, 60));
-            } else {
-                const now = new Date();
-                const next15 = new Date(Math.ceil(now.getTime() / (15 * 60000)) * (15 * 60000));
-                setStartAt(next15);
-                setEndAt(addMinutes(next15, 60));
-            }
-        }
-    }, [isOpen, initialStart, initialEnd]);
-
-    const handleClose = useCallback(() => {
-        setIsClosing(true);
-        setTimeout(() => {
-            setMounted(false);
-            onClose();
-        }, 250);
-    }, [onClose]);
 
     const handleSave = useCallback(() => {
         let finalEnd = endAt;
@@ -164,19 +142,19 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
         });
 
         createBlock(enriched);
-        handleClose();
-    }, [title, startAt, endAt, recurrence, createBlock, handleClose]);
+        onClose();
+    }, [createBlock, endAt, onClose, recurrence, startAt, title]);
 
-    const handleTimeUpdate = (type: 'start' | 'end', newDate: Date) => {
-        if (type === 'start') {
+    const handleTimeUpdate = (type: "start" | "end", newDate: Date) => {
+        if (type === "start") {
             setStartAt(newDate);
             if (endAt.getTime() <= newDate.getTime()) setEndAt(addMinutes(newDate, 15));
-        } else {
-            setEndAt(newDate);
+            return;
         }
+
+        setEndAt(newDate);
     };
 
-    // Duration string
     const diffMs = endAt.getTime() - startAt.getTime();
     let diffMins = Math.round(diffMs / 60000);
     if (diffMins < 0) diffMins += 1440;
@@ -184,35 +162,26 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
     const mins = diffMins % 60;
     const durationStr = hrs === 0 ? `${mins}m` : mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
 
-    if (!mounted) return null;
-
     return createPortal(
-        <div className={cn("fixed inset-0 z-[250] flex items-center justify-center", isClosing && "pointer-events-none")}>
-            {/* Backdrop */}
+        <div className="fixed inset-0 z-[250] flex items-center justify-center">
             <div
-                className={cn("absolute inset-0 bg-black/70 backdrop-blur-2xl transition-opacity duration-250", isClosing ? "opacity-0" : "opacity-100")}
-                onClick={handleClose}
+                className="absolute inset-0 bg-black/70 backdrop-blur-2xl"
+                onClick={onClose}
             />
 
-            {/* Card */}
             <div
                 className={cn(
-                    "relative w-[320px] max-w-[90vw] flex flex-col",
-                    "rounded-[2rem] overflow-hidden",
-                    "bg-[#09090b]/95 backdrop-blur-3xl",
-                    "border border-white/[0.06]",
-                    "shadow-[0_32px_80px_-16px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.04)]",
-                    "transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]",
-                    isClosing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"
+                    "relative flex w-[320px] max-w-[90vw] flex-col overflow-hidden rounded-[2rem]",
+                    "border border-white/[0.06] bg-[#09090b]/95 backdrop-blur-3xl",
+                    "shadow-[0_32px_80px_-16px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.04)]"
                 )}
             >
                 <GlowingEffect spread={50} proximity={100} inactiveZone={0.01} borderWidth={1} variant="subtle" />
 
-                {/* Title */}
-                <div className="relative px-6 pt-6 pb-4">
+                <div className="relative px-6 pb-4 pt-6">
                     <button
-                        onClick={handleClose}
-                        className="absolute top-5 right-5 w-7 h-7 rounded-full flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+                        onClick={onClose}
+                        className="absolute right-5 top-5 flex h-7 w-7 items-center justify-center rounded-full text-white/20 transition-all hover:bg-white/[0.06] hover:text-white/60"
                     >
                         <X size={14} />
                     </button>
@@ -221,83 +190,93 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
                         type="text"
                         placeholder="Nuevo bloque"
                         value={title}
-                        onChange={e => setTitle(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                        className="w-full bg-transparent text-[20px] font-semibold tracking-tight text-white placeholder:text-white/20 border-none outline-none p-0 caret-indigo-400"
+                        onChange={(event) => setTitle(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") handleSave();
+                        }}
+                        className="w-full border-none bg-transparent p-0 text-[20px] font-semibold tracking-tight text-white outline-none placeholder:text-white/20 caret-indigo-400"
                         autoFocus
                     />
                 </div>
 
-                {/* Divider */}
                 <div className="mx-6 h-px bg-white/[0.05]" />
 
-                {/* Time */}
-                <div className="px-6 py-4 flex flex-col gap-2">
+                <div className="flex flex-col gap-2 px-6 py-4">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">Horario</span>
-                        <span className="text-[10px] font-semibold text-indigo-400/50 tabular-nums">{durationStr}</span>
+                        <span className="text-[10px] font-semibold tabular-nums text-indigo-400/50">{durationStr}</span>
                     </div>
 
                     <div className="flex flex-col gap-1 rounded-2xl bg-white/[0.02] p-3">
-                        <InlineTimePicker date={startAt} onChange={d => handleTimeUpdate('start', d)} label="Inicio" />
-                        <div className="h-px bg-white/[0.04] my-1" />
-                        <InlineTimePicker date={endAt} onChange={d => handleTimeUpdate('end', d)} label="Fin" />
+                        <InlineTimePicker date={startAt} onChange={(date) => handleTimeUpdate("start", date)} label="Inicio" />
+                        <div className="my-1 h-px bg-white/[0.04]" />
+                        <InlineTimePicker date={endAt} onChange={(date) => handleTimeUpdate("end", date)} label="Fin" />
                     </div>
                 </div>
 
-                {/* Divider */}
                 <div className="mx-6 h-px bg-white/[0.05]" />
 
-                {/* Recurrence */}
-                <div className="px-6 py-4 flex flex-col gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">Repetición</span>
+                <div className="flex flex-col gap-2 px-6 py-4">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">RepeticiÃ³n</span>
 
                     <div className="grid grid-cols-2 gap-1.5">
                         {[
                             { label: "Una vez", value: undefined },
-                            { label: "Diario", value: "daily" },
-                            { label: "Semanal", value: "weekly" },
-                            { label: "A medida", value: "custom" },
-                        ].map((opt) => {
-                            const isSelected = (!recurrence && !opt.value) || (recurrence?.type === opt.value);
+                            { label: "Diario", value: "daily" as const },
+                            { label: "Semanal", value: "weekly" as const },
+                            { label: "A medida", value: "custom" as const },
+                        ].map((option) => {
+                            const isSelected = (!recurrence && !option.value) || recurrence?.type === option.value;
+
                             return (
                                 <button
-                                    key={opt.label}
+                                    key={option.label}
                                     onClick={() => {
-                                        if (!opt.value) setRecurrence(undefined);
-                                        else setRecurrence({
-                                            type: opt.value as any,
+                                        if (!option.value) {
+                                            setRecurrence(undefined);
+                                            return;
+                                        }
+
+                                        setRecurrence({
+                                            type: option.value,
                                             endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-                                            days: opt.value === "custom" ? recurrence?.days || [1, 3, 5] : undefined,
+                                            days: option.value === "custom" ? recurrence?.days || [1, 3, 5] : undefined,
                                         });
                                     }}
                                     className={cn(
                                         "h-9 rounded-xl text-[12px] font-medium transition-all duration-200",
                                         isSelected
                                             ? "bg-white/[0.07] text-white/80 ring-1 ring-white/[0.06]"
-                                            : "text-white/25 hover:text-white/50 hover:bg-white/[0.03]"
+                                            : "text-white/25 hover:bg-white/[0.03] hover:text-white/50"
                                     )}
                                 >
-                                    {opt.label}
+                                    {option.label}
                                 </button>
                             );
                         })}
                     </div>
 
                     {recurrence?.type === "custom" && (
-                        <div className="flex justify-between pt-1 animate-in slide-in-from-top-1 fade-in duration-200">
-                            {["D", "L", "M", "X", "J", "V", "S"].map((day, idx) => {
-                                const isOn = recurrence?.days?.includes(idx);
+                        <div className="animate-in fade-in slide-in-from-top-1 flex justify-between pt-1 duration-200">
+                            {["D", "L", "M", "X", "J", "V", "S"].map((day, index) => {
+                                const isOn = recurrence.days?.includes(index);
+
                                 return (
                                     <button
-                                        key={idx}
+                                        key={index}
                                         onClick={() => {
-                                            const cur = recurrence?.days || [];
-                                            const next = isOn ? cur.filter(d => d !== idx) : [...cur, idx].sort();
-                                            setRecurrence({ ...recurrence!, days: next.length ? next : [idx] });
+                                            const currentDays = recurrence.days || [];
+                                            const nextDays = isOn
+                                                ? currentDays.filter((value) => value !== index)
+                                                : [...currentDays, index].sort();
+
+                                            setRecurrence({
+                                                ...recurrence,
+                                                days: nextDays.length ? nextDays : [index],
+                                            });
                                         }}
                                         className={cn(
-                                            "w-8 h-8 rounded-full text-[11px] font-bold transition-all duration-200",
+                                            "h-8 w-8 rounded-full text-[11px] font-bold transition-all duration-200",
                                             isOn
                                                 ? "bg-indigo-500 text-white shadow-[0_0_14px_rgba(99,102,241,0.4)]"
                                                 : "bg-white/[0.03] text-white/20 hover:bg-white/[0.06] hover:text-white/60"
@@ -311,11 +290,10 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-white/[0.04] flex items-center justify-between">
+                <div className="flex items-center justify-between border-t border-white/[0.04] px-6 py-4">
                     <button
-                        onClick={handleClose}
-                        className="text-[13px] font-medium text-white/25 hover:text-white/60 transition-colors"
+                        onClick={onClose}
+                        className="text-[13px] font-medium text-white/25 transition-colors hover:text-white/60"
                     >
                         Cancelar
                     </button>
@@ -323,10 +301,10 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
                         onClick={handleSave}
                         className={cn(
                             "gradient-button gradient-button-agendo",
-                            "h-10 px-6 rounded-full text-[13px] font-semibold text-white tracking-wide",
-                            "shadow-[0_6px_20px_-4px_rgba(99,102,241,0.45)]",
-                            "hover:shadow-[0_10px_28px_-4px_rgba(99,102,241,0.65)] hover:scale-[1.02]",
-                            "active:scale-[0.97] transition-all duration-200"
+                            "h-10 rounded-full px-6 text-[13px] font-semibold tracking-wide text-white",
+                            "shadow-[0_6px_20px_-4px_rgba(99,102,241,0.45)] transition-all duration-200",
+                            "hover:scale-[1.02] hover:shadow-[0_10px_28px_-4px_rgba(99,102,241,0.65)]",
+                            "active:scale-[0.97]"
                         )}
                     >
                         Crear bloque
@@ -335,5 +313,20 @@ export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: 
             </div>
         </div>,
         document.body
+    );
+}
+
+export function CreateBlockModal({ isOpen, onClose, initialStart, initialEnd }: CreateBlockModalProps) {
+    if (!isOpen) return null;
+
+    const modalKey = `${initialStart?.toISOString() ?? "default"}-${initialEnd?.toISOString() ?? "default"}`;
+
+    return (
+        <CreateBlockModalContent
+            key={modalKey}
+            onClose={onClose}
+            initialStart={initialStart}
+            initialEnd={initialEnd}
+        />
     );
 }

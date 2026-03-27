@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
-import { createClient } from "@/lib/supabase/client";
+import { tryCreateClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
 import { BellRing, Check } from "lucide-react";
 import { requestNotificationPermission } from "@/lib/utils/notifications";
-
-const supabase = createClient();
 
 export default function NotificationsTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
@@ -16,6 +14,9 @@ export default function NotificationsTab() {
 
     useEffect(() => {
         async function init() {
+            const supabase = tryCreateClient();
+            if (!supabase) return;
+
             if (!isInitialized) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user?.id) {

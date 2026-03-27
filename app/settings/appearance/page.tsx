@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
-import { createClient } from "@/lib/supabase/client";
+import { tryCreateClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
-
-const supabase = createClient();
 
 export default function AppearanceTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
 
     useEffect(() => {
         async function init() {
+            const supabase = tryCreateClient();
+            if (!supabase) return;
+
             if (!isInitialized) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user?.id) {

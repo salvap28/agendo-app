@@ -205,6 +205,68 @@
   animation: digitEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+@keyframes agendoHaloBreath {
+  0% {
+    transform: scale(0.985);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: scale(1.025);
+    opacity: 0.96;
+  }
+
+  100% {
+    transform: scale(0.985);
+    opacity: 0.72;
+  }
+}
+
+@keyframes agendoNebulaFloat {
+  0% {
+    transform: translate3d(-8%, -50%, 0) scale(0.98);
+  }
+
+  50% {
+    transform: translate3d(-10%, -47%, 0) scale(1.03);
+  }
+
+  100% {
+    transform: translate3d(-8%, -50%, 0) scale(0.98);
+  }
+}
+
+@keyframes agendoOrbitDrift {
+  0% {
+    transform: rotate(0deg) scale(0.98);
+    opacity: 0.2;
+  }
+
+  50% {
+    transform: rotate(180deg) scale(1.01);
+    opacity: 0.34;
+  }
+
+  100% {
+    transform: rotate(360deg) scale(0.98);
+    opacity: 0.2;
+  }
+}
+
+@keyframes agendoStarPulse {
+  0% {
+    opacity: 0.12;
+  }
+
+  50% {
+    opacity: 0.38;
+  }
+
+  100% {
+    opacity: 0.12;
+  }
+}
+
 /* ── Gradient Button (Agendo Violet/Indigo palette) ──────────────────────── */
 
 @layer base {

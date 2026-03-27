@@ -1,39 +1,39 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useReducer } from "react";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
 
 interface PerformanceConfig {
     isLowEnd: boolean;
     prefersReducedMotion: boolean;
-    isLiteMode: boolean; // Explicit opt-in via URL ?lite=true
+    isLiteMode: boolean;
 }
 
 export function usePerformancePreference(): PerformanceConfig {
     const { settings } = useSettingsStore();
-    const [config, setConfig] = useState<PerformanceConfig>({
-        isLowEnd: settings.performance_mode,
-        prefersReducedMotion: false,
-        isLiteMode: false,
-    });
+    const [, forceRender] = useReducer((value: number) => value + 1, 0);
 
     useEffect(() => {
-        // 1. Check URL Parameter explicitly
-        const urlParams = new URLSearchParams(window.location.search);
-        const isLiteMode = urlParams.get('lite') === 'true';
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const handleChange = () => forceRender();
 
-        // 2. Check Reduced Motion preference
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        motionQuery.addEventListener('change', handleChange);
 
-        // 3. User toggle preference from Settings!
-        let isLowEnd = settings.performance_mode;
+        return () => {
+            motionQuery.removeEventListener('change', handleChange);
+        };
+    }, []);
 
-        setConfig({
-            isLowEnd: isLowEnd || isLiteMode,
-            prefersReducedMotion,
-            isLiteMode,
-        });
-    }, [settings.performance_mode]);
+    const isLiteMode = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get('lite') === 'true'
+        : false;
+    const prefersReducedMotion = typeof window !== "undefined"
+        ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        : false;
 
-    return config;
+    return {
+        isLowEnd: settings.performance_mode || isLiteMode,
+        prefersReducedMotion,
+        isLiteMode,
+    };
 }

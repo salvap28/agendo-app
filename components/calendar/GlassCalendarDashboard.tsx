@@ -70,6 +70,11 @@ interface GlassCalendarDashboardProps {
     onOpenBlock: (blockId: string, isNewBlock?: boolean) => void;
 }
 
+type PendingConflict = {
+    newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt">;
+    overlaps: Block[];
+};
+
 export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardProps) {
     const { blocks, createBlock, updateBlock } = useBlocksStore();
     const { session, openFromBlock } = useFocusStore();
@@ -78,7 +83,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
     const [displayMonth, setDisplayMonth] = useState(() => startOfMonth(new Date()));
     const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
     const [searchQuery, setSearchQuery] = useState("");
-    const [pendingConflict, setPendingConflict] = useState<{ newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt">, overlaps: Block[] } | null>(null);
+    const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -219,7 +224,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         const { newBlock, overlaps } = pendingConflict;
         
         let resultingId = newBlock.id;
-        let isCreation = !newBlock.id;
+        const isCreation = !newBlock.id;
 
         const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
 
@@ -236,9 +241,12 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
             
             if (slot) {
-                newBlock.startAt = slot.startAt;
-                newBlock.endAt = slot.endAt;
-                const result = createBlock(newBlock);
+                const movedBlock = {
+                    ...newBlock,
+                    startAt: slot.startAt,
+                    endAt: slot.endAt,
+                };
+                const result = createBlock(movedBlock);
                 if (result && isCreation) resultingId = result.id;
             }
         }

@@ -2,6 +2,25 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 
+type BlockRow = {
+  user_id: string
+  start_at: string
+  notifications: number[] | null
+  title: string | null
+}
+
+type PushSubscriptionRow = {
+  id: string
+  user_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
+type PushError = {
+  statusCode?: number
+}
+
 const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')
 const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
 
@@ -13,94 +32,91 @@ if (vapidPublicKey && vapidPrivateKey) {
   )
 }
 
-serve(async (req) => {
+serve(async () => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    return new Response(JSON.stringify({ error: "Missing DB env var" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Missing DB env var" }), { status: 500 })
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  // 1. Get all planned blocks starting in the next roughly 120 minutes (max allowed)
-  const now = new Date();
-  const timeLimit = new Date(now.getTime() + 120 * 60000 + 60000);
+  const now = new Date()
+  const timeLimit = new Date(now.getTime() + 120 * 60000 + 60000)
 
-  const { data: blocks, error: blocksError } = await supabase
+  const { data: blocksData, error: blocksError } = await supabase
     .from('blocks')
     .select('*')
     .eq('status', 'planned')
     .gte('start_at', now.toISOString())
-    .lte('start_at', timeLimit.toISOString());
+    .lte('start_at', timeLimit.toISOString())
 
-  if (blocksError || !blocks) {
+  if (blocksError || !blocksData) {
     return new Response(JSON.stringify({ error: blocksError }), { status: 500 })
   }
+
+  const blocks = blocksData as BlockRow[]
 
   if (blocks.length === 0) {
     return new Response(JSON.stringify({ message: "No blocks found." }), { status: 200 })
   }
 
-  // 2. Fetch subscriptions for users who have blocks in window
-  const userIds = [...new Set(blocks.map((b: any) => b.user_id))];
-  const { data: subs, error: subsError } = await supabase
+  const userIds = [...new Set(blocks.map((block) => block.user_id))]
+  const { data: subsData, error: subsError } = await supabase
     .from('push_subscriptions')
     .select('*')
-    .in('user_id', userIds);
+    .in('user_id', userIds)
 
   if (subsError) {
     return new Response(JSON.stringify({ error: subsError }), { status: 500 })
   }
 
-  // 3. Filter blocks to see if they match their custom notification times this current minute
-  const notificationsToSend: Promise<any>[] = [];
+  const subs = (subsData ?? []) as PushSubscriptionRow[]
+  const notificationsToSend: Promise<unknown>[] = []
 
   for (const block of blocks) {
-    const startAt = new Date(block.start_at);
-    const startAtMin = Math.floor(startAt.getTime() / 60000);
-    const nowMin = Math.floor(now.getTime() / 60000);
-    const diffMinutes = startAtMin - nowMin;
+    const startAt = new Date(block.start_at)
+    const startAtMin = Math.floor(startAt.getTime() / 60000)
+    const nowMin = Math.floor(now.getTime() / 60000)
+    const diffMinutes = startAtMin - nowMin
+    const offsets = block.notifications || [5]
 
-    const offsets: number[] = block.notifications || [5]; // default 5 mins
+    if (!offsets.includes(diffMinutes)) {
+      continue
+    }
 
-    // Check if the current diff matches exactly any of the requested offsets
-    if (offsets.includes(diffMinutes)) {
+    let bodyMsg = `Empezando en ${diffMinutes} minutos.`
+    if (diffMinutes === 0) bodyMsg = "Â¡Tu bloque empieza ahora!"
+    else if (diffMinutes === 60) bodyMsg = "Tu bloque empieza en 1 hora."
 
-      let bodyMsg = `Empezando en ${diffMinutes} minutos.`;
-      if (diffMinutes === 0) bodyMsg = "¡Tu bloque empieza ahora!";
-      else if (diffMinutes === 60) bodyMsg = "Tu bloque empieza en 1 hora.";
+    const payload = JSON.stringify({
+      title: block.title || 'Recordatorio de Agendo',
+      body: bodyMsg,
+      icon: '/favicon.ico'
+    })
 
-      const payload = JSON.stringify({
-        title: block.title || 'Recordatorio de Agendo',
-        body: bodyMsg,
-        icon: '/favicon.ico'
-      });
+    const userSubs = subs.filter((subscription) => subscription.user_id === block.user_id)
 
-      // Find subs for this user
-      const userSubs = subs.filter((s: Record<string, any>) => s.user_id === block.user_id);
-
-      for (const sub of userSubs) {
-        notificationsToSend.push(
-          webpush.sendNotification({
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth
-            }
-          }, payload).catch((e: any) => {
-            console.error("Error sending push API request", e);
-            // Handle expired subscriptions by deleting them
-            if (e.statusCode === 410 || e.statusCode === 404) {
-              return supabase.from('push_subscriptions').delete().eq('id', sub.id);
-            }
-          })
-        );
-      }
+    for (const sub of userSubs) {
+      notificationsToSend.push(
+        webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth
+          }
+        }, payload).catch((error: PushError) => {
+          console.error("Error sending push API request", error)
+          if (error.statusCode === 410 || error.statusCode === 404) {
+            return supabase.from('push_subscriptions').delete().eq('id', sub.id)
+          }
+        })
+      )
     }
   }
 
-  await Promise.all(notificationsToSend);
+  await Promise.all(notificationsToSend)
 
   return new Response(JSON.stringify({ message: `Sent ${notificationsToSend.length} pushes.` }), {
     headers: { 'Content-Type': 'application/json' },

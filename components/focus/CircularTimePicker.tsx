@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/cn";
 
 interface CircularTimePickerProps {
@@ -44,15 +44,6 @@ function formatTime(mins: number) {
     return `${h12}:${mnt.toString().padStart(2, '0')} ${ampm}`;
 }
 
-// Format just time without AM/PM
-function formatTimeShort(mins: number) {
-    const m = Math.round(((mins % 1440) + 1440) % 1440);
-    const hrs = Math.floor(m / 60);
-    const mnt = m % 60;
-    const h12 = hrs % 12 || 12;
-    return `${h12}:${mnt.toString().padStart(2, '0')}`;
-}
-
 export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, busyBlocks = [], className, hideCenterText }: CircularTimePickerProps) {
     const svgRef = useRef<SVGSVGElement>(null);
     const [dragging, setDragging] = useState<'start' | 'end' | 'arc' | null>(null);
@@ -82,23 +73,18 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
     // Completely fluid visual state decoupled from the 5-min snap logic
     const [localStart, setLocalStart] = useState(startMins);
     const [localEnd, setLocalEnd] = useState(endMins);
+    const activeStart = dragging ? localStart : startMins;
+    const activeEnd = dragging ? localEnd : endMins;
 
-    useEffect(() => {
-        if (!dragging) {
-            setLocalStart(startMins);
-            setLocalEnd(endMins);
-        }
-    }, [startMins, endMins, dragging]);
-
-    const startAngle = getAngleFromMins(localStart);
-    const endAngle = getAngleFromMins(localEnd);
+    const startAngle = getAngleFromMins(activeStart);
+    const endAngle = getAngleFromMins(activeEnd);
 
     const startP = getPointFromAngle(startAngle);
     const endP = getPointFromAngle(endAngle);
 
     // Calculate Arc Path
     // If end is after start, we draw clockwise. 
-    let diffMins = localEnd - localStart;
+    let diffMins = activeEnd - activeStart;
 
     // Handle cross-day scenario directly: if localEnd < localStart, the duration crosses midnight
     if (diffMins < 0) {
@@ -122,30 +108,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
         arcPath += ` A ${RADIUS} ${RADIUS} 0 ${largeArcFlag} 1 ${drawEndP.x} ${drawEndP.y}`;
     }
 
-    const checkCollision = (start: number, end: number) => {
-        let testStart = start % 1440;
-        let testEnd = end % 1440;
-        if (end > 1440 && testEnd === 0) testEnd = 1440; // Allow ending precisely at midnight 
-
-        // Cross-day check wrapper
-        const crossesMidnight = end > start && testEnd <= testStart;
-
-        for (const block of busyBlocks) {
-            // Block spans are also just start/end minutes
-            // We need to check if [testStart, testEnd] overlaps with [block.start, block.end]
-            // Simplified for 1 day dial:
-            if (crossesMidnight) {
-                // If it crosses midnight, check both sides
-                if ((testStart < block.end && 1440 > block.start) ||
-                    (0 < block.end && testEnd > block.start)) return true;
-            } else {
-                if (testStart < block.end && testEnd > block.start) return true;
-            }
-        }
-        return false;
-    };
-
-    const computeDeltaMins = (clientX: number, clientY: number) => {
+    const computeDeltaMins = useCallback((clientX: number, clientY: number) => {
         if (!svgRef.current) return 0;
         const rect = svgRef.current.getBoundingClientRect();
 
@@ -153,7 +116,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
         const centerX = rect.left + CENTER;
         const centerY = rect.top + CENTER;
 
-        let angle = Math.atan2(clientY - centerY, clientX - centerX);
+        const angle = Math.atan2(clientY - centerY, clientX - centerX);
         // Map space so top is 0
         let clockAngle = angle + Math.PI / 2;
         if (clockAngle < 0) clockAngle += 2 * Math.PI;
@@ -169,11 +132,13 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
 
         setLastAngle(clockAngle);
         return delta;
-    };
+    }, [CENTER, lastAngle]);
 
     const handlePointerDown = (type: 'start' | 'end' | 'arc', e: React.PointerEvent) => {
         e.preventDefault();
         setDragging(type);
+        setLocalStart(startMins);
+        setLocalEnd(endMins);
 
         if (!svgRef.current) return;
         const rect = svgRef.current.getBoundingClientRect();
@@ -181,7 +146,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
         const centerX = rect.left + CENTER;
         const centerY = rect.top + CENTER;
 
-        let angle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+        const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
         let clockAngle = angle + Math.PI / 2;
         if (clockAngle < 0) clockAngle += 2 * Math.PI;
 
@@ -262,7 +227,7 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [dragging, startMins, endMins, onChange, lastAngle]);
+    }, [computeDeltaMins, dragging, endMins, localEnd, localStart, onChange, onChangeEnd, startMins]);
 
     // Local hover states for better SVG scaling origin control
     const [hoveredNode, setHoveredNode] = useState<'start' | 'end' | null>(null);
@@ -290,7 +255,6 @@ export function CircularTimePicker({ startMins, endMins, onChange, onChangeEnd, 
                 {/* Busy Tracks (Carved Out) */}
                 {busyBlocks.map((block, idx) => {
                     const bStartA = getAngleFromMins(block.start);
-                    const bEndA = getAngleFromMins(block.end);
 
                     let bVisualDiff = block.end - block.start;
                     if (bVisualDiff < 0) bVisualDiff += 1440;

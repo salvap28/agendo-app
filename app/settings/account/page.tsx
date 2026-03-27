@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import { tryCreateClient } from "@/lib/supabase/client";
 import { LogOut, Trash2 } from "lucide-react";
-
-const supabase = createClient();
 import { useRouter } from "next/navigation";
 
 export default function AccountTab() {
@@ -14,6 +12,12 @@ export default function AccountTab() {
     const handleLogout = async () => {
         setIsLoggingOut(true);
         try {
+            const supabase = tryCreateClient();
+            if (!supabase) {
+                alert("Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.");
+                return;
+            }
+
             await supabase.auth.signOut();
             router.push('/login');
         } catch (error) {

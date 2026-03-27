@@ -1,8 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { createClient } from '@/lib/supabase/client';
-
-const supabase = createClient();
+import { tryCreateClient } from '@/lib/supabase/client';
 
 export interface UserSettings {
     theme_color: string;
@@ -32,6 +30,17 @@ const defaultSettings: UserSettings = {
     notify_daily_briefing: true,
 };
 
+function mergeSettings(data?: Partial<UserSettings> | null): UserSettings {
+    return {
+        ...defaultSettings,
+        ...(data ?? {}),
+    };
+}
+
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : error;
+}
+
 interface SettingsState {
     settings: UserSettings;
     isLoading: boolean;
@@ -42,7 +51,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
     persist(
-        (set, get) => ({
+        (set) => ({
             settings: defaultSettings,
             isLoading: false,
             isInitialized: false,
@@ -50,6 +59,13 @@ export const useSettingsStore = create<SettingsState>()(
             fetchSettings: async (userId: string) => {
                 if (!userId) return;
                 set({ isLoading: true });
+                const supabase = tryCreateClient();
+
+                if (!supabase) {
+                    set({ isLoading: false, isInitialized: true });
+                    return;
+                }
+
                 try {
                     const { data, error } = await supabase
                         .from('user_settings')
@@ -67,8 +83,7 @@ export const useSettingsStore = create<SettingsState>()(
                                 .single();
 
                             if (!insertError && newData) {
-                                // @ts-ignore
-                                set({ settings: newData });
+                                set({ settings: mergeSettings(newData as Partial<UserSettings>) });
                             }
                         } else {
                             // If table is missing, just ignore and use defaults.
@@ -77,11 +92,10 @@ export const useSettingsStore = create<SettingsState>()(
                             }
                         }
                     } else if (data) {
-                        // @ts-ignore
-                        set({ settings: data });
+                        set({ settings: mergeSettings(data as Partial<UserSettings>) });
                     }
-                } catch (error: any) {
-                    console.error('Error general en fetchSettings:', error.message || error);
+                } catch (error: unknown) {
+                    console.error('Error general en fetchSettings:', getErrorMessage(error));
                 } finally {
                     set({ isLoading: false, isInitialized: true });
                 }
@@ -95,6 +109,9 @@ export const useSettingsStore = create<SettingsState>()(
                         [key]: value,
                     },
                 }));
+
+                const supabase = tryCreateClient();
+                if (!supabase) return;
 
                 const { data: { session } } = await supabase.auth.getSession();
                 const userId = session?.user?.id;
@@ -110,8 +127,8 @@ export const useSettingsStore = create<SettingsState>()(
                     if (error && error.code !== '42P01' && !error.message?.includes('schema cache')) {
                         console.error('Error al guardar configuración en BD:', error.message || error);
                     }
-                } catch (error: any) {
-                    console.error('Error general en updateSetting:', error.message || error);
+                } catch (error: unknown) {
+                    console.error('Error general en updateSetting:', getErrorMessage(error));
                 }
             },
         }),

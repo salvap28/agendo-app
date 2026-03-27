@@ -31,6 +31,14 @@ export function TimePicker({ date, onChange, label }: TimePickerProps) {
     // Track user interaction to avoid fighting native scroll
     const isPointerDown = React.useRef(false);
 
+    const scrollToIndex = React.useCallback((container: HTMLDivElement | null, index: number, behavior: 'auto' | 'smooth') => {
+        if (!container) return;
+        container.scrollTo({
+            top: index * ITEM_HEIGHT,
+            behavior
+        });
+    }, []);
+
     // Initial Scroll Effect (On Open)
     React.useEffect(() => {
         if (isOpen) {
@@ -40,7 +48,7 @@ export function TimePicker({ date, onChange, label }: TimePickerProps) {
                 scrollToIndex(minuteContainerRef.current, minIndex, 'auto');
             }, 0);
         }
-    }, [isOpen]);
+    }, [isOpen, scrollToIndex, selectedHour, selectedMinute]);
 
     // Sync Scroll with Value Changes (The "Visual" Fix)
     // We ONLY sync if the user is NOT physically dragging/holding the list (PointerDown).
@@ -56,16 +64,7 @@ export function TimePicker({ date, onChange, label }: TimePickerProps) {
             const minIndex = Math.round(selectedMinute / 5);
             scrollToIndex(minuteContainerRef.current, minIndex, 'smooth');
         }
-    }, [selectedHour, selectedMinute, isOpen]);
-
-
-    const scrollToIndex = (container: HTMLDivElement | null, index: number, behavior: 'auto' | 'smooth') => {
-        if (!container) return;
-        container.scrollTo({
-            top: index * ITEM_HEIGHT,
-            behavior
-        });
-    };
+    }, [selectedHour, selectedMinute, isOpen, scrollToIndex]);
 
     // Wheel Handlers (Desktop Mouse) - "Ticks"
     const handleWheel = (e: React.WheelEvent, type: 'hour' | 'minute') => {

@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { tryCreateClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 
-const supabase = createClient();
+type ProfileUpdateData = {
+    email?: string;
+    password?: string;
+    data: {
+        username: string;
+    };
+};
 
 export default function ProfileTab() {
     const [username, setUsername] = useState("");
@@ -18,6 +24,13 @@ export default function ProfileTab() {
 
     useEffect(() => {
         async function loadProfile() {
+            const supabase = tryCreateClient();
+            if (!supabase) {
+                setMessage("Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.");
+                setIsLoading(false);
+                return;
+            }
+
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 // Keep backward compatibility if they used full_name, but save to username
@@ -36,13 +49,19 @@ export default function ProfileTab() {
         setMessage("");
 
         try {
+            const supabase = tryCreateClient();
+            if (!supabase) {
+                setMessage("Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en .env.local.");
+                return;
+            }
+
             if (password !== confirmPassword) {
                 setMessage("Las contraseñas no coinciden.");
                 setIsSaving(false);
                 return;
             }
 
-            const updateData: any = { data: { username: username } };
+            const updateData: ProfileUpdateData = { data: { username } };
 
             if (email !== currentEmail && email.trim() !== "") {
                 updateData.email = email;
@@ -63,8 +82,8 @@ export default function ProfileTab() {
             setMessage(successMsg);
             setPassword("");
             setConfirmPassword("");
-        } catch (error: any) {
-            setMessage(error.message || "Error al actualizar el perfil.");
+        } catch (error: unknown) {
+            setMessage(error instanceof Error ? error.message : "Error al actualizar el perfil.");
         } finally {
             setIsSaving(false);
         }

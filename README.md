@@ -17,6 +17,12 @@ npm run test
 - Node.js 24.11.0
 - npm 11.6.1
 
+## Configuracion local
+
+1. Crea `.env.local` a partir de `.env.example`.
+2. Completa `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` con los valores de tu proyecto de Supabase.
+3. Reinicia `npm run dev` despues de guardar las variables.
+
 ## Versiones usadas
 
 - next: 16.1.6

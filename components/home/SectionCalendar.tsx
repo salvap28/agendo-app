@@ -13,12 +13,17 @@ import { isSameDay, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 
+type PendingConflict = {
+    newBlock: Partial<import("@/lib/types/blocks").Block> & Pick<import("@/lib/types/blocks").Block, "startAt" | "endAt">;
+    overlaps: import("@/lib/types/blocks").Block[];
+};
+
 export function SectionCalendar() {
     const { blocks, createBlock, updateBlock } = useBlocksStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [mobileSelectedDate, setMobileSelectedDate] = useState<Date>(startOfDay(new Date()));
-    const [pendingConflict, setPendingConflict] = useState<any>(null);
+    const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
 
     const handleMobilePlusCreate = () => {
         const selectedDay = startOfDay(mobileSelectedDate);
@@ -62,7 +67,7 @@ export function SectionCalendar() {
         const { newBlock, overlaps } = pendingConflict;
         
         let resultingId = newBlock.id;
-        let isCreation = !newBlock.id;
+        const isCreation = !newBlock.id;
 
         const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
 
@@ -79,9 +84,12 @@ export function SectionCalendar() {
             const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
             
             if (slot) {
-                newBlock.startAt = slot.startAt;
-                newBlock.endAt = slot.endAt;
-                const result = createBlock(newBlock);
+                const movedBlock = {
+                    ...newBlock,
+                    startAt: slot.startAt,
+                    endAt: slot.endAt,
+                };
+                const result = createBlock(movedBlock);
                 if (result && isCreation) resultingId = result.id;
             }
         }

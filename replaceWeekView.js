@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs');
 const file = 'c:/Users/salva/Documents/AGENDO V0.2/components/calendar/WeekView.tsx';
 let content = fs.readFileSync(file, 'utf8');

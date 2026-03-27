@@ -1,6 +1,6 @@
 "use client";
 
-import { Block, BlockType, BlockStatus } from "@/lib/types/blocks";
+import { BlockType, BlockStatus, type RecurrencePattern } from "@/lib/types/blocks";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { useState } from "react";
@@ -31,10 +31,10 @@ import {
     Repeat,
     X,
     Zap,
+    type LucideIcon,
 } from "lucide-react";
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -55,7 +55,7 @@ interface BlockDrawerProps {
 
 // ── BLOCK TYPE CONFIG ────────────────────────────────────────────────────────
 
-const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: any; color: string; glow: string }[] = [
+const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: LucideIcon; color: string; glow: string }[] = [
     { value: "deep_work", label: "Deep Work", icon: Layers, color: "text-indigo-400", glow: "bg-indigo-400" },
     { value: "meeting", label: "Meeting", icon: Briefcase, color: "text-blue-400", glow: "bg-blue-400" },
     { value: "gym", label: "Gym", icon: Dumbbell, color: "text-emerald-400", glow: "bg-emerald-400" },
@@ -76,7 +76,7 @@ const FOCUS_BUTTON_STYLE: Record<string, { bg: string; border: string; shadow: s
     other: { bg: "bg-white/10 hover:bg-white/15", border: "border border-white/20", shadow: "shadow-[0_0_14px_rgba(0,0,0,0.3)]", text: "text-white/80" },
 };
 
-const STATUS_OPTS: { value: BlockStatus; label: string; icon: any; color: string; dot: string }[] = [
+const STATUS_OPTS: { value: BlockStatus; label: string; icon: LucideIcon; color: string; dot: string }[] = [
     { value: "planned", label: "Planificado", icon: MoreHorizontal, color: "text-white/50", dot: "bg-white/30" },
     { value: "active", label: "En progreso", icon: Play, color: "text-green-400", dot: "bg-green-400" },
     { value: "completed", label: "Completado", icon: CheckCircle2, color: "text-indigo-400", dot: "bg-indigo-400" },
@@ -341,7 +341,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                                 updateBlock(block.id, { recurrencePattern: undefined, recurrenceId: undefined });
                                             } else {
                                                 applyRecurrence(block.id, {
-                                                    type: opt.value as any,
+                                                    type: opt.value as RecurrencePattern["type"],
                                                     endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
                                                     days: opt.value === "custom" ? [1, 3, 5] : undefined,
                                                 });

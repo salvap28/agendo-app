@@ -201,7 +201,7 @@ export function VisualBackground({ className, mode = "auto" }: VisualBackgroundP
         const resolutionLocation = gl.getUniformLocation(program, "u_resolution");
         const scrollLocation = gl.getUniformLocation(program, "u_scroll_intensity");
 
-        let startTime = performance.now();
+        const startTime = performance.now();
 
         const render = (now: number) => {
             if (!canvas || !gl || !program) return;

@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
 import { createStudyLayer, StudyTechniqueState } from '@/lib/engines/layersEngine';
-import { X, Clock, Brain, RefreshCw, Play, Save } from 'lucide-react';
+import { Clock, Brain, RefreshCw, Play, Save, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
 import { GlassButton } from '@/components/ui/glass-button';
 
 type TechId = "pomodoro_25_5" | "study_50_10" | "active_recall";
 
-const TECHNIQUES: Record<TechId, { name: string; desc: string; focus: number; break: number; icon: any }> = {
+const TECHNIQUES: Record<TechId, { name: string; desc: string; focus: number; break: number; icon: LucideIcon }> = {
     pomodoro_25_5: {
         name: "Pomodoro (25/5)",
         desc: "Trabajá 25 minutos seguidos y descansá 5. Ideal para arrancar de a poco y mantener un ritmo sostenible sin quemarte.",
