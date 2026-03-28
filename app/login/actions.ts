@@ -4,28 +4,39 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getMessages, resolveAppLanguage } from '@/lib/i18n/messages'
+import { getServerLanguage } from '@/lib/i18n/server'
 
-function translateAuthError(message: string) {
+async function getActionMessages(formData?: FormData) {
+    const formLanguage = formData?.get('language');
+    const language = typeof formLanguage === 'string'
+        ? resolveAppLanguage(formLanguage)
+        : await getServerLanguage();
+
+    return getMessages(language);
+}
+
+function translateAuthError(message: string, authMessages: ReturnType<typeof getMessages>['auth']) {
     const normalized = message.toLowerCase()
 
     if (normalized.includes('invalid login credentials')) {
-        return 'Email, usuario o contraseña inválidos.'
+        return authMessages.invalidCredentials
     }
 
     if (normalized.includes('email not confirmed')) {
-        return 'Confirmá tu email antes de entrar.'
+        return authMessages.confirmEmail
     }
 
     if (normalized.includes('user already registered')) {
-        return 'Ya existe una cuenta con ese email.'
+        return authMessages.userAlreadyRegistered
     }
 
     if (normalized.includes('password should be at least')) {
-        return 'La contraseña debe tener al menos 6 caracteres.'
+        return authMessages.passwordMinLength
     }
 
     if (normalized.includes('unable to validate email address')) {
-        return 'Ingresá un email válido.'
+        return authMessages.invalidEmail
     }
 
     return message
@@ -59,27 +70,26 @@ async function getSignupEmailRedirectUrl() {
 }
 
 export async function login(formData: FormData) {
+    const t = await getActionMessages(formData)
     const loginId = formData.get('loginId') as string
     const password = formData.get('password') as string
 
     if (!loginId || !password) {
-        return { error: 'Completá tu email o usuario y tu contraseña.' }
+        return { error: t.auth.completeLoginFields }
     }
 
     const supabase = await createClient()
+    let email = loginId
 
-    let email = loginId;
-
-    // If it's not an email, assume it's a username and look up the email
     if (!loginId.includes('@')) {
         const { data: fetchedEmail, error: rpcError } = await supabase.rpc('get_email_by_username', {
             p_username: loginId
-        });
+        })
 
         if (rpcError || !fetchedEmail) {
-            return { error: 'Email, usuario o contraseña inválidos.' }
+            return { error: t.auth.invalidCredentials }
         }
-        email = fetchedEmail;
+        email = fetchedEmail
     }
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -88,7 +98,7 @@ export async function login(formData: FormData) {
     })
 
     if (error) {
-        return { error: translateAuthError(error.message) }
+        return { error: translateAuthError(error.message, t.auth) }
     }
 
     revalidatePath('/', 'layout')
@@ -96,21 +106,22 @@ export async function login(formData: FormData) {
 }
 
 export async function signup(formData: FormData) {
+    const t = await getActionMessages(formData)
     const email = formData.get('email') as string
     const password = formData.get('password') as string
     const confirmPassword = formData.get('confirmPassword') as string
     const username = formData.get('username') as string
 
     if (!email || !password || !username) {
-        return { error: 'Completá todos los campos.' }
+        return { error: t.auth.completeAllFields }
     }
 
     if (username.length > 20) {
-        return { error: 'El usuario puede tener hasta 20 caracteres.' }
+        return { error: t.auth.usernameMaxLength }
     }
 
     if (password !== confirmPassword) {
-        return { error: 'Las contraseñas no coinciden.' }
+        return { error: t.auth.passwordsMismatch }
     }
 
     const supabase = await createClient()
@@ -126,10 +137,10 @@ export async function signup(formData: FormData) {
     })
 
     if (error) {
-        return { error: translateAuthError(error.message) }
+        return { error: translateAuthError(error.message, t.auth) }
     }
 
-    return { success: 'Revisa tu correo para confirmar tu cuenta.' }
+    return { success: t.auth.confirmEmailSuccess }
 }
 
 export async function logout() {

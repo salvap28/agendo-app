@@ -8,6 +8,8 @@ import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { startOfDay, addMinutes } from "date-fns";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { useI18n } from "@/lib/i18n/client";
+import { getFocusPlannerCopy } from "@/lib/i18n/ui";
 
 interface FocusPlannerModalProps {
     isOpen: boolean;
@@ -33,8 +35,10 @@ function FocusPlannerModalContent({
     initialStart,
     initialEnd,
 }: Omit<FocusPlannerModalProps, "isOpen">) {
+    const { language } = useI18n();
     const { blocks, createBlock } = useBlocksStore();
     const initialMinutes = getInitialMinutes(initialStart, initialEnd);
+    const copy = getFocusPlannerCopy(language);
 
     const [startMins, setStartMins] = useState(initialMinutes.startMins);
     const [endMins, setEndMins] = useState(initialMinutes.endMins);
@@ -53,7 +57,7 @@ function FocusPlannerModalContent({
         const endAt = addMinutes(baseDate, normalizedEnd);
 
         createBlock({
-            title: title || "Focus Session",
+            title: title || copy.defaultTitle,
             type: "deep_work",
             startAt,
             endAt,
@@ -89,9 +93,9 @@ function FocusPlannerModalContent({
                     >
                         <X size={20} />
                     </button>
-                    <span className="text-xl font-medium tracking-tight text-white">Plan Your Focus</span>
+                    <span className="text-xl font-medium tracking-tight text-white">{copy.modalTitle}</span>
                     <GlassButton onClick={handleSave} variant="primary" size="sm">
-                        Save
+                        {copy.save}
                     </GlassButton>
                 </div>
 
@@ -111,7 +115,7 @@ function FocusPlannerModalContent({
                     <div className="group relative">
                         <input
                             type="text"
-                            placeholder="Focus Subject: (Deep Work Session)"
+                            placeholder={copy.placeholder}
                             value={title}
                             onChange={(event) => setTitle(event.target.value)}
                             className={cn(

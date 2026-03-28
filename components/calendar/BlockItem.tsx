@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { getBlockColors } from "@/lib/utils/blockColors";
 import { getBlockEffectiveStatus } from "@/lib/utils/blockState";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
+import { useI18n } from "@/lib/i18n/client";
+import { getIntlLocale } from "@/lib/i18n/app";
 
 interface BlockItemProps {
     block: Block;
@@ -14,6 +16,8 @@ interface BlockItemProps {
 }
 
 export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemProps) {
+    const { language } = useI18n();
+    const intlLocale = getIntlLocale(language);
 
     const [isHovered, setIsHovered] = useState(false);
     const activityExperience = useActivityExperienceStore((state) => (
@@ -48,7 +52,7 @@ export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemP
                 {height >= 45 && (
                     <div className="mt-1 flex items-center gap-2">
                         <span className="text-[11px] text-[#9ca3af] truncate tracking-wide">
-                            {block.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {block.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {block.startAt.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' })} - {block.endAt.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {activityExperience && (
                             <>
@@ -60,7 +64,9 @@ export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemP
                                             : "bg-cyan-300/70"
                                 }`} />
                                 <span className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-                                    {activityExperience.wasUserConfirmed ? "confirmed" : "inferred"}
+                                    {activityExperience.wasUserConfirmed
+                                        ? (language === "es" ? "confirmado" : "confirmed")
+                                        : (language === "es" ? "inferido" : "inferred")}
                                 </span>
                             </>
                         )}
@@ -75,7 +81,7 @@ export function BlockItem({ block, top, height, now, onPointerDown }: BlockItemP
                             <path d="M23 7l-7 5 7 5V7z" />
                             <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                         </svg>
-                        <span className="text-[10px] font-medium">Join</span>
+                        <span className="text-[10px] font-medium">{language === "es" ? "Unirse" : "Join"}</span>
                     </button>
                 </div>
             )}

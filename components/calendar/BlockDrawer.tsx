@@ -46,6 +46,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { GlassButton } from "@/components/ui/glass-button";
+import { useI18n } from "@/lib/i18n/client";
+import {
+    getBlockStatusLabel,
+    getBlockTypeLabel,
+    getIntlLocale,
+    getRecurrenceLabel,
+    getWeekdayInitialsSundayFirst,
+} from "@/lib/i18n/app";
 
 interface BlockDrawerProps {
     blockId: string | null;
@@ -96,9 +104,63 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 
 export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
+    const { language } = useI18n();
+    const intlLocale = getIntlLocale(language);
     const { blocks, updateBlock, deleteBlock, deleteBlockSeries, duplicateBlock, setStatus, applyRecurrence } = useBlocksStore();
     const { openFromBlock } = useFocusStore();
     const block = blocks.find((b) => b.id === blockId);
+    const weekdayLabels = getWeekdayInitialsSundayFirst(language);
+    const copy = language === "es"
+        ? {
+            editBlock: "Editar bloque",
+            editBlockDetails: "Editar detalles del bloque",
+            untitledBlock: "Bloque sin titulo",
+            startFocus: "Iniciar foco",
+            status: "Estado",
+            schedule: "Horario",
+            start: "Inicio",
+            end: "Fin",
+            category: "Categoria",
+            recurrence: "Repeticion",
+            noRecurrence: "No se repite",
+            notes: "Notas",
+            notesPlaceholder: "Agrega detalles...",
+            delete: "Eliminar",
+            duplicate: "Duplicar",
+            done: "Listo",
+            deleteRecurring: "Eliminar bloque recurrente",
+            deleteCurrent: "Eliminar este bloque",
+            deleteSeriesMessage: "Este bloque es parte de una serie. Quieres eliminar solo este o toda la serie?",
+            deleteWarning: "Esta accion no se puede deshacer.",
+            cancel: "Cancelar",
+            onlyThis: "Solo este",
+            wholeSeries: "Toda la serie",
+        }
+        : {
+            editBlock: "Edit block",
+            editBlockDetails: "Edit block details",
+            untitledBlock: "Untitled block",
+            startFocus: "Start focus",
+            status: "Status",
+            schedule: "Schedule",
+            start: "Start",
+            end: "End",
+            category: "Category",
+            recurrence: "Recurrence",
+            noRecurrence: "Does not repeat",
+            notes: "Notes",
+            notesPlaceholder: "Add details...",
+            delete: "Delete",
+            duplicate: "Duplicate",
+            done: "Done",
+            deleteRecurring: "Delete recurring block",
+            deleteCurrent: "Delete this block",
+            deleteSeriesMessage: "This block belongs to a series. Do you want to delete only this one or the whole series?",
+            deleteWarning: "This action cannot be undone.",
+            cancel: "Cancel",
+            onlyThis: "Only this one",
+            wholeSeries: "Whole series",
+        };
 
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -138,8 +200,8 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
     const activeStatus = STATUS_OPTS.find(s => s.value === block.status) ?? STATUS_OPTS[0];
     const TypeIcon = activeType.icon;
 
-    const startStr = block.startAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const endStr = block.endAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const startStr = block.startAt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
+    const endStr = block.endAt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" });
 
     return (
         <Sheet open={isOpen} onOpenChange={onClose}>
@@ -151,8 +213,8 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                 <GlowingEffect spread={60} proximity={120} inactiveZone={0.01} borderWidth={1} variant="subtle" />
 
                 <SheetHeader className="sr-only">
-                    <SheetTitle>Edit Block</SheetTitle>
-                    <SheetDescription>Edit block details</SheetDescription>
+                    <SheetTitle>{copy.editBlock}</SheetTitle>
+                    <SheetDescription>{copy.editBlockDetails}</SheetDescription>
                 </SheetHeader>
 
                 {/* ─── HEADER ─────────────────────────────────────────────── */}
@@ -165,7 +227,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                             activeType.color
                         )}>
                             <TypeIcon size={12} />
-                            {activeType.label}
+                            {getBlockTypeLabel(language, activeType.value)}
                         </div>
                         <button
                             onClick={onClose}
@@ -180,7 +242,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                         value={block.title}
                         onChange={(e) => handleTitleChange(e.target.value)}
                         className="text-2xl font-semibold text-white bg-transparent border-none p-0 h-auto placeholder:text-white/20 focus-visible:ring-0 tracking-tight mb-1"
-                        placeholder="Untitled Block"
+                        placeholder={copy.untitledBlock}
                     />
 
                     {/* Time + status chip row */}
@@ -191,7 +253,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                         <span className="text-white/15">·</span>
                         <div className={cn("flex items-center gap-1.5 text-xs font-medium", activeStatus.color)}>
                             <span className={cn("w-1.5 h-1.5 rounded-full", activeStatus.dot)} />
-                            {activeStatus.label}
+                            {getBlockStatusLabel(language, activeStatus.value)}
                         </div>
                     </div>
 
@@ -210,7 +272,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                 )}
                             >
                                 <Zap size={15} />
-                                <span>Iniciar Focus</span>
+                                <span>{copy.startFocus}</span>
                             </button>
                         );
                     })()}
@@ -221,7 +283,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
 
                     {/* STATUS */}
                     <div>
-                        <SectionLabel>Estado</SectionLabel>
+                        <SectionLabel>{copy.status}</SectionLabel>
                         <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {STATUS_OPTS.map((s) => {
                                 const isActive = block.status === s.value;
@@ -252,7 +314,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                             "text-sm font-semibold z-10 transition-colors",
                                             isActive ? "text-white" : "text-white/50"
                                         )}>
-                                            {s.label}
+                                            {getBlockStatusLabel(language, s.value)}
                                         </span>
                                     </button>
                                 );
@@ -262,11 +324,11 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
 
                     {/* SCHEDULE */}
                     <div>
-                        <SectionLabel>Horario</SectionLabel>
+                        <SectionLabel>{copy.schedule}</SectionLabel>
                         <div className="flex flex-col gap-0.5">
                             {[
-                                { label: "Inicio", type: "start" as const, date: block.startAt },
-                                { label: "Fin", type: "end" as const, date: block.endAt },
+                                { label: copy.start, type: "start" as const, date: block.startAt },
+                                { label: copy.end, type: "end" as const, date: block.endAt },
                             ].map(({ label, type, date }) => (
                                 <div key={type} className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/[0.04] transition-colors group">
                                     <div className="flex items-center gap-3">
@@ -283,7 +345,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
 
                     {/* CATEGORY */}
                     <div>
-                        <SectionLabel>Categoría</SectionLabel>
+                        <SectionLabel>{copy.category}</SectionLabel>
                         <div className="flex overflow-x-auto gap-3 pb-2 -mx-4 px-4 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {BLOCK_TYPES_UI.map((t) => {
                                 const isActive = block.type === t.value;
@@ -314,7 +376,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                             "text-sm font-semibold z-10 transition-colors",
                                             isActive ? "text-white" : "text-white/50"
                                         )}>
-                                            {t.label}
+                                            {getBlockTypeLabel(language, t.value)}
                                         </span>
                                     </button>
                                 );
@@ -324,13 +386,13 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
 
                     {/* RECURRENCE */}
                     <div>
-                        <SectionLabel>Repetición</SectionLabel>
+                        <SectionLabel>{copy.recurrence}</SectionLabel>
                         <div className="flex flex-col gap-0.5">
                             {[
-                                { label: "No se repite", value: undefined },
-                                { label: "Todos los días", value: "daily" },
-                                { label: "Cada semana", value: "weekly" },
-                                { label: "Personalizado", value: "custom" },
+                                { label: copy.noRecurrence, value: undefined },
+                                { label: getRecurrenceLabel(language, "daily"), value: "daily" },
+                                { label: getRecurrenceLabel(language, "weekly"), value: "weekly" },
+                                { label: getRecurrenceLabel(language, "custom"), value: "custom" },
                             ].map((opt) => {
                                 const isSelected = (!block.recurrencePattern && !opt.value) || (block.recurrencePattern?.type === opt.value);
                                 return (
@@ -371,7 +433,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                             {/* Custom day picker */}
                             {block.recurrencePattern?.type === "custom" && (
                                 <div className="flex justify-between px-3 pt-3 pb-1 animate-in slide-in-from-top-2 fade-in duration-200">
-                                    {["D", "L", "M", "X", "J", "V", "S"].map((day, idx) => {
+                                    {weekdayLabels.map((day, idx) => {
                                         const isOn = block.recurrencePattern?.days?.includes(idx);
                                         return (
                                             <button
@@ -399,11 +461,11 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
 
                     {/* NOTES */}
                     <div>
-                        <SectionLabel>Notas</SectionLabel>
+                        <SectionLabel>{copy.notes}</SectionLabel>
                         <Textarea
                             value={block.notes || ""}
                             onChange={(e) => handleNotesChange(e.target.value)}
-                            placeholder="Agrega detalles..."
+                            placeholder={copy.notesPlaceholder}
                             className="bg-white/[0.04] border-white/[0.06] text-white/80 placeholder:text-white/20 min-h-[90px] resize-none rounded-xl focus:bg-white/[0.06] focus:border-white/10 transition-colors text-sm"
                         />
                     </div>
@@ -418,7 +480,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all"
                     >
                         <Trash2 size={13} />
-                        Eliminar
+                        {copy.delete}
                     </button>
 
                     <div className="flex items-center gap-2">
@@ -428,7 +490,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white/25 hover:text-white/70 hover:bg-white/[0.05] transition-all"
                         >
                             <Copy size={13} />
-                            Duplicar
+                            {copy.duplicate}
                         </button>
                         {/* Done / close */}
                         <GlassButton
@@ -437,7 +499,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                             size="sm"
                             className="rounded-xl h-8 px-4 border-white/10"
                         >
-                            Listo
+                            {copy.done}
                         </GlassButton>
                     </div>
                 </div>
@@ -450,17 +512,17 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                     <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-white">
-                            {block.recurrenceId ? "Eliminar bloque recurrente" : "¿Eliminar este bloque?"}
+                            {block.recurrenceId ? copy.deleteRecurring : copy.deleteCurrent}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-white/50">
                             {block.recurrenceId
-                                ? "Este bloque es parte de una serie. ¿Querés eliminarlo solo o toda la serie?"
-                                : "Esta acción no se puede deshacer."}
+                                ? copy.deleteSeriesMessage
+                                : copy.deleteWarning}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex-col sm:flex-row gap-2">
                         <AlertDialogCancel className="bg-white/[0.05] border-white/[0.06] hover:bg-white/10 text-white hover:text-white rounded-xl">
-                            Cancelar
+                            {copy.cancel}
                         </AlertDialogCancel>
 
                         {block.recurrenceId ? (
@@ -469,13 +531,13 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                     onClick={() => confirmDelete('one')}
                                     className="bg-red-500/15 text-red-400 hover:bg-red-500/25 border-0 rounded-xl"
                                 >
-                                    Solo este
+                                    {copy.onlyThis}
                                 </Button>
                                 <Button
                                     onClick={() => confirmDelete('series')}
                                     className="bg-red-600 text-white hover:bg-red-700 border-0 rounded-xl"
                                 >
-                                    Toda la serie
+                                    {copy.wholeSeries}
                                 </Button>
                             </>
                         ) : (
@@ -483,7 +545,7 @@ export function BlockDrawer({ blockId, isOpen, onClose }: BlockDrawerProps) {
                                 onClick={() => confirmDelete('one')}
                                 className="bg-red-600 text-white hover:bg-red-700 border-0 rounded-xl"
                             >
-                                Eliminar
+                                {copy.delete}
                             </Button>
                         )}
                     </AlertDialogFooter>

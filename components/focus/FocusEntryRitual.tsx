@@ -1,49 +1,15 @@
 "use client";
 
 import React from "react";
-import {
-    ArrowLeft,
-    ArrowRight,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { GlassButton } from "@/components/ui/glass-button";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { BlockType } from "@/lib/types/blocks";
 import { FocusEntryStartMode } from "@/lib/types/focus";
-
-const BLOCK_TYPE_COPY: Record<string, { label: string; objective: string; nextStep: string }> = {
-    deep_work: {
-        label: "Deep Work",
-        objective: "Ej: dejar lista la estructura del informe",
-        nextStep: "Ej: abrir el documento y escribir la primera sección",
-    },
-    study: {
-        label: "Study",
-        objective: "Ej: entender y repasar el tema 3",
-        nextStep: "Ej: abrir apuntes y resolver el ejercicio 4",
-    },
-    gym: {
-        label: "Training",
-        objective: "Ej: completar pecho y hombro",
-        nextStep: "Ej: empezar por pecho inclinado",
-    },
-    admin: {
-        label: "Admin",
-        objective: "Ej: ordenar pendientes clave",
-        nextStep: "Ej: responder el primer mail importante",
-    },
-    other: {
-        label: "Focus",
-        objective: "Ej: avanzar una parte concreta",
-        nextStep: "Ej: abrir lo necesario y hacer la primera acción",
-    },
-    free: {
-        label: "Free Focus",
-        objective: "Ej: terminar lo más importante de esta sesión",
-        nextStep: "Ej: abrir el material y empezar",
-    },
-};
+import { useI18n } from "@/lib/i18n/client";
+import { getFocusEntryCopy } from "@/lib/i18n/ui";
 
 type StartModeOption = {
     id: FocusEntryStartMode;
@@ -59,8 +25,9 @@ function getInitialStep(objective: string | null, nextStep: string | null) {
 
 function getModeOptions(
     mode: "block" | "free",
-    blockType?: BlockType,
-    suggested?: FocusEntryStartMode | null
+    blockType: BlockType | undefined,
+    suggested: FocusEntryStartMode | null | undefined,
+    copy: ReturnType<typeof getFocusEntryCopy>,
 ): StartModeOption[] {
     const options: StartModeOption[] = [];
 
@@ -73,48 +40,48 @@ function getModeOptions(
     if (suggested === "study_technique") {
         pushUnique({
             id: "study_technique",
-            label: "Tecnica de estudio",
-            hint: "Te acompana con estructura",
+            label: copy.modes.studyTechnique.label,
+            hint: copy.modes.studyTechnique.hint,
         });
     }
 
     if (suggested === "gym") {
         pushUnique({
             id: "gym",
-            label: "Gym tracker",
-            hint: "Entrar con seguimiento",
+            label: copy.modes.gymTracker.label,
+            hint: copy.modes.gymTracker.entryHint,
         });
     }
 
     if (suggested === "micro_commit") {
         pushUnique({
             id: "micro_commit",
-            label: "Micro commit",
-            hint: "Cinco minutos para arrancar",
+            label: copy.modes.microCommit.label,
+            hint: copy.modes.microCommit.hint,
         });
     }
 
     pushUnique({
         id: "normal",
-        label: "Modo normal",
-        hint: "Entrar directo",
+        label: copy.modes.normal.label,
+        hint: copy.modes.normal.hint,
     });
 
     if (mode === "free") {
         pushUnique({
             id: "study_technique",
-            label: "Tecnica de estudio",
-            hint: "Te acompana con estructura",
+            label: copy.modes.studyTechnique.label,
+            hint: copy.modes.studyTechnique.hint,
         });
         pushUnique({
             id: "gym",
-            label: "Gym tracker",
-            hint: "Series, descansos y progreso",
+            label: copy.modes.gymTracker.label,
+            hint: copy.modes.gymTracker.hint,
         });
         pushUnique({
             id: "micro_commit",
-            label: "Micro commit",
-            hint: "Cinco minutos para arrancar",
+            label: copy.modes.microCommit.label,
+            hint: copy.modes.microCommit.hint,
         });
 
         return options;
@@ -123,25 +90,25 @@ function getModeOptions(
     if (blockType === "study") {
         pushUnique({
             id: "study_technique",
-            label: "Tecnica de estudio",
-            hint: "Te acompana con estructura",
+            label: copy.modes.studyTechnique.label,
+            hint: copy.modes.studyTechnique.hint,
         });
         pushUnique({
             id: "micro_commit",
-            label: "Micro commit",
-            hint: "Cinco minutos para arrancar",
+            label: copy.modes.microCommit.label,
+            hint: copy.modes.microCommit.hint,
         });
     } else if (blockType === "gym") {
         pushUnique({
             id: "gym",
-            label: "Gym tracker",
-            hint: "Series, descansos y progreso",
+            label: copy.modes.gymTracker.label,
+            hint: copy.modes.gymTracker.hint,
         });
     } else {
         pushUnique({
             id: "micro_commit",
-            label: "Micro commit",
-            hint: "Cinco minutos para arrancar",
+            label: copy.modes.microCommit.label,
+            hint: copy.modes.microCommit.hint,
         });
     }
 
@@ -149,11 +116,13 @@ function getModeOptions(
 }
 
 export function FocusEntryRitual() {
+    const { language } = useI18n();
     const { session, lastSession, updateEntryRitual, completeEntryRitual, skipEntryRitual } = useFocusStore();
     const { blocks } = useBlocksStore();
     const ritual = session?.entryRitual;
     const [step, setStep] = React.useState(() => getInitialStep(ritual?.objective ?? null, ritual?.nextStep ?? null));
     const ritualActivationRef = React.useRef<string | null>(null);
+    const copy = React.useMemo(() => getFocusEntryCopy(language), [language]);
 
     const block = session?.blockId
         ? blocks.find((item) => item.id === session.blockId) ?? null
@@ -170,19 +139,17 @@ export function FocusEntryRitual() {
 
     if (!session || !ritual) return null;
 
-    const blockCopy = BLOCK_TYPE_COPY[session.blockType ?? "free"] ?? BLOCK_TYPE_COPY.free;
+    const blockCopy = copy.examples[session.blockType ?? "free"] ?? copy.examples.free;
     const hasCompatibleLastSession = lastSession?.blockType === session.blockType;
     const objective = ritual.objective ?? "";
     const nextStep = ritual.nextStep ?? "";
     const minimumViable = ritual.minimumViable ?? "";
     const selectedMode = ritual.selectedStartMode ?? ritual.suggestedStartMode ?? "normal";
-    const modeOptions = getModeOptions(session.mode, session.blockType, ritual.suggestedStartMode);
+    const modeOptions = getModeOptions(session.mode, session.blockType, ritual.suggestedStartMode, copy);
     const recentObjective = hasCompatibleLastSession ? lastSession?.intention?.trim() || "" : "";
     const recentNextStep = hasCompatibleLastSession ? lastSession?.nextStep?.trim() || "" : "";
     const blockSeed = block?.title?.trim() || "";
-    const blockNextStepSeed = block?.notes
-        ? block.notes.trim().split(/\r?\n/)[0]?.trim() || ""
-        : "";
+    const blockNextStepSeed = block?.notes ? block.notes.trim().split(/\r?\n/)[0]?.trim() || "" : "";
 
     const applyObjective = (value: string) => updateEntryRitual({ objective: value });
     const applyNextStep = (value: string) => updateEntryRitual({ nextStep: value });
@@ -203,26 +170,13 @@ export function FocusEntryRitual() {
         if (selectedMode === "micro_commit" && !minimumViable.trim()) {
             updateEntryRitual({ minimumViable: nextStep.trim() || objective.trim() });
         }
+
         completeEntryRitual();
     };
 
-    const title = step === 0
-        ? "Que te gustaria cerrar en este bloque?"
-        : step === 1
-            ? "Cual va a ser tu primer paso?"
-            : "Como queres arrancar?";
-
-    const subtitle = step === 0
-        ? "Una frase corta. Pensemos juntos en lo que queres dejar hecho."
-        : step === 1
-            ? "Lo primero que vas a hacer apenas entres. Mejor si es simple y visible."
-            : "Elegi la ayuda que mejor te acompane hoy. Si queres, entra directo.";
-
-    const helperBody = step === 0
-        ? "Pensalo como resultado, no como deseo. Algo claro y concreto."
-        : step === 1
-            ? "Algo chiquito y real: abrir un archivo, leer una hoja o empezar el primer ejercicio."
-            : "Normal si ya estas listo. Micro commit si cuesta arrancar. Las otras opciones te guian.";
+    const title = step === 0 ? copy.titles.objective : step === 1 ? copy.titles.nextStep : copy.titles.mode;
+    const subtitle = step === 0 ? copy.subtitles.objective : step === 1 ? copy.subtitles.nextStep : copy.subtitles.mode;
+    const helperBody = step === 0 ? copy.helpers.objective : step === 1 ? copy.helpers.nextStep : copy.helpers.mode;
 
     return (
         <div className="relative z-10 flex min-h-full w-full items-center justify-center px-4 py-8 sm:px-8">
@@ -248,7 +202,7 @@ export function FocusEntryRitual() {
                                         "h-2 rounded-full transition-all duration-300",
                                         step === index
                                             ? "w-8 bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] shadow-[0_0_20px_rgba(109,40,217,0.45)]"
-                                            : "w-2 bg-white/15"
+                                            : "w-2 bg-white/15",
                                     )}
                                 />
                             ))}
@@ -259,14 +213,12 @@ export function FocusEntryRitual() {
                         className={cn(
                             step === 2
                                 ? "rounded-[30px] border border-white/10 bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
-                                : "px-0 py-1"
+                                : "px-0 py-1",
                         )}
                     >
                         {step === 0 && (
                             <div className="mx-auto max-w-[680px] space-y-6">
-                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">
-                                    {helperBody}
-                                </p>
+                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">{helperBody}</p>
 
                                 <input
                                     value={objective}
@@ -283,16 +235,16 @@ export function FocusEntryRitual() {
                                             onClick={() => applyObjective(recentObjective)}
                                             className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
                                         >
-                                            Retomar: {recentObjective}
+                                            {copy.actions.resume} {recentObjective}
                                         </button>
                                     )}
-                                    {blockSeed && blockSeed !== objective.trim() && !/^(new block|focus block)$/i.test(blockSeed) && (
+                                    {blockSeed && blockSeed !== objective.trim() && !/^(new block|focus block|bloque de foco|nuevo bloque)$/i.test(blockSeed) && (
                                         <button
                                             type="button"
                                             onClick={() => applyObjective(blockSeed)}
                                             className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
                                         >
-                                            Usar titulo del bloque
+                                            {copy.actions.useBlockTitle}
                                         </button>
                                     )}
                                 </div>
@@ -301,9 +253,7 @@ export function FocusEntryRitual() {
 
                         {step === 1 && (
                             <div className="mx-auto max-w-[680px] space-y-6">
-                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">
-                                    {helperBody}
-                                </p>
+                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">{helperBody}</p>
 
                                 <input
                                     value={nextStep}
@@ -320,7 +270,7 @@ export function FocusEntryRitual() {
                                             onClick={() => applyNextStep(recentNextStep)}
                                             className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
                                         >
-                                            Seguir con: {recentNextStep}
+                                            {copy.actions.continueWith} {recentNextStep}
                                         </button>
                                     )}
                                     {blockNextStepSeed && blockNextStepSeed !== nextStep.trim() && (
@@ -329,7 +279,7 @@ export function FocusEntryRitual() {
                                             onClick={() => applyNextStep(blockNextStepSeed)}
                                             className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 transition-colors hover:bg-white/[0.08] hover:text-white"
                                         >
-                                            Usar nota del bloque
+                                            {copy.actions.useBlockNote}
                                         </button>
                                     )}
                                 </div>
@@ -338,9 +288,7 @@ export function FocusEntryRitual() {
 
                         {step === 2 && (
                             <div className="space-y-5">
-                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">
-                                    {helperBody}
-                                </p>
+                                <p className="max-w-[52ch] text-sm leading-relaxed text-white/44">{helperBody}</p>
 
                                 <div className="grid gap-3 pt-1 sm:grid-cols-2">
                                     {modeOptions.map((option) => {
@@ -356,7 +304,7 @@ export function FocusEntryRitual() {
                                                     "relative rounded-[26px] border p-4 text-left transition-all duration-200",
                                                     isSelected
                                                         ? "border-transparent bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] text-white shadow-[0_16px_36px_rgba(109,40,217,0.3)]"
-                                                        : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/14 hover:bg-white/[0.06]"
+                                                        : "border-white/[0.08] bg-white/[0.035] text-white/70 hover:border-white/14 hover:bg-white/[0.06]",
                                                 )}
                                             >
                                                 <div className="flex items-start justify-between gap-4">
@@ -370,13 +318,15 @@ export function FocusEntryRitual() {
                                                     </div>
 
                                                     {isSuggested && (
-                                                        <span className={cn(
-                                                            "rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]",
-                                                            isSelected
-                                                                ? "border-white/20 bg-white/10 text-white/80"
-                                                                : "border-[#7C3AED]/30 bg-[#7C3AED]/10 text-[#c4b5fd]"
-                                                        )}>
-                                                            Sugerido
+                                                        <span
+                                                            className={cn(
+                                                                "rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                                                                isSelected
+                                                                    ? "border-white/20 bg-white/10 text-white/80"
+                                                                    : "border-[#7C3AED]/30 bg-[#7C3AED]/10 text-[#c4b5fd]",
+                                                            )}
+                                                        >
+                                                            {copy.actions.suggested}
                                                         </span>
                                                     )}
                                                 </div>
@@ -388,12 +338,12 @@ export function FocusEntryRitual() {
                                 {selectedMode === "micro_commit" && (
                                     <div className="space-y-3 border-t border-white/[0.08] pt-4">
                                         <label className="text-xs font-medium uppercase tracking-[0.18em] text-white/40">
-                                            Minimo viable
+                                            {copy.actions.minimumViable}
                                         </label>
                                         <input
                                             value={minimumViable}
                                             onChange={(event) => updateEntryRitual({ minimumViable: event.target.value })}
-                                            placeholder="Ej: abrir el archivo y escribir una linea"
+                                            placeholder={copy.actions.minimumViablePlaceholder}
                                             className="h-14 w-full rounded-[22px] border border-white/[0.08] bg-white/[0.04] px-4 text-sm text-white outline-none transition-colors placeholder:text-white/22 focus:border-white/18 focus:bg-white/[0.05]"
                                         />
                                     </div>
@@ -411,7 +361,7 @@ export function FocusEntryRitual() {
                                     className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-white/65 transition-colors hover:bg-white/10 hover:text-white"
                                 >
                                     <ArrowLeft className="h-4 w-4" />
-                                    Atras
+                                    {copy.actions.back}
                                 </button>
                             )}
 
@@ -420,7 +370,7 @@ export function FocusEntryRitual() {
                                 onClick={skipEntryRitual}
                                 className="inline-flex h-11 items-center justify-center rounded-full px-1 text-sm text-white/35 transition-colors hover:text-white/70"
                             >
-                                Omitir por ahora
+                                {copy.actions.skipForNow}
                             </button>
                         </div>
 
@@ -429,7 +379,7 @@ export function FocusEntryRitual() {
                             className="h-12 rounded-full px-6"
                             disabled={(step === 0 && !objective.trim()) || (step === 1 && !nextStep.trim())}
                         >
-                            {step === 2 ? "Empezar bloque" : "Continuar"}
+                            {step === 2 ? copy.actions.startBlock : copy.actions.continue}
                             <ArrowRight className="h-4 w-4" />
                         </GlassButton>
                     </div>

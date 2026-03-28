@@ -19,6 +19,7 @@ import {
 import { FocusInterventionRecord, FocusSession, FocusSessionEvent } from "@/lib/types/focus";
 import { DailyMetric } from "@/lib/types/metrics";
 import type { ActivityPatternSummary } from "@/lib/types/activity";
+import { AppLanguage } from "@/lib/i18n/messages";
 import {
     computeActivityExperienceAnalyticsForUser,
     fetchRecentActivityExperiences,
@@ -330,18 +331,21 @@ function average(values: number[]) {
     return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
-function getHomeWindowLabel(window: NonNullable<BehaviorProfile["bestFocusWindow"]>["data"]["window"]) {
+function getHomeWindowLabel(
+    window: NonNullable<BehaviorProfile["bestFocusWindow"]>["data"]["window"],
+    language: AppLanguage = "en",
+) {
     switch (window) {
         case "morning":
-            return "morning";
+            return language === "es" ? "la manana" : "morning";
         case "afternoon":
-            return "afternoon";
+            return language === "es" ? "la tarde" : "afternoon";
         case "evening":
-            return "evening";
+            return language === "es" ? "el atardecer" : "evening";
         case "night":
-            return "night";
+            return language === "es" ? "la noche" : "night";
         default:
-            return "best window";
+            return language === "es" ? "tu mejor ventana" : "best window";
     }
 }
 
@@ -898,7 +902,8 @@ export async function runPersonalIntelligenceBatchConsolidation(
 
 export async function getInsightsDashboardData(
     supabase: SupabaseClient,
-    userId: string
+    userId: string,
+    language: AppLanguage = "en",
 ): Promise<InsightsDashboardData> {
     let profile = await fetchProfileRow(supabase, userId);
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 30 });
@@ -937,7 +942,7 @@ export async function getInsightsDashboardData(
 
     return {
         profile,
-        cards: buildInsightCards(profile),
+        cards: buildInsightCards(profile, language),
         timeline,
         activityOverview: profile.activityAnalytics,
         weeklySessions: weeklyAnalytics.length,
@@ -954,10 +959,14 @@ export async function getInsightsDashboardData(
     };
 }
 
-export async function getHomeSummaryData(supabase: SupabaseClient, userId: string) {
-    const dashboard = await getInsightsDashboardData(supabase, userId);
+export async function getHomeSummaryData(
+    supabase: SupabaseClient,
+    userId: string,
+    language: AppLanguage = "en",
+) {
+    const dashboard = await getInsightsDashboardData(supabase, userId, language);
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 30, limit: 40 });
-    const summary = buildProfileSummary(dashboard.profile, recentAnalytics);
+    const summary = buildProfileSummary(dashboard.profile, recentAnalytics, language);
     const mainCard = dashboard.cards[0];
     const latestTimelinePoint = [...dashboard.timeline].reverse()[0];
     const progressSignal = dashboard.weeklySessions === 0
@@ -966,15 +975,25 @@ export async function getHomeSummaryData(supabase: SupabaseClient, userId: strin
             ? "positive"
             : "neutral";
 
-    let softRecommendation = "A bit more consistent use will make this read sharper.";
+    let softRecommendation = language === "es"
+        ? "Un uso un poco mas consistente va a volver esta lectura mas precisa."
+        : "A bit more consistent use will make this read sharper.";
     if (dashboard.profile.bestFocusWindow) {
-        softRecommendation = `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window)} when you can.`;
+        softRecommendation = language === "es"
+            ? `Protege un bloque importante en ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} cuando puedas.`
+            : `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} when you can.`;
     } else if (dashboard.profile.optimalSessionLength) {
         softRecommendation = dashboard.profile.optimalSessionLength.data.bucket === "medium"
-            ? "Medium-length sessions look like your cleanest rhythm right now."
-            : "Stay closer to the session range that has been holding best lately.";
+            ? (language === "es"
+                ? "Las sesiones medias se ven como tu ritmo mas limpio ahora."
+                : "Medium-length sessions look like your cleanest rhythm right now.")
+            : (language === "es"
+                ? "Mantente cerca del rango de sesion que mejor se sostuvo ultimamente."
+                : "Stay closer to the session range that has been holding best lately.");
     } else if (dashboard.profile.topFrictionSources[0]) {
-        softRecommendation = `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`;
+        softRecommendation = language === "es"
+            ? `Cuando aparezca ${dashboard.profile.topFrictionSources[0].data.label}, empieza mas pequeno.`
+            : `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`;
     }
 
     void softRecommendation;
@@ -985,20 +1004,30 @@ export async function getHomeSummaryData(supabase: SupabaseClient, userId: strin
     )));
 
     const homeMainInsight = dashboard.profile.warmupStage !== "ready"
-        ? "Your profile is still calibrating."
+        ? (language === "es" ? "Tu perfil todavia se esta calibrando." : "Your profile is still calibrating.")
         : mainCard?.title ?? summary;
 
     const homeSoftRecommendation = dashboard.profile.bestFocusWindow
-        ? `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window)} when you can.`
+        ? (language === "es"
+            ? `Protege un bloque importante en ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} cuando puedas.`
+            : `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} when you can.`)
         : dashboard.profile.optimalSessionLength
             ? (
                 dashboard.profile.optimalSessionLength.data.bucket === "medium"
-                    ? "Medium-length sessions look like your cleanest rhythm right now."
-                    : "Stay closer to the session range that has been holding best lately."
+                    ? (language === "es"
+                        ? "Las sesiones medias se ven como tu ritmo mas limpio ahora."
+                        : "Medium-length sessions look like your cleanest rhythm right now.")
+                    : (language === "es"
+                        ? "Mantente cerca del rango de sesion que mejor se sostuvo ultimamente."
+                        : "Stay closer to the session range that has been holding best lately.")
             )
             : dashboard.profile.topFrictionSources[0]
-                ? `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`
-                : "A bit more consistent use will make this read sharper.";
+                ? (language === "es"
+                    ? `Cuando aparezca ${dashboard.profile.topFrictionSources[0].data.label}, empieza mas pequeno.`
+                    : `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`)
+                : (language === "es"
+                    ? "Un uso un poco mas consistente va a volver esta lectura mas precisa."
+                    : "A bit more consistent use will make this read sharper.");
 
     return {
         momentum_current: dashboard.compositeSignalCurrent,

@@ -1,12 +1,15 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 interface SectionIntroProps {
     onNext: () => void;
 }
 
 export function SectionIntro({ onNext }: SectionIntroProps) {
+    const { language } = useI18n();
+
     return (
         <section className="relative w-full h-[100dvh] snap-start flex flex-col items-center justify-center p-6 select-none bg-transparent overflow-hidden">
             <h1
@@ -24,7 +27,7 @@ export function SectionIntro({ onNext }: SectionIntroProps) {
             {/* Pulse Down Arrow (Call to scroll) */}
             <button
                 onClick={onNext}
-                aria-label="Scroll to next section"
+                aria-label={language === "es" ? "Ir a la siguiente sección" : "Scroll to next section"}
                 className="absolute bottom-16 md:bottom-24 p-4 text-white/50 hover:text-white/90 transition-colors animate-bounce cursor-pointer group"
                 style={{ animationDuration: '3s' }}
             >

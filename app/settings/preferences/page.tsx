@@ -5,9 +5,11 @@ import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { tryCreateClient } from "@/lib/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GlassSwitch } from "@/components/ui/glass-switch";
+import { useI18n } from "@/lib/i18n/client";
 
 export default function PreferencesTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
+    const { t } = useI18n();
 
     useEffect(() => {
         async function init() {
@@ -27,45 +29,43 @@ export default function PreferencesTab() {
     return (
         <div suppressHydrationWarning className="flex flex-col gap-8 w-full">
             <div>
-                <h1 className="text-3xl font-semibold mb-3">Preferencias</h1>
-                <p className="text-foreground/60 text-base">Configura cómo funciona Agendo por defecto.</p>
+                <h1 className="text-3xl font-semibold mb-3">{t.settingsPreferences.title}</h1>
+                <p className="text-foreground/60 text-base">{t.settingsPreferences.description}</p>
             </div>
 
             <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-8 flex flex-col gap-10">
-
-                {/* Calendar Preferences */}
                 <div className="flex flex-col gap-6">
-                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Calendario y Sistema</h3>
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{t.settingsPreferences.calendarAndSystem}</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="flex flex-col gap-3">
-                            <label className="text-sm text-foreground/80 font-medium">Primer día de la semana</label>
+                            <label className="text-sm text-foreground/80 font-medium">{t.settingsPreferences.firstDayOfWeek}</label>
                             <Select
                                 value={settings.first_day_of_week.toString()}
                                 onValueChange={(val) => updateSetting('first_day_of_week', parseInt(val) as 0 | 1)}
                             >
                                 <SelectTrigger className="w-full bg-black/20 border-white/10 h-12 rounded-xl text-foreground">
-                                    <SelectValue placeholder="Selecciona un día" />
+                                    <SelectValue placeholder={t.settingsPreferences.selectDay} />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#0a0b12] border border-white/10 text-foreground">
-                                    <SelectItem value="1">Lunes</SelectItem>
-                                    <SelectItem value="0">Domingo</SelectItem>
+                                    <SelectItem value="1">{t.settingsPreferences.monday}</SelectItem>
+                                    <SelectItem value="0">{t.settingsPreferences.sunday}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="flex flex-col gap-3">
-                            <label className="text-sm text-foreground/80 font-medium">Formato de Hora</label>
+                            <label className="text-sm text-foreground/80 font-medium">{t.settingsPreferences.timeFormat}</label>
                             <Select
                                 value={settings.time_format}
                                 onValueChange={(val) => updateSetting('time_format', val as '12h' | '24h')}
                             >
                                 <SelectTrigger className="w-full bg-black/20 border-white/10 h-12 rounded-xl text-foreground">
-                                    <SelectValue placeholder="Selecciona formato" />
+                                    <SelectValue placeholder={t.settingsPreferences.selectFormat} />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#0a0b12] border border-white/10 text-foreground">
-                                    <SelectItem value="24h">24 Horas (14:00)</SelectItem>
-                                    <SelectItem value="12h">12 Horas (2:00 PM)</SelectItem>
+                                    <SelectItem value="24h">{t.settingsPreferences.time24}</SelectItem>
+                                    <SelectItem value="12h">{t.settingsPreferences.time12}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -74,13 +74,12 @@ export default function PreferencesTab() {
 
                 <div className="w-full h-px bg-white/5"></div>
 
-                {/* Focus Preferences */}
                 <div className="flex flex-col gap-6">
-                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Sesiones de Enfoque</h3>
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{t.settingsPreferences.focusSessions}</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="flex flex-col gap-3">
-                            <label className="text-sm text-foreground/80 font-medium">Minutos de Enfoque Predeterminados</label>
+                            <label className="text-sm text-foreground/80 font-medium">{t.settingsPreferences.focusDefaultMinutes}</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
                                     <button
@@ -105,12 +104,12 @@ export default function PreferencesTab() {
                                         +
                                     </button>
                                 </div>
-                                <span className="text-base text-foreground/50 font-medium">min</span>
+                                <span className="text-base text-foreground/50 font-medium">{t.common.minuteShort}</span>
                             </div>
                         </div>
 
                         <div className="flex flex-col gap-3">
-                            <label className="text-sm text-foreground/80 font-medium">Minutos de Descanso Predeterminados</label>
+                            <label className="text-sm text-foreground/80 font-medium">{t.settingsPreferences.restDefaultMinutes}</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
                                     <button
@@ -135,15 +134,15 @@ export default function PreferencesTab() {
                                         +
                                     </button>
                                 </div>
-                                <span className="text-base text-foreground/50 font-medium">min</span>
+                                <span className="text-base text-foreground/50 font-medium">{t.common.minuteShort}</span>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex justify-between items-center mt-6 bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
                         <div className="flex flex-col gap-2">
-                            <h4 className="text-base font-medium text-foreground/90">Iniciar descanso automáticamente</h4>
-                            <p className="text-sm text-foreground/50 max-w-[80%]">Al terminar un bloque de concentración, el contador de descanso inicia solo para que no pierdas el ritmo.</p>
+                            <h4 className="text-base font-medium text-foreground/90">{t.settingsPreferences.autoStartRest}</h4>
+                            <p className="text-sm text-foreground/50 max-w-[80%]">{t.settingsPreferences.autoStartRestDescription}</p>
                         </div>
                         <GlassSwitch
                             checked={settings.auto_start_rest}
@@ -151,7 +150,6 @@ export default function PreferencesTab() {
                         />
                     </div>
                 </div>
-
             </div>
         </div>
     );

@@ -6,6 +6,8 @@ import { cn } from '@/lib/cn';
 import { CheckCircle2, Footprints, Target } from 'lucide-react';
 import { GlassButton } from '@/components/ui/glass-button';
 import { GlowingEffect } from '@/components/ui/glowing-effect';
+import { useI18n } from '@/lib/i18n/client';
+import { getIntentInputCopy } from '@/lib/i18n/ui';
 
 interface IntentInputOverlayProps {
     onClose: () => void;
@@ -18,6 +20,7 @@ export function IntentInputOverlay({
     defaultIsCompletion = false,
     field = "intention",
 }: IntentInputOverlayProps) {
+    const { language } = useI18n();
     const { session, setSessionIntention, setSessionNextStep } = useFocusStore();
     const [value, setValue] = useState(() => (
         field === "nextStep"
@@ -44,23 +47,25 @@ export function IntentInputOverlay({
         handleClose();
     };
 
+    const copy = getIntentInputCopy(language);
+
     const title = field === "nextStep"
-        ? "Cual es el siguiente paso?"
+        ? copy.nextStepTitle
         : defaultIsCompletion
-            ? "Objetivo cumplido"
-            : "Cual es el objetivo?";
+            ? copy.completionTitle
+            : copy.intentionTitle;
 
     const description = field === "nextStep"
-        ? "Defini la accion concreta que sigue para no perder el arranque."
+        ? copy.nextStepDescription
         : defaultIsCompletion
-            ? "Escribi tu proximo paso para mantener el impulso, o cerra para continuar libremente."
-            : "Defini en una frase corta que queres lograr en este bloque.";
+            ? copy.completionDescription
+            : copy.intentionDescription;
 
     const placeholder = field === "nextStep"
-        ? "Ej: abrir apuntes y resolver el ejercicio 4..."
+        ? copy.nextStepPlaceholder
         : defaultIsCompletion
-            ? "Ej: repasar el siguiente capitulo..."
-            : "Ej: cerrar la estructura del informe...";
+            ? copy.completionPlaceholder
+            : copy.intentionPlaceholder;
 
     return (
         <div
@@ -107,7 +112,7 @@ export function IntentInputOverlay({
                         variant="ghost"
                         className="flex-1 w-full justify-center rounded-xl h-10"
                     >
-                        {defaultIsCompletion ? "Quizas luego" : "Cancelar"}
+                        {defaultIsCompletion ? copy.maybeLater : copy.cancel}
                     </GlassButton>
                     <GlassButton
                         type="submit"
@@ -115,7 +120,7 @@ export function IntentInputOverlay({
                         variant="primary"
                         className="flex-[2] w-full justify-center rounded-xl h-11"
                     >
-                        {field === "nextStep" ? "Guardar paso" : "Fijar objetivo"}
+                        {field === "nextStep" ? copy.saveStep : copy.setObjective}
                     </GlassButton>
                 </div>
             </form>

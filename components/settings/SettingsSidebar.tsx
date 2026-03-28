@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Palette, Settings, ShieldAlert, ArrowLeft, Bell } from "lucide-react";
+import { User, Palette, Settings, ShieldAlert, ArrowLeft, Bell, Languages } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 export function SettingsSidebar() {
     const pathname = usePathname();
+    const { t } = useI18n();
 
     const navItems = [
-        { name: "Perfil", href: "/settings/profile", icon: User },
-        { name: "Apariencia", href: "/settings/appearance", icon: Palette },
-        { name: "Preferencias", href: "/settings/preferences", icon: Settings },
-        { name: "Notificaciones", href: "/settings/notifications", icon: Bell },
-        { name: "Cuenta", href: "/settings/account", icon: ShieldAlert, danger: true },
+        { name: t.settingsSidebar.profile, href: "/settings/profile", icon: User },
+        { name: t.settingsSidebar.appearance, href: "/settings/appearance", icon: Palette },
+        { name: t.settingsSidebar.preferences, href: "/settings/preferences", icon: Settings },
+        { name: t.settingsSidebar.notifications, href: "/settings/notifications", icon: Bell },
+        { name: t.settingsSidebar.language, href: "/settings/language", icon: Languages },
+        { name: t.settingsSidebar.account, href: "/settings/account", icon: ShieldAlert, danger: true },
     ];
 
     return (
@@ -22,7 +25,7 @@ export function SettingsSidebar() {
                 className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground transition-colors w-fit px-2"
             >
                 <ArrowLeft size={16} />
-                <span>Volver a Inicio</span>
+                <span>{t.settingsSidebar.backHome}</span>
             </Link>
 
             <nav className="flex flex-col gap-1">
@@ -40,7 +43,7 @@ export function SettingsSidebar() {
                             <item.icon size={18} className={isActive ? "text-primary" : ""} />
                             <span>{item.name}</span>
                         </Link>
-                    )
+                    );
                 })}
             </nav>
         </div>

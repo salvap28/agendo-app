@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { tryCreateClient } from '@/lib/supabase/client';
+import type { AppLanguage } from '@/lib/i18n/messages';
 
 export interface UserSettings {
+    language: AppLanguage;
     theme_color: string;
     performance_mode: boolean;
-    first_day_of_week: 0 | 1; // 0: Sunday, 1: Monday
+    first_day_of_week: 0 | 1;
     time_format: '12h' | '24h';
     focus_default_minutes: number;
     rest_default_minutes: number;
@@ -17,9 +19,10 @@ export interface UserSettings {
 }
 
 const defaultSettings: UserSettings = {
-    theme_color: '#3B82F6', // Default blue-ish
+    language: 'en',
+    theme_color: '#3B82F6',
     performance_mode: false,
-    first_day_of_week: 1, // Default Monday
+    first_day_of_week: 1,
     time_format: '24h',
     focus_default_minutes: 25,
     rest_default_minutes: 5,
@@ -39,6 +42,19 @@ function mergeSettings(data?: Partial<UserSettings> | null): UserSettings {
 
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : error;
+}
+
+function shouldIgnoreSettingsError(error?: { code?: string | null; message?: string | null }) {
+    return error?.code === '42P01'
+        || error?.code === 'PGRST204'
+        || error?.message?.includes('schema cache')
+        || error?.message?.toLowerCase().includes('language');
+}
+
+function syncLanguageCookie(language: AppLanguage) {
+    if (typeof document === 'undefined') return;
+    document.documentElement.lang = language;
+    document.cookie = `agendo-language=${language}; path=/; max-age=31536000; samesite=lax`;
 }
 
 interface SettingsState {
@@ -75,7 +91,6 @@ export const useSettingsStore = create<SettingsState>()(
 
                     if (error) {
                         if (error.code === 'PGRST116') {
-                            // Row doesn't exist yet, insert default settings
                             const { data: newData, error: insertError } = await supabase
                                 .from('user_settings')
                                 .insert([{ user_id: userId, ...defaultSettings }])
@@ -83,32 +98,36 @@ export const useSettingsStore = create<SettingsState>()(
                                 .single();
 
                             if (!insertError && newData) {
-                                set({ settings: mergeSettings(newData as Partial<UserSettings>) });
+                                const mergedSettings = mergeSettings(newData as Partial<UserSettings>);
+                                syncLanguageCookie(mergedSettings.language);
+                                set({ settings: mergedSettings });
                             }
-                        } else {
-                            // If table is missing, just ignore and use defaults.
-                            if (error.code !== '42P01' && !error.message?.includes('schema cache')) {
-                                console.error('Error al cargar configuración:', error.message || error);
-                            }
+                        } else if (!shouldIgnoreSettingsError(error)) {
+                            console.error('Error loading settings:', error.message || error);
                         }
                     } else if (data) {
-                        set({ settings: mergeSettings(data as Partial<UserSettings>) });
+                        const mergedSettings = mergeSettings(data as Partial<UserSettings>);
+                        syncLanguageCookie(mergedSettings.language);
+                        set({ settings: mergedSettings });
                     }
                 } catch (error: unknown) {
-                    console.error('Error general en fetchSettings:', getErrorMessage(error));
+                    console.error('General fetchSettings error:', getErrorMessage(error));
                 } finally {
                     set({ isLoading: false, isInitialized: true });
                 }
             },
 
             updateSetting: async (key, value) => {
-                // Optimistic UI update
                 set((state) => ({
                     settings: {
                         ...state.settings,
                         [key]: value,
                     },
                 }));
+
+                if (key === 'language') {
+                    syncLanguageCookie(value as AppLanguage);
+                }
 
                 const supabase = tryCreateClient();
                 if (!supabase) return;
@@ -124,18 +143,18 @@ export const useSettingsStore = create<SettingsState>()(
                         .update({ [key]: value })
                         .eq('user_id', userId);
 
-                    if (error && error.code !== '42P01' && !error.message?.includes('schema cache')) {
-                        console.error('Error al guardar configuración en BD:', error.message || error);
+                    if (error && !shouldIgnoreSettingsError(error)) {
+                        console.error('Error saving settings:', error.message || error);
                     }
                 } catch (error: unknown) {
-                    console.error('Error general en updateSetting:', getErrorMessage(error));
+                    console.error('General updateSetting error:', getErrorMessage(error));
                 }
             },
         }),
         {
             name: 'agendo-settings',
             storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({ settings: state.settings }), // Only persist settings to localStorage
+            partialize: (state) => ({ settings: state.settings }),
         }
     )
 );

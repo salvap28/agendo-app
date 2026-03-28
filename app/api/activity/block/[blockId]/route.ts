@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServerLanguage } from "@/lib/i18n/server";
 import {
     fetchActivityExperienceForBlock,
     inferActivityExperienceForBlock,
@@ -114,8 +115,18 @@ export async function GET(
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
+        const language = await getServerLanguage();
+        const copy = language === "es"
+            ? {
+                unauthorized: "No autorizado",
+                loadError: "No se pudo cargar la experiencia de actividad",
+            }
+            : {
+                unauthorized: "Unauthorized",
+                loadError: "Failed to load activity experience.",
+            };
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ error: copy.unauthorized }, { status: 401 });
         }
 
         const { blockId } = await context.params;
@@ -123,7 +134,11 @@ export async function GET(
         const block = await fetchOwnedBlock(supabase, user.id, blockId);
         return NextResponse.json({ experience, block });
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to load activity experience.";
+        const language = await getServerLanguage();
+        const fallback = language === "es"
+            ? "No se pudo cargar la experiencia de actividad"
+            : "Failed to load activity experience.";
+        const message = error instanceof Error ? error.message : fallback;
         return NextResponse.json({ error: message }, { status: 400 });
     }
 }
@@ -135,8 +150,24 @@ export async function POST(
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
+        const language = await getServerLanguage();
+        const copy = language === "es"
+            ? {
+                unauthorized: "No autorizado",
+                previousNextRequired: "previousBlock y nextBlock son obligatorios.",
+                blockNotFound: "Bloque no encontrado.",
+                checkoutRequired: "El payload de checkout es obligatorio.",
+                updateError: "No se pudo actualizar la experiencia de actividad.",
+            }
+            : {
+                unauthorized: "Unauthorized",
+                previousNextRequired: "previousBlock and nextBlock are required.",
+                blockNotFound: "Block not found.",
+                checkoutRequired: "checkout payload is required.",
+                updateError: "Failed to update activity experience.",
+            };
         if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ error: copy.unauthorized }, { status: 401 });
         }
 
         const body = await request.json().catch(() => ({}));
@@ -145,7 +176,7 @@ export async function POST(
 
         if (action === "rescheduled") {
             if (!body?.previousBlock || !body?.nextBlock) {
-                return NextResponse.json({ error: "previousBlock and nextBlock are required." }, { status: 400 });
+                return NextResponse.json({ error: copy.previousNextRequired }, { status: 400 });
             }
 
             const experience = await recordBlockRescheduleExperience(
@@ -160,12 +191,12 @@ export async function POST(
 
         const block = await fetchOwnedBlock(supabase, user.id, blockId);
         if (!block) {
-            return NextResponse.json({ error: "Block not found." }, { status: 404 });
+            return NextResponse.json({ error: copy.blockNotFound }, { status: 404 });
         }
 
         if (action === "checkout") {
             if (!body?.checkout || typeof body.checkout !== "object") {
-                return NextResponse.json({ error: "checkout payload is required." }, { status: 400 });
+                return NextResponse.json({ error: copy.checkoutRequired }, { status: 400 });
             }
 
             const experience = await recordActivityCheckout(supabase, user.id, {
@@ -183,7 +214,11 @@ export async function POST(
 
         return NextResponse.json({ experience });
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to update activity experience.";
+        const language = await getServerLanguage();
+        const fallback = language === "es"
+            ? "No se pudo actualizar la experiencia de actividad."
+            : "Failed to update activity experience.";
+        const message = error instanceof Error ? error.message : fallback;
         return NextResponse.json({ error: message }, { status: 400 });
     }
 }

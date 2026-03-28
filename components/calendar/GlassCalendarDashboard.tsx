@@ -33,17 +33,13 @@ import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from 
 import { MonthDayCell } from "./glass-calendar-dashboard/MonthDayCell";
 import { ScheduledEventCard } from "./glass-calendar-dashboard/ScheduledEventCard";
 import { CalendarEvent } from "./glass-calendar-dashboard/types";
-
-const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const SEARCHABLE_TYPE_LABELS: Record<CalendarEvent["type"], string> = {
-    deep_work: "deep work",
-    meeting: "meeting",
-    gym: "gym",
-    study: "study",
-    admin: "admin",
-    break: "break",
-    other: "other",
-};
+import { useI18n } from "@/lib/i18n/client";
+import {
+    getBlockTypeLabel,
+    getDateFnsLocale,
+    getIntlLocale,
+    getWeekdayNamesSundayFirst,
+} from "@/lib/i18n/app";
 
 function buildMonthGrid(month: Date) {
     const monthStart = startOfMonth(month);
@@ -76,6 +72,40 @@ type PendingConflict = {
 };
 
 export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardProps) {
+    const { language } = useI18n();
+    const dateFnsLocale = getDateFnsLocale(language);
+    const intlLocale = getIntlLocale(language);
+    const dayLabels = getWeekdayNamesSundayFirst(language);
+    const copy = language === "es"
+        ? {
+            untitledBlock: "Bloque sin título",
+            searchPlaceholder: "Buscar bloques, notas o tipo",
+            searchAria: "Buscar bloques del calendario",
+            clearSearchAria: "Limpiar búsqueda del calendario",
+            newEvent: "Nuevo evento",
+            scheduled: "Programado",
+            noMatchingBlocks: "No hay bloques coincidentes",
+            noBlocksScheduled: "No hay bloques programados",
+            emptySearch: "Prueba otra búsqueda, otro día o limpia el filtro.",
+            emptyCalendar: "Crea un bloque y edítalo desde el menú orbital.",
+            clearSearch: "Limpiar búsqueda",
+            createBlock: "Crear bloque",
+        }
+        : {
+            untitledBlock: "Untitled Block",
+            searchPlaceholder: "Search blocks, notes or type",
+            searchAria: "Search calendar blocks",
+            clearSearchAria: "Clear calendar search",
+            newEvent: "New event",
+            scheduled: "Scheduled",
+            noMatchingBlocks: "No matching blocks",
+            noBlocksScheduled: "No blocks scheduled",
+            emptySearch: "Try another search, another day, or clear the filter.",
+            emptyCalendar: "Create a block and edit it with the orbital menu.",
+            clearSearch: "Clear search",
+            createBlock: "Create block",
+        };
+
     const { blocks, createBlock, updateBlock } = useBlocksStore();
     const { session, openFromBlock } = useFocusStore();
 
@@ -93,6 +123,16 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         return () => window.clearInterval(interval);
     }, []);
 
+    const searchableTypeLabels = useMemo<Record<CalendarEvent["type"], string>>(() => ({
+        deep_work: getBlockTypeLabel(language, "deep_work").toLowerCase(),
+        meeting: getBlockTypeLabel(language, "meeting").toLowerCase(),
+        gym: getBlockTypeLabel(language, "gym").toLowerCase(),
+        study: getBlockTypeLabel(language, "study").toLowerCase(),
+        admin: getBlockTypeLabel(language, "admin").toLowerCase(),
+        break: getBlockTypeLabel(language, "break").toLowerCase(),
+        other: getBlockTypeLabel(language, "other").toLowerCase(),
+    }), [language]);
+
     const events = useMemo<CalendarEvent[]>(
         () =>
             sortBlocksByStart(
@@ -100,11 +140,12 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     .filter((block) => block.status !== "canceled")
                     .map((block) => ({
                         ...block,
-                        displayTitle: block.title?.trim() || "Untitled Block",
-                    }))
+                        displayTitle: block.title?.trim() || copy.untitledBlock,
+                    })),
             ),
-        [blocks]
+        [blocks, copy.untitledBlock],
     );
+
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const visibleEvents = useMemo(() => {
         if (!normalizedSearch) return events;
@@ -113,9 +154,9 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             const searchableValue = [
                 event.displayTitle,
                 event.notes,
-                SEARCHABLE_TYPE_LABELS[event.type],
-                format(event.startAt, "MMMM d yyyy"),
-                format(event.startAt, "H:mm"),
+                searchableTypeLabels[event.type],
+                format(event.startAt, "MMMM d yyyy", { locale: dateFnsLocale }),
+                format(event.startAt, "H:mm", { locale: dateFnsLocale }),
             ]
                 .filter(Boolean)
                 .join(" ")
@@ -123,22 +164,25 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
 
             return searchableValue.includes(normalizedSearch);
         });
-    }, [events, normalizedSearch]);
+    }, [dateFnsLocale, events, normalizedSearch, searchableTypeLabels]);
+
     const firstSearchMatch = normalizedSearch ? visibleEvents[0] ?? null : null;
+
     const effectiveDisplayMonth = useMemo(() => {
         if (!normalizedSearch || !firstSearchMatch) return displayMonth;
 
         const currentMonthHasMatches = visibleEvents.some(
-            (event) => startOfMonth(event.startAt).getTime() === displayMonth.getTime()
+            (event) => startOfMonth(event.startAt).getTime() === displayMonth.getTime(),
         );
 
         return currentMonthHasMatches ? displayMonth : startOfMonth(firstSearchMatch.startAt);
     }, [displayMonth, firstSearchMatch, normalizedSearch, visibleEvents]);
+
     const effectiveSelectedDate = useMemo(() => {
         if (!normalizedSearch || !firstSearchMatch) return selectedDate;
 
         const selectedDayHasMatches = visibleEvents.some(
-            (event) => getDayKey(event.startAt) === getDayKey(selectedDate)
+            (event) => getDayKey(event.startAt) === getDayKey(selectedDate),
         );
 
         return selectedDayHasMatches ? selectedDate : startOfDay(firstSearchMatch.startAt);
@@ -166,15 +210,14 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
 
     const selectedEvents = useMemo(
         () => eventsByDay.get(getDayKey(effectiveSelectedDate)) ?? [],
-        [effectiveSelectedDate, eventsByDay]
+        [effectiveSelectedDate, eventsByDay],
     );
 
     const totalMonthEvents = useMemo(
-        () =>
-            visibleEvents.reduce((count, event) => (
-                startOfMonth(event.startAt).getTime() === effectiveDisplayMonth.getTime() ? count + 1 : count
-            ), 0),
-        [visibleEvents, effectiveDisplayMonth]
+        () => visibleEvents.reduce((count, event) => (
+            startOfMonth(event.startAt).getTime() === effectiveDisplayMonth.getTime() ? count + 1 : count
+        ), 0),
+        [visibleEvents, effectiveDisplayMonth],
     );
 
     const dayEvents = (day: Date) => eventsByDay.get(getDayKey(day)) ?? [];
@@ -197,17 +240,17 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         }
 
         const dayBlocks = blocks.filter(
-            (block) => getDayKey(block.startAt) === getDayKey(effectiveSelectedDate) && block.status !== "canceled"
+            (block) => getDayKey(block.startAt) === getDayKey(effectiveSelectedDate) && block.status !== "canceled",
         );
         const endAt = addMinutes(desiredStart, durationMinutes);
-        
-        const overlaps = dayBlocks.filter(b => isOverlapping(desiredStart, endAt, b.startAt, b.endAt));
+
+        const overlaps = dayBlocks.filter((block) => isOverlapping(desiredStart, endAt, block.startAt, block.endAt));
 
         const enriched = enrichNewBlockWithPlanningMetadata({
             startAt: desiredStart,
             endAt,
             title: "",
-            type: "other"
+            type: "other",
         });
 
         if (overlaps.length > 0) {
@@ -218,28 +261,24 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         }
     };
 
-    
     const handleResolveConflict = (resolution: OverlapResolutionType) => {
         if (!pendingConflict) return;
         const { newBlock, overlaps } = pendingConflict;
-        
+
         let resultingId = newBlock.id;
         const isCreation = !newBlock.id;
+        const currentBlocks = blocks.filter((block) => block.status !== "canceled" && block.id !== newBlock.id);
 
-        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
-
-        if (resolution === 'slice_underlying') {
+        if (resolution === "slice_underlying") {
             const result = resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
             if (result && isCreation) resultingId = result.id;
-        } 
-        else if (resolution === 'shrink_new') {
+        } else if (resolution === "shrink_new") {
             const result = resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock);
             if (result && isCreation) resultingId = result.id;
-        }
-        else if (resolution === 'move_forward') {
+        } else if (resolution === "move_forward") {
             const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
-            const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
-            
+            const slot = findNextFreeSlot(currentBlocks, newBlock.startAt, durationMins, newBlock.id);
+
             if (slot) {
                 const movedBlock = {
                     ...newBlock,
@@ -249,8 +288,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                 const result = createBlock(movedBlock);
                 if (result && isCreation) resultingId = result.id;
             }
-        }
-        else if (resolution === 'keep_overlap') {
+        } else if (resolution === "keep_overlap") {
             const result = createBlock(newBlock);
             if (result && isCreation) resultingId = result.id;
         }
@@ -258,9 +296,17 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
         if (isCreation && resultingId) {
             onOpenBlock(resultingId, true);
         }
-        
+
         setPendingConflict(null);
     };
+
+    const monthSummary = normalizedSearch
+        ? language === "es"
+            ? `${visibleEvents.length} bloques coinciden, ${totalMonthEvents} en ${format(effectiveDisplayMonth, "MMMM", { locale: dateFnsLocale })}.`
+            : `${visibleEvents.length} matching blocks, ${totalMonthEvents} in ${format(effectiveDisplayMonth, "MMMM", { locale: dateFnsLocale })}.`
+        : language === "es"
+            ? `${totalMonthEvents} bloques reales en ${format(effectiveDisplayMonth, "MMMM", { locale: dateFnsLocale })}.`
+            : `${totalMonthEvents} real blocks in ${format(effectiveDisplayMonth, "MMMM", { locale: dateFnsLocale })}.`;
 
     return (
         <div className="relative h-full w-full overflow-hidden rounded-[inherit]">
@@ -268,11 +314,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             <div className="relative z-10 flex h-full flex-col p-5 lg:p-6">
                 <div className="flex items-center justify-between gap-4 pb-5 lg:pb-6">
                     <div className="space-y-1">
-                        <p className="text-sm text-white/40">
-                            {normalizedSearch
-                                ? `${visibleEvents.length} matching blocks, ${totalMonthEvents} in ${format(effectiveDisplayMonth, "MMMM")}.`
-                                : `${totalMonthEvents} real blocks in ${format(effectiveDisplayMonth, "MMMM")}.`}
-                        </p>
+                        <p className="text-sm text-white/40">{monthSummary}</p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -282,16 +324,16 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                                 type="text"
                                 value={searchQuery}
                                 onChange={(event) => setSearchQuery(event.target.value)}
-                                placeholder="Search blocks, notes or type"
+                                placeholder={copy.searchPlaceholder}
                                 className="w-full bg-transparent text-white/80 outline-none placeholder:text-white/30"
-                                aria-label="Search calendar blocks"
+                                aria-label={copy.searchAria}
                             />
                             {searchQuery && (
                                 <button
                                     type="button"
                                     onClick={() => setSearchQuery("")}
                                     className="inline-flex h-6 w-6 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/8 hover:text-white/75"
-                                    aria-label="Clear calendar search"
+                                    aria-label={copy.clearSearchAria}
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
@@ -304,7 +346,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                             className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white/80 backdrop-blur-md transition-all duration-300 hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none"
                         >
                             <Plus className="h-4 w-4" />
-                            New event
+                            {copy.newEvent}
                         </button>
                     </div>
                 </div>
@@ -318,9 +360,13 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                                     className="inline-flex h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 text-left text-white/85 transition-colors hover:bg-white/[0.06] motion-reduce:transition-none"
                                 >
                                     <CalendarDays className="h-4 w-4 text-white/50" />
-                                    <span className="text-lg font-semibold tracking-tight">{format(effectiveDisplayMonth, "MMMM")}</span>
+                                    <span className="text-lg font-semibold tracking-tight">
+                                        {format(effectiveDisplayMonth, "MMMM", { locale: dateFnsLocale })}
+                                    </span>
                                 </button>
-                                <span className="text-lg text-white/50">{format(effectiveDisplayMonth, "yyyy")}</span>
+                                <span className="text-lg text-white/50">
+                                    {format(effectiveDisplayMonth, "yyyy", { locale: dateFnsLocale })}
+                                </span>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -342,7 +388,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                         </div>
 
                         <div className="mt-5 grid grid-cols-7 gap-2 text-[11px] uppercase tracking-[0.18em] text-white/35">
-                            {DAY_LABELS.map((label) => (
+                            {dayLabels.map((label) => (
                                 <div key={label} className="px-2 py-1">
                                     {label}
                                 </div>
@@ -369,11 +415,19 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     <aside className="flex min-h-0 flex-col overflow-visible rounded-[2rem] border border-white/10 bg-black/30 p-5 backdrop-blur-2xl">
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <h3 className="text-2xl font-semibold tracking-tight text-white/90">Scheduled</h3>
-                                <p className="mt-1 text-sm text-white/40">{format(effectiveSelectedDate, "MMMM d, yyyy")}</p>
+                                <h3 className="text-2xl font-semibold tracking-tight text-white/90">{copy.scheduled}</h3>
+                                <p className="mt-1 text-sm text-white/40">
+                                    {new Intl.DateTimeFormat(intlLocale, {
+                                        month: "long",
+                                        day: "numeric",
+                                        year: "numeric",
+                                    }).format(effectiveSelectedDate)}
+                                </p>
                                 {normalizedSearch && (
                                     <p className="mt-1 text-xs text-white/30">
-                                        Filtering by &quot;{searchQuery.trim()}&quot;
+                                        {language === "es"
+                                            ? `Filtrando por "${searchQuery.trim()}"`
+                                            : `Filtering by "${searchQuery.trim()}"`}
                                     </p>
                                 )}
                             </div>
@@ -414,12 +468,10 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                                         <Plus className="h-5 w-5" />
                                     </div>
                                     <p className="text-base font-medium text-white/80">
-                                        {normalizedSearch ? "No matching blocks" : "No blocks scheduled"}
+                                        {normalizedSearch ? copy.noMatchingBlocks : copy.noBlocksScheduled}
                                     </p>
                                     <p className="mt-1 max-w-[240px] text-sm text-white/40">
-                                        {normalizedSearch
-                                            ? "Try another search, another day, or clear the filter."
-                                            : "Create a block and edit it with the orbital menu."}
+                                        {normalizedSearch ? copy.emptySearch : copy.emptyCalendar}
                                     </p>
                                     {normalizedSearch ? (
                                         <button
@@ -428,7 +480,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                                             className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white/80 transition-all duration-300 hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none"
                                         >
                                             <X className="h-4 w-4" />
-                                            Clear search
+                                            {copy.clearSearch}
                                         </button>
                                     ) : (
                                         <button
@@ -437,7 +489,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                                             className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white/80 transition-all duration-300 hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none"
                                         >
                                             <Plus className="h-4 w-4" />
-                                            Create block
+                                            {copy.createBlock}
                                         </button>
                                     )}
                                 </div>
@@ -446,6 +498,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     </aside>
                 </div>
             </div>
+
             <style jsx global>{`
                 @keyframes agendo-paused-sweep {
                     0% {
@@ -456,7 +509,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     }
                 }
             `}</style>
-        
+
             <OverlapResolutionModal
                 isOpen={!!pendingConflict}
                 onClose={() => setPendingConflict(null)}

@@ -20,12 +20,8 @@ import { cn } from "@/lib/cn";
 import { saveSessionReflection } from "@/lib/services/focusService";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
-
-const REFLECTION_QUESTIONS = [
-    "Que fue lo mas valioso de este bloque?",
-    "Que te gustaria repetir de esta sesion?",
-    "Como cerras este bloque mentalmente?",
-];
+import { useI18n } from "@/lib/i18n/client";
+import { getReflectionCopy } from "@/lib/i18n/ui";
 
 type ReflectionMetrics = {
     difficulty: number;
@@ -40,25 +36,6 @@ type MetricOption = {
     icon: LucideIcon;
 };
 
-const PROGRESS_OPTIONS: MetricOption[] = [
-    { value: 1, label: "Minimo", hint: "Apenas salio", icon: Turtle },
-    { value: 3, label: "Solido", hint: "Se movio bien", icon: Footprints },
-    { value: 5, label: "Potente", hint: "Despego fuerte", icon: Rocket },
-];
-
-const DIFFICULTY_OPTIONS: MetricOption[] = [
-    { value: 1, label: "Ligero", hint: "Fluyo facil", icon: Feather },
-    { value: 3, label: "Tenso", hint: "Pidio foco", icon: Gauge },
-    { value: 5, label: "Pesado", hint: "Costo sostener", icon: Mountain },
-];
-
-const FINAL_MOOD_OPTIONS: MetricOption[] = [
-    { value: 1, label: "Bajo", hint: "Quede drenado", icon: Frown },
-    { value: 3, label: "Sereno", hint: "Estoy neutro", icon: Meh },
-    { value: 4, label: "Bien", hint: "Quede conforme", icon: Smile },
-    { value: 5, label: "Arriba", hint: "Quede encendido", icon: Sparkles },
-];
-
 interface MetricChoiceGroupProps {
     label: string;
     description: string;
@@ -66,6 +43,7 @@ interface MetricChoiceGroupProps {
     options: MetricOption[];
     onChange: (value: number) => void;
     emphasized?: boolean;
+    emphasizedLabel: string;
 }
 
 function MetricChoiceGroup({
@@ -75,6 +53,7 @@ function MetricChoiceGroup({
     options,
     onChange,
     emphasized = false,
+    emphasizedLabel,
 }: MetricChoiceGroupProps) {
     const gridClassName = options.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
 
@@ -85,7 +64,7 @@ function MetricChoiceGroup({
                     <h3 className="text-sm font-semibold tracking-tight text-white/90">{label}</h3>
                     {emphasized && (
                         <span className="rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c4b5fd]">
-                            Principal
+                            {emphasizedLabel}
                         </span>
                     )}
                 </div>
@@ -106,7 +85,7 @@ function MetricChoiceGroup({
                                 "group flex min-h-[84px] flex-col items-start justify-between rounded-2xl border px-3 py-3 text-left transition-all duration-300 motion-reduce:transition-none sm:min-h-[92px] sm:px-3.5 sm:py-3.5",
                                 isSelected
                                     ? "border-transparent bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] text-white shadow-[0_14px_30px_rgba(109,40,217,0.28)]"
-                                    : "border-white/10 bg-white/5 text-white/65 hover:border-white/15 hover:bg-white/[0.08]"
+                                    : "border-white/10 bg-white/5 text-white/65 hover:border-white/15 hover:bg-white/[0.08]",
                             )}
                             aria-pressed={isSelected}
                         >
@@ -115,7 +94,7 @@ function MetricChoiceGroup({
                                     "flex h-10 w-10 items-center justify-center rounded-2xl border transition-all duration-300 motion-reduce:transition-none",
                                     isSelected
                                         ? "border-white/15 bg-white/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
-                                        : "border-white/10 bg-black/20"
+                                        : "border-white/10 bg-black/20",
                                 )}
                             >
                                 <Icon className={cn("h-[18px] w-[18px]", isSelected ? "text-white" : "text-white/70")} />
@@ -138,8 +117,26 @@ function MetricChoiceGroup({
 }
 
 export function ReflectionSheet() {
+    const { language } = useI18n();
     const { session } = useFocusStore();
     const { createBlock } = useBlocksStore();
+    const copy = useMemo(() => getReflectionCopy(language), [language]);
+    const progressOptions: MetricOption[] = useMemo(() => ([
+        { value: 1, ...copy.progressOptions.minimal, icon: Turtle },
+        { value: 3, ...copy.progressOptions.solid, icon: Footprints },
+        { value: 5, ...copy.progressOptions.strong, icon: Rocket },
+    ]), [copy.progressOptions]);
+    const difficultyOptions: MetricOption[] = useMemo(() => ([
+        { value: 1, ...copy.difficultyOptions.light, icon: Feather },
+        { value: 3, ...copy.difficultyOptions.tense, icon: Gauge },
+        { value: 5, ...copy.difficultyOptions.heavy, icon: Mountain },
+    ]), [copy.difficultyOptions]);
+    const moodOptions: MetricOption[] = useMemo(() => ([
+        { value: 1, ...copy.moodOptions.low, icon: Frown },
+        { value: 3, ...copy.moodOptions.calm, icon: Meh },
+        { value: 4, ...copy.moodOptions.good, icon: Smile },
+        { value: 5, ...copy.moodOptions.up, icon: Sparkles },
+    ]), [copy.moodOptions]);
 
     const [metrics, setMetrics] = useState<ReflectionMetrics>({
         difficulty: 0,
@@ -150,13 +147,13 @@ export function ReflectionSheet() {
     const [isSaving, setIsSaving] = useState(false);
 
     const question = useMemo(
-        () => REFLECTION_QUESTIONS[Math.floor(Math.random() * REFLECTION_QUESTIONS.length)],
-        []
+        () => copy.questions[Math.floor(Math.random() * copy.questions.length)],
+        [copy.questions],
     );
 
     const canFinish = metrics.progressFeelingAfter > 0 && !isSaving;
     const isFree = session?.mode === "free";
-    const blockTitle = "Focus Block";
+    const blockTitle = copy.freeBlockTitle;
     const closureHint = session?.closureNote?.text?.trim() || null;
 
     const setMetric = (metric: keyof ReflectionMetrics, value: number) => {
@@ -229,10 +226,10 @@ export function ReflectionSheet() {
 
                                 <div className="space-y-1.5">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/70">
-                                        Cierre
+                                        {copy.closeBadge}
                                     </p>
                                     <h2 className="text-[1.75rem] font-semibold tracking-tight text-white/90 sm:text-2xl">
-                                        {isFree ? "Sesion completada" : "Bloque completado"}
+                                        {isFree ? copy.sessionCompleted : copy.blockCompleted}
                                     </h2>
                                     <p className="max-w-[36ch] text-sm leading-relaxed text-white/45">{question}</p>
                                 </div>
@@ -240,48 +237,49 @@ export function ReflectionSheet() {
 
                             <div className="space-y-4 sm:space-y-5">
                                 <MetricChoiceGroup
-                                    label="Avance Logrado"
-                                    description="Marca el nivel de progreso real. Esta es la metrica principal."
+                                    label={copy.progressLabel}
+                                    description={copy.progressDescription}
                                     value={metrics.progressFeelingAfter}
-                                    options={PROGRESS_OPTIONS}
+                                    options={progressOptions}
                                     onChange={(value) => setMetric("progressFeelingAfter", value)}
                                     emphasized
+                                    emphasizedLabel={copy.primary}
                                 />
 
                                 <MetricChoiceGroup
-                                    label="Dificultad"
-                                    description="Que tan costoso fue sostener el bloque?"
+                                    label={copy.difficultyLabel}
+                                    description={copy.difficultyDescription}
                                     value={metrics.difficulty}
-                                    options={DIFFICULTY_OPTIONS}
+                                    options={difficultyOptions}
                                     onChange={(value) => setMetric("difficulty", value)}
+                                    emphasizedLabel={copy.primary}
                                 />
 
                                 <MetricChoiceGroup
-                                    label="Animo Final"
-                                    description="Elegi como terminaste esta sesion."
+                                    label={copy.moodLabel}
+                                    description={copy.moodDescription}
                                     value={metrics.moodAfter}
-                                    options={FINAL_MOOD_OPTIONS}
+                                    options={moodOptions}
                                     onChange={(value) => setMetric("moodAfter", value)}
+                                    emphasizedLabel={copy.primary}
                                 />
                             </div>
 
                             {closureHint && (
                                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/75">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                                        Antes anotaste
+                                        {copy.closureHintTitle}
                                     </p>
                                     <p className="mt-1 leading-relaxed text-white/72">
                                         &ldquo;{closureHint}&rdquo;
                                     </p>
-                                    <p className="mt-2 text-xs text-white/40">
-                                        Si queres, suma algo mas sobre como termino la sesion.
-                                    </p>
+                                    <p className="mt-2 text-xs text-white/40">{copy.closureHintBody}</p>
                                 </div>
                             )}
 
                             <textarea
                                 rows={3}
-                                placeholder="Nota mental opcional..."
+                                placeholder={copy.notePlaceholder}
                                 value={reflection}
                                 onChange={(event) => setReflection(event.target.value)}
                                 className="min-h-[88px] w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-relaxed text-white/85 placeholder:text-white/28 outline-none transition-all duration-200 focus:border-white/20 focus:bg-black/25 motion-reduce:transition-none sm:min-h-[92px]"
@@ -298,10 +296,10 @@ export function ReflectionSheet() {
                                 "inline-flex h-12 w-full items-center justify-center rounded-2xl text-sm font-semibold tracking-tight transition-all duration-300 motion-reduce:transition-none",
                                 canFinish
                                     ? "bg-gradient-to-r from-[#4c1d95] to-[#6d28d9] text-white shadow-[0_16px_34px_rgba(109,40,217,0.32)] hover:from-[#5b21b6] hover:to-[#7c3aed] active:scale-[0.985]"
-                                    : "cursor-not-allowed bg-white/8 text-white/55 opacity-50"
+                                    : "cursor-not-allowed bg-white/8 text-white/55 opacity-50",
                             )}
                         >
-                            {isSaving ? "Guardando..." : "Guardar y finalizar"}
+                            {isSaving ? copy.saving : copy.saveAndFinish}
                         </button>
                     </div>
                 </div>

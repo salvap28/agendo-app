@@ -6,9 +6,11 @@ import { tryCreateClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
 import { BellRing, Check } from "lucide-react";
 import { requestNotificationPermission } from "@/lib/utils/notifications";
+import { useI18n } from "@/lib/i18n/client";
 
 export default function NotificationsTab() {
     const { settings, updateSetting, fetchSettings, isInitialized } = useSettingsStore();
+    const { t } = useI18n();
     const [testStatus, setTestStatus] = useState<"idle" | "waiting" | "sent">("idle");
     const [pushStatus, setPushStatus] = useState<"checking" | "configured" | "missing">("checking");
 
@@ -61,7 +63,7 @@ export default function NotificationsTab() {
 
     const handleTestNotification = async () => {
         if (!("Notification" in window)) {
-            alert("Este navegador no soporta notificaciones de escritorio.");
+            alert(t.settingsNotifications.unsupportedBrowser);
             return;
         }
 
@@ -73,17 +75,15 @@ export default function NotificationsTab() {
         if (permission === "granted") {
             setTestStatus("waiting");
             setTimeout(() => {
-                new Notification("¡Prueba Exitosa! 🚀", {
-                    body: "Las notificaciones locales desde Agendo están funcionando perfecto.",
-                    icon: "/icon.png" // Opcional si tenés un ícono en public
+                new Notification(t.settingsNotifications.testSuccessTitle, {
+                    body: t.settingsNotifications.testSuccessBody,
+                    icon: "/icon.png"
                 });
                 setTestStatus("sent");
-
-                // Reset status after a few seconds
                 setTimeout(() => setTestStatus("idle"), 4000);
             }, 10000);
         } else {
-            alert("Permiso denegado. Por favor habilitá las notificaciones para este sitio en los ajustes de tu navegador/celular.");
+            alert(t.settingsNotifications.permissionDenied);
         }
     };
 
@@ -91,8 +91,8 @@ export default function NotificationsTab() {
         <div suppressHydrationWarning className="flex flex-col gap-8 w-full">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-semibold mb-3">Notificaciones</h1>
-                    <p className="text-foreground/60 text-base">Decidí cómo y cuándo querés que Agendo te avise.</p>
+                    <h1 className="text-3xl font-semibold mb-3">{t.settingsNotifications.title}</h1>
+                    <p className="text-foreground/60 text-base">{t.settingsNotifications.description}</p>
                 </div>
 
                 <button
@@ -106,32 +106,30 @@ export default function NotificationsTab() {
                         }`}
                 >
                     {testStatus === "sent" ? (
-                        <><Check size={18} /> Enviado</>
+                        <><Check size={18} /> {t.settingsNotifications.testButtonSent}</>
                     ) : testStatus === "waiting" ? (
-                        <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span> Esperando 10s...</>
+                        <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span> {t.settingsNotifications.testButtonWaiting}</>
                     ) : (
-                        <><BellRing size={18} /> Enviar Prueba (10s)</>
+                        <><BellRing size={18} /> {t.settingsNotifications.testButtonIdle}</>
                     )}
                 </button>
             </div>
 
             {pushStatus === "missing" && (
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
-                    Las notificaciones locales siguen funcionando, pero los push en segundo plano necesitan una VAPID public key.
-                    Si ya la agregaste en <code className="mx-1">.env.local</code>, reinicia <code className="mx-1">npm run dev</code>.
+                    {t.settingsNotifications.vapidWarning}
                 </div>
             )}
 
             <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-8 flex flex-col gap-10">
-
                 <div className="flex flex-col gap-6">
-                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Avisos del Calendario</h3>
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{t.settingsNotifications.calendarAlerts}</h3>
 
                     <div className="flex justify-between items-center bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
                         <div className="flex flex-col gap-2">
-                            <h3 className="text-base font-medium text-foreground/90">Recordatorios de Bloques</h3>
+                            <h3 className="text-base font-medium text-foreground/90">{t.settingsNotifications.blockReminders}</h3>
                             <p className="text-sm text-foreground/50 max-w-[85%]">
-                                Recibir notificaciones sutiles poco antes de que empiece un bloque en tu calendario.
+                                {t.settingsNotifications.blockRemindersDescription}
                             </p>
                         </div>
                         <GlassSwitch
@@ -140,7 +138,7 @@ export default function NotificationsTab() {
                                 if (val) {
                                     const granted = await requestNotificationPermission();
                                     if (!granted) {
-                                        alert("Necesitás habilitar permisos en tu navegador/celular para activar las notificaciones.");
+                                        alert(t.settingsNotifications.permissionDenied);
                                         return;
                                     }
                                 }
@@ -153,13 +151,13 @@ export default function NotificationsTab() {
                 <div className="w-full h-px bg-white/5"></div>
 
                 <div className="flex flex-col gap-6">
-                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Foco y Gimnasio</h3>
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{t.settingsNotifications.focusAndGym}</h3>
 
                     <div className="flex justify-between items-center bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
                         <div className="flex flex-col gap-2">
-                            <h3 className="text-base font-medium text-foreground/90">Cronómetro de Foco</h3>
+                            <h3 className="text-base font-medium text-foreground/90">{t.settingsNotifications.focusTimer}</h3>
                             <p className="text-sm text-foreground/50 max-w-[85%]">
-                                Alertas al terminar una sesión de concentración o descanso activo.
+                                {t.settingsNotifications.focusTimerDescription}
                             </p>
                         </div>
                         <GlassSwitch
@@ -170,9 +168,9 @@ export default function NotificationsTab() {
 
                     <div className="flex justify-between items-center bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
                         <div className="flex flex-col gap-2">
-                            <h3 className="text-base font-medium text-foreground/90">Descanso de Series (Gym)</h3>
+                            <h3 className="text-base font-medium text-foreground/90">{t.settingsNotifications.gymRest}</h3>
                             <p className="text-sm text-foreground/50 max-w-[85%]">
-                                Avisos para informarte que finalizó tu tiempo de descanso y debes empezar la próxima serie.
+                                {t.settingsNotifications.gymRestDescription}
                             </p>
                         </div>
                         <GlassSwitch
@@ -185,13 +183,13 @@ export default function NotificationsTab() {
                 <div className="w-full h-px bg-white/5"></div>
 
                 <div className="flex flex-col gap-6">
-                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Hábitos y Resúmenes</h3>
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">{t.settingsNotifications.habitsAndSummaries}</h3>
 
                     <div className="flex justify-between items-center bg-black/20 p-6 rounded-2xl border border-white/5 shadow-inner">
                         <div className="flex flex-col gap-2">
-                            <h3 className="text-base font-medium text-foreground/90">Daily Briefing</h3>
+                            <h3 className="text-base font-medium text-foreground/90">{t.settingsNotifications.dailyBriefing}</h3>
                             <p className="text-sm text-foreground/50 max-w-[85%]">
-                                Recibe un resumen por la mañana con tus bloques y tareas más importantes del día.
+                                {t.settingsNotifications.dailyBriefingDescription}
                             </p>
                         </div>
                         <GlassSwitch
@@ -200,7 +198,6 @@ export default function NotificationsTab() {
                         />
                     </div>
                 </div>
-
             </div>
         </div>
     );

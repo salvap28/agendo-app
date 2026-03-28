@@ -1,21 +1,44 @@
 "use client";
 
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+    ChevronLeft,
+    ChevronRight,
+    MoreHorizontal,
+    Coffee,
+    Dumbbell,
+    Briefcase,
+    BookOpen,
+    Layers,
+    Activity,
+    type LucideIcon,
+} from "lucide-react";
+import {
+    format,
+    addMonths,
+    subMonths,
+    startOfMonth,
+    endOfMonth,
+    startOfWeek,
+    endOfWeek,
+    isSameMonth,
+    isSameDay,
+    addDays,
+    isBefore,
+    startOfDay,
+} from "date-fns";
+import { cn } from "@/lib/cn";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { Block } from "@/lib/types/blocks";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ChevronLeft, ChevronRight, MoreHorizontal, Coffee, Dumbbell, Briefcase, BookOpen, Layers, Activity } from "lucide-react";
-import { cn } from "@/lib/cn";
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, isBefore, startOfDay } from "date-fns";
 import { getBlockColors } from "@/lib/utils/blockColors";
 import { getBlockRuntimeState, sortBlocksByStart } from "@/lib/utils/blockState";
+import { useI18n } from "@/lib/i18n/client";
+import { getDateFnsLocale, getWeekdayInitialsMondayFirst } from "@/lib/i18n/app";
 
-const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
-
-// UI Config for Block Types (copied to have icons)
 type BlockTypeUiConfig = {
-    icon: unknown;
+    icon: LucideIcon;
     color: string;
     border: string;
     glow: string;
@@ -38,7 +61,6 @@ interface DailyAgendaViewProps {
     setIsNewBlock?: (isNew: boolean) => void;
 }
 
-// --- Active Block Card: self-manages hover state for dynamic inline styles ---
 interface ActiveBlockCardProps {
     block: Block;
     isDeepWork: boolean;
@@ -48,20 +70,22 @@ interface ActiveBlockCardProps {
 }
 
 function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }: ActiveBlockCardProps) {
+    const { language } = useI18n();
+    const dateFnsLocale = getDateFnsLocale(language);
     const [isHovered, setIsHovered] = useState(false);
 
     return (
         <div
             className={cn(
                 "relative w-full rounded-[24px] transition-shadow duration-300",
-                isSessionPaused ? "animate-pulse ring-2 ring-opacity-50" : "overflow-hidden"
+                isSessionPaused ? "animate-pulse ring-2 ring-opacity-50" : "overflow-hidden",
             )}
             style={{
                 boxShadow: isSessionPaused
                     ? `0 0 30px ${colors.glow1}`
                     : isHovered
-                    ? `0 0 20px 4px ${colors.glow1}, 0 0 40px 8px ${colors.glow2}`
-                    : "none",
+                        ? `0 0 20px 4px ${colors.glow1}, 0 0 40px 8px ${colors.glow2}`
+                        : "none",
                 "--tw-ring-color": isSessionPaused ? colors.primary : undefined,
             } as CSSProperties}
             onMouseEnter={() => setIsHovered(true)}
@@ -69,63 +93,76 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
         >
             {!isSessionPaused && (
                 <>
-                    {/* Spinning conic gradient — Layer 1: main dual-streak */}
                     <div
-                        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_3s_linear_infinite]"
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-[300%] w-[300%] -translate-x-1/2 -translate-y-1/2 animate-[spin_3s_linear_infinite]"
                         style={{ background: `conic-gradient(transparent, ${colors.primary} 5%, transparent 38%, transparent 50%, ${colors.secondary} 62%, transparent 87%)` }}
                     />
-                    {/* Layer 2: faster sharper streak */}
                     <div
-                        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_2s_linear_infinite] opacity-70"
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-[300%] w-[300%] -translate-x-1/2 -translate-y-1/2 animate-[spin_2s_linear_infinite] opacity-70"
                         style={{ background: `conic-gradient(transparent, ${colors.streak} 2%, transparent 18%)`, filter: "blur(1px)" }}
                     />
                 </>
             )}
-            {/* Inner button sits 1.5px inset — opaque bg blocks the gradient center */}
+
             <button
                 onClick={onOpen}
                 className={cn(
-                    "absolute text-left p-5 backdrop-blur-xl transition-colors duration-200",
-                    isSessionPaused ? "rounded-[24px] bg-[#11131e]/90 hover:bg-[#1a1d2e]/90" : "rounded-[22.5px] bg-[#0a0b12] hover:bg-[#11131e]"
+                    "absolute p-5 text-left backdrop-blur-xl transition-colors duration-200",
+                    isSessionPaused ? "rounded-[24px] bg-[#11131e]/90 hover:bg-[#1a1d2e]/90" : "rounded-[22.5px] bg-[#0a0b12] hover:bg-[#11131e]",
                 )}
-                style={{ 
-                    inset: isSessionPaused ? "0px" : "1.5px", 
-                    border: isSessionPaused ? "none" : `1px solid ${colors.innerBorder}` 
+                style={{
+                    inset: isSessionPaused ? "0px" : "1.5px",
+                    border: isSessionPaused ? "none" : `1px solid ${colors.innerBorder}`,
                 }}
             >
                 <div className="flex flex-col gap-1.5">
-                    <span className="text-white/90 font-medium text-[16px] tracking-tight flex items-center gap-2">
+                    <span className="flex items-center gap-2 text-[16px] font-medium tracking-tight text-white/90">
                         {block.title}
                         {isSessionPaused && (
-                            <span className="text-[9px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded-sm" style={{ color: colors.primary, backgroundColor: `${colors.primary}20` }}>Paused</span>
+                            <span
+                                className="rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+                                style={{ color: colors.primary, backgroundColor: `${colors.primary}20` }}
+                            >
+                                {language === "es" ? "Pausado" : "Paused"}
+                            </span>
                         )}
                     </span>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                        <span className="text-[12px] text-white/40 flex items-center gap-1">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="flex items-center gap-1 text-[12px] text-white/40">
                             <span className="opacity-70">⏱</span>
-                            {format(block.startAt, "h:mm a")} - {format(block.endAt, "h:mm a")}
+                            {format(block.startAt, "h:mm a", { locale: dateFnsLocale })} - {format(block.endAt, "h:mm a", { locale: dateFnsLocale })}
                         </span>
                         {isDeepWork && (
-                            <span className="text-[10px] font-medium text-indigo-300/80 tracking-wide bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/10">
-                                ✨ Optimal focus flow
+                            <span className="rounded-full border border-indigo-500/10 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-indigo-300/80">
+                                ✦ {language === "es" ? "Flujo ideal de foco" : "Optimal focus flow"}
                             </span>
                         )}
                     </div>
                 </div>
             </button>
-            {/* Spacer: gives the wrapper its natural height since button is absolute */}
+
             <div className="invisible p-5">
-                <div className="text-[16px] flex items-center gap-2">
+                <div className="flex items-center gap-2 text-[16px]">
                     {block.title}
-                    {isSessionPaused && <span className="text-[9px] px-1.5 py-0.5">Paused</span>}
+                    {isSessionPaused && <span className="px-1.5 py-0.5 text-[9px]">{language === "es" ? "Pausado" : "Paused"}</span>}
                 </div>
-                <div className="text-[12px] mt-0.5">{format(block.startAt, "h:mm a")} - {format(block.endAt, "h:mm a")}</div>
+                <div className="mt-0.5 text-[12px]">
+                    {format(block.startAt, "h:mm a", { locale: dateFnsLocale })} - {format(block.endAt, "h:mm a", { locale: dateFnsLocale })}
+                </div>
             </div>
         </div>
     );
 }
 
-export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelectedBlockId, setIsNewBlock }: DailyAgendaViewProps) {
+export function DailyAgendaView({
+    selectedDate,
+    onSelectedDateChange,
+    setSelectedBlockId,
+    setIsNewBlock,
+}: DailyAgendaViewProps) {
+    const { language } = useI18n();
+    const dateFnsLocale = getDateFnsLocale(language);
+    const dayLabels = getWeekdayInitialsMondayFirst(language);
     const blocks = useBlocksStore((state) => state.blocks);
     const fetchDayExperiences = useActivityExperienceStore((state) => state.fetchDayExperiences);
     const session = useFocusStore((state) => state.session);
@@ -134,22 +171,16 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
     const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
     const [internalSelectedDate, setInternalSelectedDate] = useState(startOfDay(new Date()));
     const [currentTime, setCurrentTime] = useState(() => new Date());
+    const [animKey, setAnimKey] = useState(0);
+
     const effectiveSelectedDateMs = selectedDate
         ? startOfDay(selectedDate).getTime()
         : internalSelectedDate.getTime();
-    const effectiveSelectedDate = useMemo(
-        () => new Date(effectiveSelectedDateMs),
-        [effectiveSelectedDateMs],
-    );
+    const effectiveSelectedDate = useMemo(() => new Date(effectiveSelectedDateMs), [effectiveSelectedDateMs]);
     const effectiveSelectedDateKey = useMemo(
         () => format(effectiveSelectedDate, "yyyy-MM-dd"),
         [effectiveSelectedDate],
     );
-
-    // --- Animation Key ---
-    // Change this key every time selectedDate changes to force re-render the timeline
-    // for the 180ms ease-out fade transition.
-    const [animKey, setAnimKey] = useState(0);
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -163,9 +194,6 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
         void fetchDayExperiences(effectiveSelectedDateKey);
     }, [effectiveSelectedDateKey, fetchDayExperiences]);
 
-    const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
-    const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-
     const handleDateClick = (day: Date) => {
         const normalizedDay = startOfDay(day);
         if (onSelectedDateChange) {
@@ -173,97 +201,87 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
         } else {
             setInternalSelectedDate(normalizedDay);
         }
-        setAnimKey(prev => prev + 1);
+        setAnimKey((prev) => prev + 1);
     };
-
-    // Removed: handleCreateBlock function, as it's now handled by the FAB in SectionCalendar
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart, { weekStartsOn: 1 }); // Monday
+    const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
     const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
     const calendarDays = useMemo(() => {
-        const days = [];
-        let day = startDate;
-        while (day <= endDate) {
-            days.push(day);
-            day = addDays(day, 1);
+        const days: Date[] = [];
+        let cursor = startDate;
+        while (cursor <= endDate) {
+            days.push(cursor);
+            cursor = addDays(cursor, 1);
         }
         return days;
-    }, [startDate, endDate]);
+    }, [endDate, startDate]);
 
-    // --- Timeline Logic ---
-    const dailyBlocks = useMemo(() => {
-        return sortBlocksByStart(
-            blocks.filter((block) => isSameDay(block.startAt, effectiveSelectedDate) && block.status !== "canceled")
-        );
-    }, [blocks, effectiveSelectedDate]);
+    const dailyBlocks = useMemo(() => (
+        sortBlocksByStart(
+            blocks.filter((block) => isSameDay(block.startAt, effectiveSelectedDate) && block.status !== "canceled"),
+        )
+    ), [blocks, effectiveSelectedDate]);
 
     return (
-        <div className="flex flex-col h-full w-full bg-transparent text-neutral-200 select-none relative">
-            {/* --- MONTH VIEW GRID --- */}
-            <div className="w-full px-4 pt-4 pb-2 shrink-0">
-                {/* Header (Diciembre 2023) */}
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-medium text-white/90 capitalize pl-2 drop-shadow-sm">
-                        {format(currentMonth, "MMMM yyyy")}
+        <div className="relative flex h-full w-full select-none flex-col bg-transparent text-neutral-200">
+            <div className="w-full shrink-0 px-4 pt-4 pb-2">
+                <div className="mb-4 flex items-center justify-between">
+                    <h2 className="pl-2 text-lg font-medium capitalize text-white/90 drop-shadow-sm">
+                        {format(currentMonth, "MMMM yyyy", { locale: dateFnsLocale })}
                     </h2>
                     <div className="flex items-center gap-1">
                         <button
-                            onClick={prevMonth}
-                            className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/50 hover:text-white"
+                            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                            className="rounded-full p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
                         >
                             <ChevronLeft size={16} />
                         </button>
                         <button
-                            onClick={nextMonth}
-                            className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/50 hover:text-white"
+                            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                            className="rounded-full p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
                         >
                             <ChevronRight size={16} />
                         </button>
                     </div>
                 </div>
 
-                {/* Days of week */}
-                <div className="grid grid-cols-7 gap-1 mb-2">
-                    {DAYS.map((d, i) => (
-                        <div key={i} className="text-center">
-                            <span className="text-[10px] text-white/40 uppercase font-semibold tracking-widest">{d}</span>
+                <div className="mb-2 grid grid-cols-7 gap-1">
+                    {dayLabels.map((label, index) => (
+                        <div key={`${label}-${index}`} className="text-center">
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{label}</span>
                         </div>
                     ))}
                 </div>
 
-                {/* Dates Grid */}
                 <div className="grid grid-cols-7 gap-y-2 gap-x-1">
-                    {calendarDays.map((day, i) => {
+                    {calendarDays.map((day, index) => {
                         const isSelected = isSameDay(day, effectiveSelectedDate);
                         const isCurrentMonth = isSameMonth(day, currentMonth);
                         const isPast = isBefore(day, startOfDay(new Date()));
                         const isToday = isSameDay(day, new Date());
 
                         return (
-                            <div key={i} className="flex justify-center items-center h-10 relative">
+                            <div key={`${day.toISOString()}-${index}`} className="relative flex h-10 items-center justify-center">
                                 <button
                                     onClick={() => handleDateClick(day)}
                                     className={cn(
-                                        "w-8 h-8 flex items-center justify-center rounded-full text-[15px] transition-all duration-200",
-                                        // Active State (Agendo Rule)
+                                        "flex h-8 w-8 items-center justify-center rounded-full text-[15px] transition-all duration-200",
                                         isSelected
-                                            ? "bg-white/5 border border-white/15 shadow-[inset_0_0_12px_rgba(124,58,237,0.3)] text-white font-medium"
+                                            ? "border border-white/15 bg-white/5 font-medium text-white shadow-[inset_0_0_12px_rgba(124,58,237,0.3)]"
                                             : "border border-transparent hover:border-white/5",
-                                        // Text color
-                                        !isSelected && isToday ? "text-indigo-300 font-semibold" : "",
+                                        !isSelected && isToday ? "font-semibold text-indigo-300" : "",
                                         !isSelected && !isCurrentMonth ? "text-white/10" : "",
                                         !isSelected && isCurrentMonth && isPast ? "text-white/30" : "",
-                                        !isSelected && isCurrentMonth && !isPast && !isToday ? "text-white/80" : ""
+                                        !isSelected && isCurrentMonth && !isPast && !isToday ? "text-white/80" : "",
                                     )}
                                 >
                                     {format(day, "d")}
                                 </button>
-                                {/* Indicator Dot for events? (Optional) */}
                                 {!isSelected && blocks.some((block) => isSameDay(block.startAt, day) && block.status !== "canceled") && (
-                                    <div className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-500/50" />
+                                    <div className="absolute bottom-1 h-1 w-1 rounded-full bg-indigo-500/50" />
                                 )}
                             </div>
                         );
@@ -271,38 +289,21 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                 </div>
             </div>
 
-            {/* --- AGENDA VIEW (VERTICAL TIMELINE) --- */}
             <div
-                className="flex-1 overflow-y-auto touch-pan-y [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] px-4 pt-4 pb-24"
+                className="flex-1 overflow-y-auto touch-pan-y px-4 pt-4 pb-24 [-ms-overflow-style:'none'] [scrollbar-width:'none'] [&::-webkit-scrollbar]:hidden"
                 key={animKey}
             >
-                {/* 180ms ease-out dominant transition container */}
-                <div className="flex w-full min-h-full animate-in fade-in slide-in-from-bottom-2 duration-[250ms] ease-out fill-mode-both">
-
-                    {/* Time Axis (Left) */}
-                    <div className="w-[60px] shrink-0 relative">
-                        {/* Vertical line fading to transparent */}
-                        <div className="absolute top-2 bottom-0 right-4 w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-
-                        {/* Time labels inside axis */}
-                        <div className="flex flex-col h-full absolute w-full right-3 pr-2" style={{ top: '0px' }}>
-                            {dailyBlocks.map((block) => (
-                                <div key={`time-${block.id}`} className="absolute w-full text-right" style={{
-                                    // Use index relative positioning for now, we will map them linearly or as a list
-                                    // Actually, in a pure agenda view, we don't place them absolutely by time, 
-                                    // we just list them and put the start time on the left in the flow.
-                                    display: 'none'
-                                }}>
-                                </div>
-                            ))}
-                        </div>
+                <div className="flex min-h-full w-full animate-in fill-mode-both fade-in slide-in-from-bottom-2 duration-[250ms] ease-out">
+                    <div className="relative w-[60px] shrink-0">
+                        <div className="absolute top-2 right-4 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-white/10 to-transparent" />
                     </div>
 
-                    {/* Timeline Flow (List of Cards) */}
-                    <div className="flex-1 flex flex-col gap-6 pt-2">
+                    <div className="flex flex-1 flex-col gap-6 pt-2">
                         {dailyBlocks.length === 0 ? (
-                            <div className="h-40 flex items-center justify-center">
-                                <span className="text-white/30 text-sm tracking-wide">No events scheduled.</span>
+                            <div className="flex h-40 items-center justify-center">
+                                <span className="text-sm tracking-wide text-white/30">
+                                    {language === "es" ? "No hay eventos programados." : "No events scheduled."}
+                                </span>
                             </div>
                         ) : (
                             dailyBlocks.map((block) => {
@@ -317,23 +318,18 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
 
                                 return (
                                     <div key={block.id} className="relative flex w-full">
-
-                                        {/* Time Label on left side within the flow */}
-                                        <div className="absolute -left-[54px] top-3 w-10 text-right">
-                                            <span className="text-[11px] font-medium text-white/40 tracking-wider">
-                                                {format(block.startAt, "h:mm")}
+                                        <div className="absolute top-3 -left-[54px] w-10 text-right">
+                                            <span className="text-[11px] font-medium tracking-wider text-white/40">
+                                                {format(block.startAt, "h:mm", { locale: dateFnsLocale })}
                                             </span>
-                                            <div className="text-[9px] text-white/20 mt-0.5">
-                                                {format(block.startAt, "a")}
+                                            <div className="mt-0.5 text-[9px] text-white/20">
+                                                {format(block.startAt, "a", { locale: dateFnsLocale })}
                                             </div>
                                         </div>
 
-                                        {/* Dot on the timeline */}
-                                        <div className="absolute -left-[16.5px] top-[18px] w-1.5 h-1.5 rounded-full bg-white/30 shadow-[0_0_8px_rgba(255,255,255,0.3)]" />
+                                        <div className="absolute top-[18px] -left-[16.5px] h-1.5 w-1.5 rounded-full bg-white/30 shadow-[0_0_8px_rgba(255,255,255,0.3)]" />
 
-                                        {/* Glass System Card */}
                                         {isCurrentlyActive || isSessionForThisBlock ? (
-                                            // OUTER: animated gradient wrapper or paused style
                                             <ActiveBlockCard
                                                 block={block}
                                                 isDeepWork={isDeepWork}
@@ -355,28 +351,26 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                                                     setSelectedBlockId?.(block.id);
                                                 }}
                                                 className={cn(
-                                                    "w-full text-left p-5 transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.08]",
-                                                    "rounded-[24px] bg-white/[0.04] backdrop-blur-xl border border-white/10",
-                                                    "shadow-[0_8px_30px_rgb(0,0,0,0.12)]",
-                                                    "border-l-2", ui.border,
+                                                    "w-full rounded-[24px] border border-white/10 border-l-2 bg-white/[0.04] p-5 text-left shadow-[0_8px_30px_rgb(0,0,0,0.12)] backdrop-blur-xl transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.08]",
+                                                    ui.border,
                                                 )}
                                             >
                                                 <div className="flex flex-col gap-1.5">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-white/90 font-medium text-[16px] tracking-tight">
+                                                        <span className="text-[16px] font-medium tracking-tight text-white/90">
                                                             {block.title}
                                                         </span>
                                                     </div>
 
-                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                                                        <span className="text-[12px] text-white/40 flex items-center gap-1">
+                                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                        <span className="flex items-center gap-1 text-[12px] text-white/40">
                                                             <span className="opacity-70">⏱</span>
-                                                            {format(block.startAt, "h:mm a")} - {format(block.endAt, "h:mm a")}
+                                                            {format(block.startAt, "h:mm a", { locale: dateFnsLocale })} - {format(block.endAt, "h:mm a", { locale: dateFnsLocale })}
                                                         </span>
 
                                                         {isDeepWork && (
-                                                            <span className="text-[10px] font-medium text-indigo-300/80 tracking-wide bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/10 shadow-[0_0_10px_-2px_rgba(99,102,241,0.3)]">
-                                                                ✨ Optimal focus flow
+                                                            <span className="rounded-full border border-indigo-500/10 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-indigo-300/80 shadow-[0_0_10px_-2px_rgba(99,102,241,0.3)]">
+                                                                ✦ {language === "es" ? "Flujo ideal de foco" : "Optimal focus flow"}
                                                             </span>
                                                         )}
                                                     </div>
@@ -384,27 +378,12 @@ export function DailyAgendaView({ selectedDate, onSelectedDateChange, setSelecte
                                             </button>
                                         )}
                                     </div>
-                                )
+                                );
                             })
                         )}
                     </div>
                 </div>
             </div>
-
-            {/* RadialBlockMenu is now rendered in SectionCalendar, not here */}
-            {/*
-            {selectedBlockId && (
-                <RadialBlockMenu
-                    blockId={selectedBlockId}
-                    isNewBlock={isNewBlock}
-                    onClose={() => {
-                        setSelectedBlockId?.(null);
-                        setIsNewBlock?.(false);
-                    }}
-                />
-            )}
-            */}
-
         </div>
     );
 }

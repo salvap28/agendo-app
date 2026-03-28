@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { InsightsDashboard } from "@/components/insights/InsightsDashboard";
 import { getInsightsDashboardData } from "@/lib/server/personalIntelligence";
+import { getServerLanguage } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function InsightsPage() {
@@ -11,6 +12,7 @@ export default async function InsightsPage() {
         redirect("/login");
     }
 
-    const data = await getInsightsDashboardData(supabase, user.id);
-    return <InsightsDashboard data={data} />;
+    const language = await getServerLanguage();
+    const data = await getInsightsDashboardData(supabase, user.id, language);
+    return <InsightsDashboard data={data} language={language} />;
 }

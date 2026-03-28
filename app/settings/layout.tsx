@@ -1,8 +1,8 @@
 import { SettingsSidebar } from "@/components/settings/SettingsSidebar";
 
 export const metadata = {
-    title: "Configuración | Agendo",
-    description: "Configura tu cuenta y preferencias de Agendo.",
+    title: "Settings | Agendo",
+    description: "Manage your Agendo account and preferences.",
 };
 
 export default function SettingsLayout({

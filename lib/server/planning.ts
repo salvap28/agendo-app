@@ -16,8 +16,31 @@ import {
     PlanningRecommendation,
     PlanningRecommendationStatus,
 } from "@/lib/types/planning";
+import { AppLanguage } from "@/lib/i18n/messages";
 
 type DbRow = Record<string, unknown>;
+
+function getPlanningServerCopy(language: AppLanguage) {
+    return language === "es"
+        ? {
+            recommendationNotFound: "Recomendacion no encontrada",
+            overlapConflict: "Aplicar esta recomendacion generaria un conflicto con otro bloque",
+            manualReviewRequired: "Esta recomendacion requiere revision manual",
+            cannotAutoApply: "Esta recomendacion no se puede aplicar automaticamente",
+            missingMoveTarget: "Falta el horario sugerido para mover el bloque",
+            blockNotFound: "Bloque no encontrado",
+            missingBreakStart: "Falta el inicio sugerido para el descanso",
+        }
+        : {
+            recommendationNotFound: "Recommendation not found",
+            overlapConflict: "Applying this recommendation would overlap another block",
+            manualReviewRequired: "This recommendation requires manual review",
+            cannotAutoApply: "This recommendation cannot be applied automatically",
+            missingMoveTarget: "Missing move target",
+            blockNotFound: "Block not found",
+            missingBreakStart: "Missing break start",
+        };
+}
 
 function asString(value: unknown, fallback = "") {
     return typeof value === "string" ? value : fallback;
@@ -596,6 +619,7 @@ export async function getPlanningGuideData(
         targetDate: string;
         targetBlockId?: string;
         preferences?: PlanningPreferencesInput;
+        language?: AppLanguage;
     },
 ): Promise<PlanningGuideResult> {
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId);
@@ -624,7 +648,7 @@ export async function getPlanningGuideData(
         targetBlockId: options.targetBlockId,
         preferences: options.preferences,
         feedbackSummary,
-    });
+    }, options.language ?? "en");
 
     const existingRows = await fetchExistingRecommendations(
         supabase,
@@ -653,10 +677,11 @@ export async function updateRecommendationStatus(
     userId: string,
     recommendationId: string,
     status: Extract<PlanningRecommendationStatus, "accepted" | "dismissed">,
+    language: AppLanguage = "en",
 ) {
     const existing = await fetchRecommendationForApply(supabase, userId, recommendationId);
     if (!existing) {
-        throw new Error("Recommendation not found");
+        throw new Error(getPlanningServerCopy(language).recommendationNotFound);
     }
 
     const now = new Date().toISOString();
@@ -758,6 +783,7 @@ async function assertNoCalendarConflict(
     userId: string,
     startIso: string,
     endIso: string,
+    language: AppLanguage,
     excludeBlockId?: string,
 ) {
     let query = supabase
@@ -774,7 +800,7 @@ async function assertNoCalendarConflict(
     const { data, error } = await query.limit(1);
     if (error) throw error;
     if ((data ?? []).length > 0) {
-        throw new Error("Applying this recommendation would overlap another block");
+        throw new Error(getPlanningServerCopy(language).overlapConflict);
     }
 }
 
@@ -782,13 +808,15 @@ export async function applyPlanningRecommendation(
     supabase: SupabaseClient,
     userId: string,
     recommendationId: string,
+    language: AppLanguage = "en",
 ) {
+    const serverCopy = getPlanningServerCopy(language);
     const recommendation = await fetchRecommendationForApply(supabase, userId, recommendationId);
     if (!recommendation) {
-        throw new Error("Recommendation not found");
+        throw new Error(serverCopy.recommendationNotFound);
     }
     if (!canAutoApplyRecommendation(recommendation)) {
-        throw new Error("This recommendation requires manual review");
+        throw new Error(serverCopy.manualReviewRequired);
     }
 
     const now = new Date().toISOString();
@@ -797,11 +825,11 @@ export async function applyPlanningRecommendation(
     const createdBlockIds: string[] = [];
 
     if (action.kind === "move") {
-        if (!recommendation.targetBlockId) throw new Error("This recommendation cannot be applied automatically");
+        if (!recommendation.targetBlockId) throw new Error(serverCopy.cannotAutoApply);
         const suggestedStart = asNullableString(action.payload.suggestedStart);
         const suggestedEnd = asNullableString(action.payload.suggestedEnd);
-        if (!suggestedStart || !suggestedEnd) throw new Error("Missing move target");
-        await assertNoCalendarConflict(supabase, userId, suggestedStart, suggestedEnd, recommendation.targetBlockId);
+        if (!suggestedStart || !suggestedEnd) throw new Error(serverCopy.missingMoveTarget);
+        await assertNoCalendarConflict(supabase, userId, suggestedStart, suggestedEnd, language, recommendation.targetBlockId);
 
         const { error } = await supabase
             .from("blocks")
@@ -817,7 +845,7 @@ export async function applyPlanningRecommendation(
         if (error) throw error;
         changedBlockIds.push(recommendation.targetBlockId);
     } else if (action.kind === "shorten") {
-        if (!recommendation.targetBlockId) throw new Error("This recommendation cannot be applied automatically");
+        if (!recommendation.targetBlockId) throw new Error(serverCopy.cannotAutoApply);
         const { data: blockRow, error: blockError } = await supabase
             .from("blocks")
             .select("*")
@@ -827,7 +855,7 @@ export async function applyPlanningRecommendation(
 
         if (blockError) throw blockError;
         const block = blockRow ? mapBlockRow(blockRow as DbRow) : null;
-        if (!block) throw new Error("Block not found");
+        if (!block) throw new Error(serverCopy.blockNotFound);
 
         const recommendedDuration = asNumber(action.payload.recommendedDurationMinutes, 0)
             || Math.max(15, Math.round(((block.endAt.getTime() - block.startAt.getTime()) / 60000) - asNumber(action.payload.reduceByMinutes, 30)));
@@ -846,7 +874,7 @@ export async function applyPlanningRecommendation(
         if (error) throw error;
         changedBlockIds.push(block.id);
     } else if (action.kind === "split") {
-        if (!recommendation.targetBlockId) throw new Error("This recommendation cannot be applied automatically");
+        if (!recommendation.targetBlockId) throw new Error(serverCopy.cannotAutoApply);
         const { data: blockRow, error: blockError } = await supabase
             .from("blocks")
             .select("*")
@@ -856,7 +884,7 @@ export async function applyPlanningRecommendation(
 
         if (blockError) throw blockError;
         const block = blockRow ? mapBlockRow(blockRow as DbRow) : null;
-        if (!block) throw new Error("Block not found");
+        if (!block) throw new Error(serverCopy.blockNotFound);
 
         const firstDurationMinutes = asNumber(action.payload.firstDurationMinutes, Math.max(25, Math.round((block.endAt.getTime() - block.startAt.getTime()) / 120000)));
         const secondDurationMinutes = asNumber(action.payload.secondDurationMinutes, Math.max(15, firstDurationMinutes));
@@ -864,7 +892,7 @@ export async function applyPlanningRecommendation(
         const secondStart = new Date(firstEnd.getTime() + (15 * 60000));
         const secondEnd = new Date(secondStart.getTime() + (secondDurationMinutes * 60000));
         const secondId = crypto.randomUUID();
-        await assertNoCalendarConflict(supabase, userId, firstEnd.toISOString(), secondEnd.toISOString(), block.id);
+        await assertNoCalendarConflict(supabase, userId, firstEnd.toISOString(), secondEnd.toISOString(), language, block.id);
 
         const { error: updateError } = await supabase
             .from("blocks")
@@ -883,7 +911,7 @@ export async function applyPlanningRecommendation(
             .insert({
                 id: secondId,
                 user_id: userId,
-                title: `${block.title} - Parte 2`,
+                title: language === "es" ? `${block.title} - Parte 2` : `${block.title} - Part 2`,
                 type: block.type,
                 status: "planned",
                 start_at: secondStart.toISOString(),
@@ -911,7 +939,7 @@ export async function applyPlanningRecommendation(
             .insert({
                 id: breakId,
                 user_id: userId,
-                title: "Break",
+                title: language === "es" ? "Descanso" : "Break",
                 type: "break",
                 status: "planned",
                 start_at: firstEnd.toISOString(),
@@ -934,17 +962,17 @@ export async function applyPlanningRecommendation(
     } else if (action.kind === "insert_break") {
         const suggestedStart = asNullableString(action.payload.suggestedStart);
         const durationMinutes = asNumber(action.payload.durationMinutes, 15);
-        if (!suggestedStart) throw new Error("Missing break start");
+        if (!suggestedStart) throw new Error(serverCopy.missingBreakStart);
         const breakId = crypto.randomUUID();
         const endAt = new Date(new Date(suggestedStart).getTime() + (durationMinutes * 60000));
-        await assertNoCalendarConflict(supabase, userId, suggestedStart, endAt.toISOString());
+        await assertNoCalendarConflict(supabase, userId, suggestedStart, endAt.toISOString(), language);
 
         const { error } = await supabase
             .from("blocks")
             .insert({
                 id: breakId,
                 user_id: userId,
-                title: "Break protegido",
+                title: language === "es" ? "Descanso protegido" : "Protected break",
                 type: "break",
                 status: "planned",
                 start_at: suggestedStart,
@@ -962,7 +990,7 @@ export async function applyPlanningRecommendation(
         if (error) throw error;
         createdBlockIds.push(breakId);
     } else if (action.kind === "mark_optional") {
-        if (!recommendation.targetBlockId) throw new Error("This recommendation cannot be applied automatically");
+        if (!recommendation.targetBlockId) throw new Error(serverCopy.cannotAutoApply);
         const { error } = await supabase
             .from("blocks")
             .update({
@@ -975,7 +1003,7 @@ export async function applyPlanningRecommendation(
         if (error) throw error;
         changedBlockIds.push(recommendation.targetBlockId);
     } else {
-        throw new Error("This recommendation requires manual review");
+        throw new Error(serverCopy.manualReviewRequired);
     }
 
     let { data: updatedRow, error: updateRecommendationError } = await supabase

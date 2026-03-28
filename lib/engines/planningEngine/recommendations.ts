@@ -16,6 +16,7 @@ import { ActivityExperience } from "@/lib/types/activity";
 import { buildPlanningBlockSnapshot } from "./blockMetadata";
 import { computeDailyLoad } from "./dailyLoad";
 import { estimatePostActivityApplicability } from "@/lib/engines/activityExperience";
+import { AppLanguage } from "@/lib/i18n/messages";
 
 function average(values: number[]) {
     if (values.length === 0) return 0;
@@ -42,18 +43,21 @@ function promotePriority(priority: PlanningPriority): PlanningPriority {
     return "high";
 }
 
-function getPlanningWindowLabel(window: "morning" | "afternoon" | "evening" | "night") {
+function getPlanningWindowLabel(
+    window: "morning" | "afternoon" | "evening" | "night",
+    language: AppLanguage = "en",
+) {
     switch (window) {
         case "morning":
-            return "morning";
+            return language === "es" ? "la manana" : "morning";
         case "afternoon":
-            return "afternoon";
+            return language === "es" ? "la tarde" : "afternoon";
         case "evening":
-            return "evening";
+            return language === "es" ? "el atardecer" : "evening";
         case "night":
-            return "night";
+            return language === "es" ? "la noche" : "night";
         default:
-            return "best window";
+            return language === "es" ? "tu mejor ventana" : "best window";
     }
 }
 
@@ -143,67 +147,104 @@ function buildEvidence(args: {
     } satisfies PlanningEvidence;
 }
 
-function renderCopy(reasonCode: ReasonCode, payload: Record<string, unknown>) {
+function renderCopy(language: AppLanguage, reasonCode: ReasonCode, payload: Record<string, unknown>) {
+    const isSpanish = language === "es";
     switch (reasonCode) {
         case "BEST_WINDOW_MISMATCH":
             return {
-                title: "This block would land better elsewhere",
-                message: `This intense block sits outside your strongest window. ${String(payload.bestWindowLabel)} would likely support it better.`,
-                reason: `Demanding sessions have been holding better in the ${String(payload.bestWindowLabel)} than in the ${String(payload.currentWindowLabel)}.`,
+                title: isSpanish ? "Este bloque funcionaria mejor en otra franja" : "This block would land better elsewhere",
+                message: isSpanish
+                    ? `Este bloque intenso cae fuera de tu mejor ventana. ${String(payload.bestWindowLabel)} probablemente lo sostenga mejor.`
+                    : `This intense block sits outside your strongest window. ${String(payload.bestWindowLabel)} would likely support it better.`,
+                reason: isSpanish
+                    ? `Las sesiones demandantes vienen sosteniendose mejor en ${String(payload.bestWindowLabel)} que en ${String(payload.currentWindowLabel)}.`
+                    : `Demanding sessions have been holding better in the ${String(payload.bestWindowLabel)} than in the ${String(payload.currentWindowLabel)}.`,
             };
         case "SESSION_TOO_LONG":
             if (payload.unsplittable) {
                 return {
-                    title: "This long block needs immediate recovery",
-                    message: `Since this ${String(payload.currentMinutes)}m task can't be split, your brain will need a ${String(payload.breakMinutes)}m restorative reset right after to clear working memory.`,
-                    reason: "Ultradian rhythms dictate a 20-30m nervous system reset after intense unsplittable exertion to prevent deep cognitive fatigue.",
+                    title: isSpanish ? "Este bloque largo necesita recuperacion inmediata" : "This long block needs immediate recovery",
+                    message: isSpanish
+                        ? `Como esta tarea de ${String(payload.currentMinutes)} min no puede dividirse, tu cerebro necesitara un reset restaurativo de ${String(payload.breakMinutes)} min justo despues.`
+                        : `Since this ${String(payload.currentMinutes)}m task can't be split, your brain will need a ${String(payload.breakMinutes)}m restorative reset right after to clear working memory.`,
+                    reason: isSpanish
+                        ? "Los ritmos ultradianos suelen pedir un reset de 20-30 min despues de una exigencia intensa que no se puede partir."
+                        : "Ultradian rhythms dictate a 20-30m nervous system reset after intense unsplittable exertion to prevent deep cognitive fatigue.",
                 };
             }
             return {
-                title: "This duration looks too ambitious",
-                message: `${String(payload.recommendedRange)} looks more sustainable for you right now than ${String(payload.currentMinutes)} straight minutes.`,
-                reason: "When blocks stretch too far past your recent sweet spot, friction and drop-off tend to rise.",
+                title: isSpanish ? "Esta duracion se ve demasiado ambiciosa" : "This duration looks too ambitious",
+                message: isSpanish
+                    ? `${String(payload.recommendedRange)} se ve mas sostenible para ti hoy que ${String(payload.currentMinutes)} minutos seguidos.`
+                    : `${String(payload.recommendedRange)} looks more sustainable for you right now than ${String(payload.currentMinutes)} straight minutes.`,
+                reason: isSpanish
+                    ? "Cuando los bloques se estiran muy por encima de tu rango reciente mas sano, suben la friccion y las caidas."
+                    : "When blocks stretch too far past your recent sweet spot, friction and drop-off tend to rise.",
             };
         case "DAY_OVERLOAD":
             return {
-                title: "The day looks overloaded",
-                message: `This day is reading as ${String(payload.loadLevel)} load. Lightening one piece would make it more realistic.`,
-                reason: "There is too much density, intensity or long-form work stacked together for your recent capacity.",
+                title: isSpanish ? "El dia se ve sobrecargado" : "The day looks overloaded",
+                message: isSpanish
+                    ? `Este dia esta leyendo como carga ${String(payload.loadLevel)}. Aligerar una pieza lo volveria mas realista.`
+                    : `This day is reading as ${String(payload.loadLevel)} load. Lightening one piece would make it more realistic.`,
+                reason: isSpanish
+                    ? "Hay demasiada densidad, intensidad o trabajo largo apilado para tu capacidad reciente."
+                    : "There is too much density, intensity or long-form work stacked together for your recent capacity.",
             };
         case "HIGH_FRICTION_CATEGORY":
             return {
-                title: "Start smaller here",
-                message: "This block sits in a context that has historically carried more friction. A smaller entry point should help.",
-                reason: `${String(payload.contextLabel)} sessions have been harder to sustain than your recent baseline.`,
+                title: isSpanish ? "Aqui conviene empezar mas pequeno" : "Start smaller here",
+                message: isSpanish
+                    ? "Este bloque cae en un contexto que historicamente trajo mas friccion. Un punto de entrada mas chico deberia ayudar."
+                    : "This block sits in a context that has historically carried more friction. A smaller entry point should help.",
+                reason: isSpanish
+                    ? `Las sesiones de ${String(payload.contextLabel)} estuvieron siendo mas dificiles de sostener que tu base reciente.`
+                    : `${String(payload.contextLabel)} sessions have been harder to sustain than your recent baseline.`,
             };
         case "INTENSE_SEQUENCE":
             return {
-                title: "This sequence needs recovery",
-                message: "Too many demanding blocks are packed together. A real break would make the day easier to hold.",
-                reason: "When intense work stacks without recovery, session stability usually falls.",
+                title: isSpanish ? "Esta secuencia necesita recuperacion" : "This sequence needs recovery",
+                message: isSpanish
+                    ? "Hay demasiados bloques exigentes pegados. Un descanso real haria el dia mas sostenible."
+                    : "Too many demanding blocks are packed together. A real break would make the day easier to hold.",
+                reason: isSpanish
+                    ? "Cuando el trabajo intenso se apila sin recuperacion, la estabilidad suele caer."
+                    : "When intense work stacks without recovery, session stability usually falls.",
             };
         case "PREMIUM_WINDOW_PROTECTION":
             return {
-                title: "Protect your premium window",
-                message: "A lighter task is occupying a window where your focus tends to be strongest. Save it for higher-value work.",
-                reason: "Your best window is being used by a low-demand block while heavier work is still outside it.",
+                title: isSpanish ? "Protege tu ventana premium" : "Protect your premium window",
+                message: isSpanish
+                    ? "Una tarea ligera esta ocupando una franja donde tu foco suele ser mas fuerte. Guardala para trabajo de mas valor."
+                    : "A lighter task is occupying a window where your focus tends to be strongest. Save it for higher-value work.",
+                reason: isSpanish
+                    ? "Tu mejor ventana esta siendo usada por un bloque liviano mientras el trabajo pesado sigue fuera de ella."
+                    : "Your best window is being used by a low-demand block while heavier work is still outside it.",
             };
         case "OVEROPTIMISTIC_PLAN":
             return {
-                title: "The plan is running too optimistic",
-                message: "You are planning meaningfully more than you have been sustaining on similar days. Dialing it down would help.",
-                reason: "Planned load is clearly above your recent executed capacity in comparable contexts.",
+                title: isSpanish ? "El plan viene demasiado optimista" : "The plan is running too optimistic",
+                message: isSpanish
+                    ? "Estas planeando bastante mas de lo que vienes sosteniendo en dias parecidos. Bajarlo ayudaria."
+                    : "You are planning meaningfully more than you have been sustaining on similar days. Dialing it down would help.",
+                reason: isSpanish
+                    ? "La carga planificada esta claramente por encima de tu capacidad ejecutada reciente en contextos comparables."
+                    : "Planned load is clearly above your recent executed capacity in comparable contexts.",
             };
         default:
             return {
-                title: "There is room for a cleaner plan",
-                message: "A small adjustment could make this schedule easier to carry.",
-                reason: "This suggestion is grounded in your recent profile and the current calendar layout.",
+                title: isSpanish ? "Hay margen para un plan mas limpio" : "There is room for a cleaner plan",
+                message: isSpanish
+                    ? "Un ajuste pequeno podria hacer esta agenda mas llevadera."
+                    : "A small adjustment could make this schedule easier to carry.",
+                reason: isSpanish
+                    ? "Esta sugerencia se apoya en tu perfil reciente y en el layout actual del calendario."
+                    : "This suggestion is grounded in your recent profile and the current calendar layout.",
             };
     }
 }
 
-function buildRecommendation(args: {
+function buildRecommendation(language: AppLanguage, args: {
     id: string;
     type: PlanningRecommendationType;
     scope: PlanningRecommendation["scope"];
@@ -217,7 +258,7 @@ function buildRecommendation(args: {
     applyability: RecommendationApplyability;
     suggestedAction: PlanningRecommendation["suggestedAction"];
 }) {
-    const copy = renderCopy(args.reasonCode, args.reasonPayload);
+    const copy = renderCopy(language, args.reasonCode, args.reasonPayload);
 
     return {
         id: args.id,
@@ -303,7 +344,7 @@ function applyFeedbackSummary(
     };
 }
 
-function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Block[]) {
+function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Block[], language: AppLanguage = "en") {
     const recommendations: PlanningRecommendation[] = [];
     const profile = input.profile;
     const dayExperiences = getDayExperiences(input.activityExperiences, input.targetDate);
@@ -340,7 +381,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                 if (confidence < 0.62) {
                     continue;
                 }
-                recommendations.push(buildRecommendation({
+                recommendations.push(buildRecommendation(language, {
                     id: getStableRecommendationId(input.userId, "move_block", "block", block.id, bestWindow.data.window),
                     type: "move_block",
                     scope: "block",
@@ -352,8 +393,8 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     reasonPayload: {
                         currentWindowLabel: getPlanningWindowLabel(
                             block.startAt.getHours() < 12 ? "morning" : block.startAt.getHours() < 17 ? "afternoon" : block.startAt.getHours() < 21 ? "evening" : "night"
-                        ),
-                        bestWindowLabel: getPlanningWindowLabel(bestWindow.data.window),
+                        , language),
+                        bestWindowLabel: getPlanningWindowLabel(bestWindow.data.window, language),
                     },
                     evidence: buildEvidence({
                         confidence: bestWindow.confidence,
@@ -365,11 +406,13 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     }),
                     applyability: {
                         mode: "auto",
-                    helperText: "Agendo can move it for you safely.",
+                        helperText: language === "es"
+                            ? "Agendo puede moverlo por ti sin romper el resto del plan."
+                            : "Agendo can move it for you safely.",
                     },
                     suggestedAction: {
                         kind: "move",
-                        label: "Move to best window",
+                        label: language === "es" ? "Mover a mejor ventana" : "Move to best window",
                         payload: openSlot,
                     },
                 }));
@@ -387,7 +430,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     continue;
                 }
                 if (snapshot.splittable) {
-                    recommendations.push(buildRecommendation({
+                    recommendations.push(buildRecommendation(language, {
                         id: getStableRecommendationId(input.userId, "shorten_block", "block", block.id),
                         type: "split_block",
                         scope: "block",
@@ -410,11 +453,13 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                         }),
                         applyability: {
                             mode: "auto",
-                            helperText: "Agendo can split it without breaking the rest of the plan.",
+                            helperText: language === "es"
+                                ? "Agendo puede dividirlo sin romper el resto del plan."
+                                : "Agendo can split it without breaking the rest of the plan.",
                         },
                         suggestedAction: {
                             kind: "split",
-                            label: "Split into two blocks",
+                            label: language === "es" ? "Dividir en dos bloques" : "Split into two blocks",
                             payload: {
                                 firstDurationMinutes: splitTargetMinutes,
                                 secondDurationMinutes: snapshot.durationMinutes - splitTargetMinutes,
@@ -423,7 +468,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     }));
                 } else {
                     const breakMinutes = snapshot.durationMinutes >= 180 ? 30 : 20;
-                    recommendations.push(buildRecommendation({
+                    recommendations.push(buildRecommendation(language, {
                         id: getStableRecommendationId(input.userId, "insert_break", "block", block.id),
                         type: "insert_break",
                         scope: "block",
@@ -448,11 +493,15 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                         }),
                         applyability: {
                             mode: "auto",
-                            helperText: `Agendo can schedule a ${breakMinutes}m restorative break right after this block.`,
+                            helperText: language === "es"
+                                ? `Agendo puede agendar un descanso restaurativo de ${breakMinutes} min justo despues de este bloque.`
+                                : `Agendo can schedule a ${breakMinutes}m restorative break right after this block.`,
                         },
                         suggestedAction: {
                             kind: "insert_break",
-                            label: `Programar descanso (${breakMinutes}m)`,
+                            label: language === "es"
+                                ? `Programar descanso (${breakMinutes}m)`
+                                : `Schedule break (${breakMinutes}m)`,
                             payload: {
                                 suggestedStart: block.endAt.toISOString(),
                                 durationMinutes: breakMinutes,
@@ -466,7 +515,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
         if (frictionSource && frictionSource.confidence >= 0.72) {
             const targetMinutes = Math.min(35, Math.max(20, Math.round(snapshot.durationMinutes * 0.45)));
             const confidence = Math.min(0.88, frictionSource.confidence) * Math.max(0.8, activityApplicability.modifier);
-            recommendations.push(buildRecommendation({
+            recommendations.push(buildRecommendation(language, {
                 id: getStableRecommendationId(input.userId, "start_small", "block", block.id),
                 type: "start_small",
                 scope: "block",
@@ -489,13 +538,13 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                 applyability: {
                     mode: "auto",
                     helperText: snapshot.splittable
-                        ? "Agendo can give you a lighter first pass."
-                        : "Agendo can reduce the first pass automatically.",
+                        ? (language === "es" ? "Agendo puede darte una primera pasada mas ligera." : "Agendo can give you a lighter first pass.")
+                        : (language === "es" ? "Agendo puede reducir la primera pasada automaticamente." : "Agendo can reduce the first pass automatically."),
                 },
                 suggestedAction: snapshot.splittable
                     ? {
                         kind: "split",
-                        label: "Start with a smaller version",
+                        label: language === "es" ? "Empezar con una version mas chica" : "Start with a smaller version",
                         payload: {
                             firstDurationMinutes: targetMinutes,
                             secondDurationMinutes: Math.max(15, snapshot.durationMinutes - targetMinutes),
@@ -503,7 +552,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
                     }
                     : {
                         kind: "shorten",
-                        label: "Reduce first pass",
+                        label: language === "es" ? "Reducir primera pasada" : "Reduce first pass",
                         payload: {
                             recommendedDurationMinutes: targetMinutes,
                         },
@@ -515,7 +564,7 @@ function generateBlockRecommendations(input: PlanningEngineInput, dayBlocks: Blo
     return recommendations;
 }
 
-function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block[]) {
+function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block[], language: AppLanguage = "en") {
     const recommendations: PlanningRecommendation[] = [];
     const dayExperiences = getDayExperiences(input.activityExperiences, input.targetDate);
     const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics, input.activityExperiences);
@@ -532,7 +581,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
             })[0];
 
         if (candidate) {
-            recommendations.push(buildRecommendation({
+            recommendations.push(buildRecommendation(language, {
                 id: getStableRecommendationId(input.userId, "reduce_daily_load", "day", input.targetDate),
                 type: "reduce_daily_load",
                 scope: "day",
@@ -556,18 +605,18 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 applyability: {
                     mode: "auto",
                     helperText: candidate.optional
-                        ? "Agendo can mark it optional without disturbing the rest of the day."
-                        : "Agendo can lighten the most flexible block.",
+                        ? (language === "es" ? "Agendo puede marcarlo como opcional sin tocar el resto del dia." : "Agendo can mark it optional without disturbing the rest of the day.")
+                        : (language === "es" ? "Agendo puede aligerar el bloque mas flexible." : "Agendo can lighten the most flexible block."),
                 },
                 suggestedAction: candidate.optional
                     ? {
                         kind: "mark_optional",
-                        label: "Keep it optional",
+                        label: language === "es" ? "Dejarlo opcional" : "Keep it optional",
                         payload: { optional: true },
                     }
                     : {
                         kind: "shorten",
-                        label: "Reduce day load",
+                        label: language === "es" ? "Reducir carga del dia" : "Reduce day load",
                         payload: {
                             recommendedDurationMinutes: Math.max(30, candidate.durationMinutes - 25),
                         },
@@ -579,7 +628,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
     if (dailyLoad.intenseSequences >= 1) {
         const anchor = intenseSnapshots[0];
         const breakStart = anchor ? new Date(anchor.block.endAt.getTime() + 15 * 60000).toISOString() : `${input.targetDate}T12:30:00.000Z`;
-        recommendations.push(buildRecommendation({
+        recommendations.push(buildRecommendation(language, {
             id: getStableRecommendationId(input.userId, "insert_break", "day", input.targetDate),
             type: "insert_break",
             scope: "day",
@@ -599,11 +648,11 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
             }),
             applyability: {
                 mode: "auto",
-                    helperText: "Agendo can reserve that break in your calendar.",
+                helperText: language === "es" ? "Agendo puede reservar ese descanso en tu calendario." : "Agendo can reserve that break in your calendar.",
             },
             suggestedAction: {
                 kind: "insert_break",
-                label: "Insertar descanso",
+                label: language === "es" ? "Insertar descanso" : "Insert break",
                 payload: {
                     suggestedStart: breakStart,
                     durationMinutes: 15,
@@ -615,7 +664,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
     if ((dailyLoad.residualEnergyEstimate <= 40 || dailyLoad.collaborativeLoad >= 90 || dailyLoad.passiveAttendanceLoad >= 80) && dayBlocks.length > 0) {
         const flexibleHeavy = daySnapshots.find((snapshot) => snapshot.cognitivelyHeavy && snapshot.flexibility !== "fixed");
         if (flexibleHeavy) {
-            recommendations.push(buildRecommendation({
+            recommendations.push(buildRecommendation(language, {
                 id: getStableRecommendationId(input.userId, "start_small", "day", input.targetDate, "post_activity_drain"),
                 type: "start_small",
                 scope: "day",
@@ -626,8 +675,8 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 reasonCode: "HIGH_FRICTION_CATEGORY",
                 reasonPayload: {
                     contextLabel: dailyLoad.collaborativeLoad >= dailyLoad.passiveAttendanceLoad
-                        ? "recent collaboration load"
-                        : "recent passive load",
+                        ? (language === "es" ? "carga reciente de colaboracion" : "recent collaboration load")
+                        : (language === "es" ? "carga pasiva reciente" : "recent passive load"),
                 },
                 evidence: buildEvidence({
                     confidence: 0.76,
@@ -640,13 +689,13 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 applyability: {
                     mode: flexibleHeavy.splittable ? "auto" : "manual",
                     helperText: flexibleHeavy.splittable
-                        ? "Agendo can lower the entry cost automatically."
-                        : "This is better adjusted manually.",
+                        ? (language === "es" ? "Agendo puede bajar el costo de entrada automaticamente." : "Agendo can lower the entry cost automatically.")
+                        : (language === "es" ? "Conviene ajustarlo manualmente." : "This is better adjusted manually."),
                 },
                 suggestedAction: flexibleHeavy.splittable
                     ? {
                         kind: "split",
-                        label: "Reduce the first pass",
+                        label: language === "es" ? "Reducir la primera pasada" : "Reduce the first pass",
                         payload: {
                             firstDurationMinutes: Math.min(30, Math.max(20, Math.round(flexibleHeavy.durationMinutes * 0.4))),
                             secondDurationMinutes: Math.max(15, flexibleHeavy.durationMinutes - Math.min(30, Math.max(20, Math.round(flexibleHeavy.durationMinutes * 0.4)))),
@@ -654,7 +703,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                     }
                     : {
                         kind: "review_plan",
-                        label: "Review today manually",
+                        label: language === "es" ? "Revisar hoy manualmente" : "Review today manually",
                         payload: {
                             reason: "post_activity_drain",
                         },
@@ -677,7 +726,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
         ));
 
         if (trivialInBestWindow && heavyOutsideWindow) {
-            recommendations.push(buildRecommendation({
+            recommendations.push(buildRecommendation(language, {
                 id: getStableRecommendationId(input.userId, "protect_focus_window", "day", input.targetDate),
                 type: "protect_focus_window",
                 scope: "day",
@@ -687,7 +736,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 confidence: bestWindow.confidence,
                 reasonCode: "PREMIUM_WINDOW_PROTECTION",
                 reasonPayload: {
-                    bestWindowLabel: getPlanningWindowLabel(bestWindow.data.window),
+                    bestWindowLabel: getPlanningWindowLabel(bestWindow.data.window, language),
                 },
                 evidence: buildEvidence({
                     confidence: bestWindow.confidence,
@@ -699,11 +748,13 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
                 }),
                 applyability: {
                     mode: "manual",
-                    helperText: "Review it manually so you can protect that window without moving something blindly.",
+                    helperText: language === "es"
+                        ? "Revisalo manualmente para proteger esa ventana sin mover algo a ciegas."
+                        : "Review it manually so you can protect that window without moving something blindly.",
                 },
                 suggestedAction: {
                     kind: "review_window",
-                    label: "Review this window",
+                    label: language === "es" ? "Revisar esta ventana" : "Review this window",
                     payload: {
                         moveOutBlockId: trivialInBestWindow.block.id,
                         protectForBlockId: heavyOutsideWindow.block.id,
@@ -717,7 +768,7 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
         (block.endAt.getTime() - block.startAt.getTime()) / 60000
     ))) / Math.max(1, average(input.recentAnalytics.slice(0, 8).map((item) => item.activeDurationMs / 60000)));
     if (recentPlannedVsActive >= 1.5 && dayBlocks.length >= 3) {
-        recommendations.push(buildRecommendation({
+        recommendations.push(buildRecommendation(language, {
             id: getStableRecommendationId(input.userId, "downgrade_goal", "day", input.targetDate),
             type: "downgrade_goal",
             scope: "day",
@@ -737,11 +788,13 @@ function generateDayRecommendations(input: PlanningEngineInput, dayBlocks: Block
             }),
             applyability: {
                 mode: "manual",
-                helperText: "Adjust this manually so nothing important gets trimmed opaquely.",
+                helperText: language === "es"
+                    ? "Ajustalo manualmente para que nada importante se recorte sin contexto."
+                    : "Adjust this manually so nothing important gets trimmed opaquely.",
             },
             suggestedAction: {
                 kind: "downgrade_goal",
-                    label: "Lower the day goal",
+                label: language === "es" ? "Bajar la meta del dia" : "Lower the day goal",
                 payload: {
                     reduceByMinutes: 30,
                 },
@@ -757,15 +810,20 @@ function buildGuidedPlan(
     dayBlocks: Block[],
     recommendations: PlanningRecommendation[],
     dailyLoad: PlanningGuideResult["dailyLoad"],
+    language: AppLanguage = "en",
 ): GuidedPlanningOutput | null {
     if (!input.preferences) return null;
 
     const snapshots = dayBlocks.map(buildPlanningBlockSnapshot);
     if (snapshots.length === 0) {
         return {
-            headline: "Nothing is scheduled yet",
-            summary: "Plan with Agendo needs at least one block before it can help structure the day.",
-            strategy: "Start by adding one or two meaningful blocks, then ask again.",
+            headline: language === "es" ? "Todavia no hay nada agendado" : "Nothing is scheduled yet",
+            summary: language === "es"
+                ? "Planificar con Agendo necesita al menos un bloque para ayudarte a ordenar el dia."
+                : "Plan with Agendo needs at least one block before it can help structure the day.",
+            strategy: language === "es"
+                ? "Empieza agregando uno o dos bloques importantes y vuelve a pedir la guia."
+                : "Start by adding one or two meaningful blocks, then ask again.",
             priorityBlockIds: [],
             steps: [],
             adjustmentRecommendationIds: [],
@@ -802,7 +860,9 @@ function buildGuidedPlan(
                 suggestedStart,
                 suggestedEnd,
                 recommendedDurationMinutes: snapshot.durationMinutes,
-                reason: "Move it into your premium window so it starts with more support.",
+                reason: language === "es"
+                    ? "Muevelo a tu ventana premium para que arranque con mas soporte."
+                    : "Move it into your premium window so it starts with more support.",
             };
         }
 
@@ -819,7 +879,9 @@ function buildGuidedPlan(
                     : typeof blockRecommendation.suggestedAction.payload.firstDurationMinutes === "number"
                         ? blockRecommendation.suggestedAction.payload.firstDurationMinutes
                         : snapshot.durationMinutes,
-                reason: "A smaller entry is more likely to hold than a single oversized push.",
+                reason: language === "es"
+                    ? "Una entrada mas chica tiene mas chances de sostenerse que un empuje sobredimensionado."
+                    : "A smaller entry is more likely to hold than a single oversized push.",
             };
         }
 
@@ -832,7 +894,9 @@ function buildGuidedPlan(
                 suggestedStart: snapshot.block.startAt.toISOString(),
                 suggestedEnd: snapshot.block.endAt.toISOString(),
                 recommendedDurationMinutes: snapshot.durationMinutes,
-                reason: "This block keeps the day from turning into one long demand stack.",
+                reason: language === "es"
+                    ? "Este bloque evita que el dia se vuelva una sola pila de exigencia."
+                    : "This block keeps the day from turning into one long demand stack.",
             };
         }
 
@@ -845,39 +909,55 @@ function buildGuidedPlan(
                 suggestedEnd: snapshot.block.endAt.toISOString(),
                 recommendedDurationMinutes: snapshot.durationMinutes,
             reason: snapshot.cognitivelyHeavy
-                ? "This is a key piece to protect early and with some air around it."
-                : "This works better as support, without adding more strain to the day.",
+                ? (language === "es"
+                    ? "Esta es una pieza clave para proteger temprano y con algo de aire alrededor."
+                    : "This is a key piece to protect early and with some air around it.")
+                : (language === "es"
+                    ? "Esto funciona mejor como soporte, sin agregar mas tension al dia."
+                    : "This works better as support, without adding more strain to the day."),
         };
     });
 
     const loadSummary = dailyLoad.realDayLoad >= 140 || dailyLoad.level === "overload"
-        ? "Simplify before you execute."
+        ? (language === "es" ? "Simplifica antes de ejecutar." : "Simplify before you execute.")
         : dailyLoad.level === "high"
-            ? "Prioritize hard and leave real air."
-            : "This day can be shaped without forcing it.";
+            ? (language === "es" ? "Prioriza fuerte y deja aire real." : "Prioritize hard and leave real air.")
+            : (language === "es" ? "Este dia puede ordenarse sin forzarlo." : "This day can be shaped without forcing it.");
     const energyStrategy = input.preferences.subjectiveEnergy === "low"
-        ? "Start with one clear piece, trim the ambitious parts and protect recovery."
+        ? (language === "es"
+            ? "Empieza con una pieza clara, recorta lo ambicioso y protege la recuperacion."
+            : "Start with one clear piece, trim the ambitious parts and protect recovery.")
         : input.preferences.subjectiveEnergy === "high"
-            ? "Protect your highest-value block in the best window and let the rest support it."
-            : "Keep one strong bet and avoid stacking too much demand back to back.";
+            ? (language === "es"
+                ? "Protege tu bloque de mayor valor en la mejor ventana y deja que el resto lo apoye."
+                : "Protect your highest-value block in the best window and let the rest support it.")
+            : (language === "es"
+                ? "Sostene una apuesta fuerte y evita apilar demasiada demanda seguida."
+                : "Keep one strong bet and avoid stacking too much demand back to back.");
 
     return {
         headline: loadSummary,
         summary: bestWindow
-            ? `Your strongest window is still the ${getPlanningWindowLabel(bestWindow)}. Shape the day around high-cost work there.`
-            : "Your strongest window is still calibrating, so the priority is keeping the day realistic.",
-        strategy: `${energyStrategy} Real day load is reading ${Math.round(dailyLoad.realDayLoad)} and residual energy looks ${Math.round(dailyLoad.residualEnergyEstimate)}%.`,
+            ? (language === "es"
+                ? `Tu mejor ventana sigue siendo ${getPlanningWindowLabel(bestWindow, language)}. Ordena el dia alrededor del trabajo de mayor costo ahi.`
+                : `Your strongest window is still the ${getPlanningWindowLabel(bestWindow, language)}. Shape the day around high-cost work there.`)
+            : (language === "es"
+                ? "Tu mejor ventana todavia se esta calibrando, asi que la prioridad es mantener el dia realista."
+                : "Your strongest window is still calibrating, so the priority is keeping the day realistic."),
+        strategy: language === "es"
+            ? `${energyStrategy} La carga real del dia esta leyendo ${Math.round(dailyLoad.realDayLoad)} y la energia residual parece ${Math.round(dailyLoad.residualEnergyEstimate)}%.`
+            : `${energyStrategy} Real day load is reading ${Math.round(dailyLoad.realDayLoad)} and residual energy looks ${Math.round(dailyLoad.residualEnergyEstimate)}%.`,
         priorityBlockIds: steps.map((step) => step.blockId).filter((blockId): blockId is string => Boolean(blockId)),
         steps,
         adjustmentRecommendationIds: recommendations.slice(0, 3).map((recommendation) => recommendation.id),
     };
 }
 
-export function buildPlanningGuide(input: PlanningEngineInput): PlanningGuideResult {
+export function buildPlanningGuide(input: PlanningEngineInput, language: AppLanguage = "en"): PlanningGuideResult {
     const dayBlocks = getDayBlocks(input.blocks, input.targetDate);
     const dailyLoad = computeDailyLoad(input.blocks, input.targetDate, input.recentAnalytics, input.activityExperiences);
-    const blockRecommendations = generateBlockRecommendations(input, dayBlocks);
-    const dayRecommendations = generateDayRecommendations(input, dayBlocks);
+    const blockRecommendations = generateBlockRecommendations(input, dayBlocks, language);
+    const dayRecommendations = generateDayRecommendations(input, dayBlocks, language);
 
     const recommendations = [...blockRecommendations, ...dayRecommendations]
         .map((recommendation) => {
@@ -926,7 +1006,7 @@ export function buildPlanningGuide(input: PlanningEngineInput): PlanningGuideRes
         blocks: dayBlocks.map(buildPlanningBlockSnapshot),
         recommendations,
         bestFocusWindow: input.profile.bestFocusWindow?.data.window ?? null,
-        guidedPlan: buildGuidedPlan(input, dayBlocks, recommendations, dailyLoad),
+        guidedPlan: buildGuidedPlan(input, dayBlocks, recommendations, dailyLoad, language),
         activityLoad: {
             passiveAttendanceLoad: dailyLoad.passiveAttendanceLoad,
             logisticsLoad: dailyLoad.logisticsLoad,

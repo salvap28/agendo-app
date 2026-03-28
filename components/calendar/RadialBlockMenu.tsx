@@ -31,9 +31,6 @@ import { CircularTimePicker } from "@/components/focus/CircularTimePicker";
 import { Input } from "@/components/ui/input";
 import { PlanningRecommendation } from "@/lib/types/planning";
 import {
-    PerceivedValue,
-} from "@/lib/types/activity";
-import {
     acceptPlanningRecommendation,
     applyPlanningRecommendation,
     canApplyRecommendation,
@@ -55,24 +52,27 @@ import {
 import { OverlapResolutionModal, OverlapResolutionType } from "@/components/calendar/OverlapResolutionModal";
 import { isOverlapping, findNextFreeSlot } from "@/lib/utils/scheduling";
 import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
+import { useI18n } from "@/lib/i18n/client";
+import { getBlockStatusLabel, getBlockTypeLabel, getRecurrenceLabel, getWeekdayInitialsSundayFirst } from "@/lib/i18n/app";
+import { getRadialBlockMenuCopy } from "@/lib/i18n/ui";
 
 // ─── CONFIGURATION ──────────────────────────────────────────────────────────
 
-const BLOCK_TYPES_UI: { value: BlockType; label: string; icon: LucideIcon; color: string; bg: string; hoverBg: string }[] = [
-    { value: "deep_work", label: "Deep Work", icon: Layers, color: "text-indigo-400", bg: "bg-indigo-400/20", hoverBg: "hover:bg-indigo-500" },
-    { value: "meeting", label: "Meeting", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/20", hoverBg: "hover:bg-blue-500" },
-    { value: "gym", label: "Gym", icon: Dumbbell, color: "text-emerald-400", bg: "bg-emerald-400/20", hoverBg: "hover:bg-emerald-500" },
-    { value: "study", label: "Study", icon: BookOpen, color: "text-amber-400", bg: "bg-amber-400/20", hoverBg: "hover:bg-amber-500" },
-    { value: "admin", label: "Admin", icon: Activity, color: "text-slate-400", bg: "bg-slate-400/20", hoverBg: "hover:bg-slate-500" },
-    { value: "break", label: "Break", icon: Coffee, color: "text-rose-400", bg: "bg-rose-400/20", hoverBg: "hover:bg-rose-500" },
-    { value: "other", label: "Other", icon: MoreHorizontal, color: "text-neutral-400", bg: "bg-neutral-400/20", hoverBg: "hover:bg-neutral-500" },
+const BLOCK_TYPES_UI: { value: BlockType; icon: LucideIcon; color: string; bg: string; hoverBg: string }[] = [
+    { value: "deep_work", icon: Layers, color: "text-indigo-400", bg: "bg-indigo-400/20", hoverBg: "hover:bg-indigo-500" },
+    { value: "meeting", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-400/20", hoverBg: "hover:bg-blue-500" },
+    { value: "gym", icon: Dumbbell, color: "text-emerald-400", bg: "bg-emerald-400/20", hoverBg: "hover:bg-emerald-500" },
+    { value: "study", icon: BookOpen, color: "text-amber-400", bg: "bg-amber-400/20", hoverBg: "hover:bg-amber-500" },
+    { value: "admin", icon: Activity, color: "text-slate-400", bg: "bg-slate-400/20", hoverBg: "hover:bg-slate-500" },
+    { value: "break", icon: Coffee, color: "text-rose-400", bg: "bg-rose-400/20", hoverBg: "hover:bg-rose-500" },
+    { value: "other", icon: MoreHorizontal, color: "text-neutral-400", bg: "bg-neutral-400/20", hoverBg: "hover:bg-neutral-500" },
 ];
 
-const STATUS_OPTS: { value: BlockStatus; label: string; icon: LucideIcon; color: string; bg: string }[] = [
-    { value: "planned", label: "Planificado", icon: MoreHorizontal, color: "text-white/50", bg: "bg-white/10" },
-    { value: "active", label: "En progreso", icon: Play, color: "text-green-400", bg: "bg-green-400/20" },
-    { value: "completed", label: "Completado", icon: CheckCircle2, color: "text-indigo-400", bg: "bg-indigo-400/20" },
-    { value: "canceled", label: "Cancelado", icon: XCircle, color: "text-red-400", bg: "bg-red-400/20" },
+const STATUS_OPTS: { value: BlockStatus; icon: LucideIcon; color: string; bg: string }[] = [
+    { value: "planned", icon: MoreHorizontal, color: "text-white/50", bg: "bg-white/10" },
+    { value: "active", icon: Play, color: "text-green-400", bg: "bg-green-400/20" },
+    { value: "completed", icon: CheckCircle2, color: "text-indigo-400", bg: "bg-indigo-400/20" },
+    { value: "canceled", icon: XCircle, color: "text-red-400", bg: "bg-red-400/20" },
 ];
 
 // Nodos primarios que orbitan el bloque
@@ -100,16 +100,17 @@ const PRIMARY_ORBIT_RADIUS_DESKTOP = 168;
 // ─── COMPONENT ──────────────────────────────────────────────────────────────
 
 export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { blockId: string; isNewBlock?: boolean; onClose: () => void }) {
+    const { language } = useI18n();
     const { blocks, updateBlock, createBlock, deleteBlock, deleteBlockSeries, setStatus, applyRecurrence, fetchBlocks } = useBlocksStore();
     const { openFromBlock } = useFocusStore();
     const {
-        experiences,
         refreshBlockExperience,
         inferBlockExperience,
-        recordCheckout,
     } = useActivityExperienceStore();
 
     const block = blocks.find(b => b.id === blockId);
+    const recurrenceDayLabels = getWeekdayInitialsSundayFirst(language);
+    const copy = React.useMemo(() => getRadialBlockMenuCopy(language), [language]);
 
     // Estado Orbital
     const [activePrimaryNode, setActivePrimaryNode] = useState<PrimaryNode | null>(null);
@@ -124,6 +125,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const [mounted, setMounted] = useState(false);
     const [pressedType, setPressedType] = useState<BlockType | null>(null);
     const [primaryRadius, setPrimaryRadius] = useState(PRIMARY_ORBIT_RADIUS_DESKTOP);
+    const [isTimeDragging, setIsTimeDragging] = useState(false);
     const [isAddingNotification, setIsAddingNotification] = useState(false);
     const [customNotificationMins, setCustomNotificationMins] = useState("");
     const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
@@ -187,12 +189,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         if (!planningBlockId || !planningDate) return;
         void refreshPlanning();
     }, [planningSignature, planningBlockId, planningDate, refreshPlanning]);
-
-    const activityExperience = React.useMemo(
-        () => experiences.find((experience) => experience.sourceBlockId === block?.id) ?? null,
-        [experiences, block?.id],
-    );
-    const blockType = block?.type;
 
     useEffect(() => {
         if (!block?.id) return;
@@ -307,6 +303,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     const [zoomByNode, setZoomByNode] = useState<Partial<Record<PrimaryNode, number>>>({});
     const zoomByNodeRef = useRef<Partial<Record<PrimaryNode, number>>>(zoomByNode);
+    const isTimeDraggingRef = useRef(false);
+
+    useEffect(() => {
+        isTimeDraggingRef.current = isTimeDragging;
+    }, [isTimeDragging]);
 
     useEffect(() => {
         zoomByNodeRef.current = zoomByNode;
@@ -415,6 +416,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         galaxyRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${zoom})`;
     };
 
+    const radialGlowDisabled = activePrimaryNode === "time" || isTimeDragging;
+
     // Animación física de alto rendimiento a 60fps usando requestAnimationFrame
     useEffect(() => {
         let animationFrameId: number;
@@ -422,6 +425,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         const physics = { angle: 0, speed: 20, offset: { x: 0, y: 0 } };
 
         const animate = () => {
+            if (isTimeDraggingRef.current) {
+                animationFrameId = requestAnimationFrame(animate);
+                return;
+            }
+
             if (!activePrimaryNode) {
                 physics.angle = (physics.angle + physics.speed) % 360;
                 if (physics.speed > 0.05) {
@@ -479,6 +487,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
     }, [activePrimaryNode, isMobile, primaryRadius, getFocusZoom]);
+
+    useEffect(() => {
+        if (activePrimaryNode === "time") return;
+        setIsTimeDragging(false);
+    }, [activePrimaryNode]);
 
     const handleClose = () => {
         setIsClosing(true);
@@ -569,12 +582,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
     const activeStatus = STATUS_OPTS.find(s => s.value === block?.status) || STATUS_OPTS[0];
 
     const primaryNodes = [
-        { id: "type" as const, label: "Categoría", icon: activeType.icon, color: activeType.color, bg: activeType.bg },
-        { id: "focus" as const, label: "Focus", icon: Zap, color: "text-purple-500", bg: "bg-purple-500/20" },
-        { id: "time" as const, label: "Horario", icon: Clock, color: "text-white/70", bg: "bg-white/10" },
-        { id: "status" as const, label: "Estado", icon: activeStatus.icon, color: activeStatus.color, bg: activeStatus.bg },
-        { id: "notifications" as const, label: "Avisos", icon: Bell, color: "text-amber-400", bg: "bg-amber-500/20" },
-        { id: "delete" as const, label: "Eliminar", icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
+        { id: "type" as const, label: copy.category, icon: activeType.icon, color: activeType.color, bg: activeType.bg },
+        { id: "focus" as const, label: copy.focus, icon: Zap, color: "text-purple-500", bg: "bg-purple-500/20" },
+        { id: "time" as const, label: copy.schedule, icon: Clock, color: "text-white/70", bg: "bg-white/10" },
+        { id: "status" as const, label: copy.status, icon: activeStatus.icon, color: activeStatus.color, bg: activeStatus.bg },
+        { id: "notifications" as const, label: copy.alerts, icon: Bell, color: "text-amber-400", bg: "bg-amber-500/20" },
+        { id: "delete" as const, label: copy.delete, icon: Trash2, color: "text-red-400", bg: "bg-red-500/10" },
     ];
 
     const PRIMARY_RADIUS = primaryRadius;
@@ -624,7 +637,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     className="absolute top-12 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-6 h-12 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl transition-all duration-300 hover:scale-105 active:scale-95 hover:bg-white/10 hover:border-white/20 text-white/50 hover:text-white animate-in slide-in-from-top-4 fade-in"
                 >
                     <ArrowLeft className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Volver</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">{copy.back}</span>
                 </button>
             )}
 
@@ -637,7 +650,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     }}
                     className="absolute top-[calc(env(safe-area-inset-top,0px)+68px)] left-1/2 -translate-x-1/2 z-[320] h-11 px-5 rounded-full bg-purple-500/25 border border-purple-300/35 text-purple-50 text-xs font-bold tracking-wider shadow-[0_10px_28px_-12px_rgba(168,85,247,0.6)] backdrop-blur-xl hover:bg-purple-500/35 hover:border-purple-200/45 hover:scale-[1.03] active:scale-95 transition-all duration-300 whitespace-nowrap"
                 >
-                    INICIAR FOCUS
+                    {language === "es" ? "INICIAR FOCO" : "START FOCUS"}
                 </button>
             )}
 
@@ -681,13 +694,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         animation: `spring-out 600ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH`
                     }}
                 >
-                    <GlowingEffect spread={40} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                    <GlowingEffect spread={40} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
 
                     {activePrimaryNode === "center" ? (
                         <div className="flex flex-col w-full gap-5 relative z-10 animate-in fade-in zoom-in-95 duration-300">
                             {/* Editable Title */}
                             <div className="flex flex-col gap-1.5">
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">Título</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">{copy.title}</span>
                                 <Input
                                     value={block.title}
                                     onChange={(e) => updateBlock(block.id, { title: e.target.value })}
@@ -709,14 +722,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                     }}
                                     className={cn("font-bold tracking-tight text-white bg-black/40 border border-white/10 rounded-xl px-3 h-10 focus-visible:ring-1 focus-visible:ring-indigo-500/50 placeholder:text-white/20 shadow-inner",
                                         isMobile ? "text-base" : "text-lg")}
-                                    placeholder="Nombre del bloque"
+                                    placeholder={copy.blockNamePlaceholder}
                                     autoFocus
                                 />
                             </div>
 
                             <div className="flex flex-col gap-2">
                                 <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">
-                                    Planning metadata
+                                    {copy.planningMetadata}
                                 </span>
                                 <div className="space-y-2 rounded-2xl border border-white/8 bg-black/20 p-3">
                                     <div className="flex flex-wrap gap-1.5">
@@ -750,7 +763,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         : "bg-white/[0.04] text-white/45 hover:text-white/80",
                                                 )}
                                             >
-                                                {intensity === "light" ? "Liviano" : intensity === "medium" ? "Medio" : "Intenso"}
+                                                {intensity === "light" ? copy.intensityLight : intensity === "medium" ? copy.intensityMedium : copy.intensityHigh}
                                             </button>
                                         ))}
                                         {(["fixed", "moderate", "flexible"] as const).map((flexibility) => (
@@ -764,7 +777,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         : "bg-white/[0.04] text-white/45 hover:text-white/80",
                                                 )}
                                             >
-                                                {flexibility === "fixed" ? "Fijo" : flexibility === "moderate" ? "Moderado" : "Flexible"}
+                                                {flexibility === "fixed" ? copy.flexibilityFixed : flexibility === "moderate" ? copy.flexibilityModerate : copy.flexibilityFlexible}
                                             </button>
                                         ))}
                                     </div>
@@ -778,7 +791,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     : "border-white/8 bg-white/[0.03] text-white/48",
                                             )}
                                         >
-                                            {(block.splittable ?? true) ? "Divisible" : "No divisible"}
+                                            {(block.splittable ?? true) ? copy.splittableYes : copy.splittableNo}
                                         </button>
                                         <button
                                             onClick={() => updateBlock(block.id, { optional: !(block.optional ?? false) })}
@@ -789,7 +802,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     : "border-white/8 bg-white/[0.03] text-white/48",
                                             )}
                                         >
-                                            {(block.optional ?? false) ? "Opcional" : "Obligatorio"}
+                                            {(block.optional ?? false) ? copy.optionalYes : copy.optionalNo}
                                         </button>
                                     </div>
                                 </div>
@@ -797,12 +810,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
                             {/* Recurrence Selector */}
                             <div className="flex flex-col gap-1.5">
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">Repetición</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">{copy.recurrence}</span>
                                 <div className="grid grid-cols-2 gap-1.5">
                                     {[
-                                        { label: "No", value: undefined },
-                                        { label: "Diario", value: "daily" },
-                                        { label: "Semanal", value: "weekly" },
+                                        { label: copy.recurrenceNone, value: undefined },
+                                        { label: getRecurrenceLabel(language, "daily"), value: "daily" },
+                                        { label: getRecurrenceLabel(language, "weekly"), value: "weekly" },
                                     ].map((opt) => {
                                         const isSelected = (!draftRecurrence && !opt.value) || (draftRecurrence?.type === opt.value);
                                         return (
@@ -847,14 +860,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         )}
                                     >
                                         <Repeat size={12} className={draftRecurrence?.type === "custom" ? "text-indigo-400" : ""} />
-                                        <span>A medida</span>
+                                        <span>{copy.custom}</span>
                                     </button>
                                 </div>
 
                                 {/* Custom day picker inline */}
                                 {draftRecurrence?.type === "custom" && (
                                     <div className="flex justify-between mt-2 animate-in slide-in-from-top-1 fade-in duration-200">
-                                        {["D", "L", "M", "X", "J", "V", "S"].map((day, idx) => {
+                                        {recurrenceDayLabels.map((day, idx) => {
                                             const isActive = draftRecurrence?.days?.includes(idx);
                                             return (
                                                 <button
@@ -899,7 +912,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                     }}
                                     className="px-5 py-2 rounded-xl text-xs font-semibold text-white/50 hover:text-white border border-transparent hover:bg-white/5 hover:border-white/10 transition-all duration-300"
                                 >
-                                    Cancelar
+                                    {copy.cancel}
                                 </button>
                                 <button
                                     onClick={() => {
@@ -920,7 +933,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                     }}
                                     className="px-5 py-2 rounded-xl text-xs font-bold text-indigo-50 bg-indigo-500/80 border border-indigo-400/50 shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:bg-indigo-500 hover:shadow-[0_0_25px_rgba(99,102,241,0.6)] hover:scale-[1.02] active:scale-95 transition-all duration-300 backdrop-blur-md"
                                 >
-                                    {guidedStep === "center" ? "Siguiente" : "Guardar"}
+                                    {guidedStep === "center" ? copy.next : copy.save}
                                 </button>
                             </div>
                         </div>
@@ -952,7 +965,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         "text-2xl font-light mb-0.5 transition-colors duration-300",
                                         isAddingNotification ? "text-amber-400" : "text-white/60 group-hover:text-amber-300"
                                     )}>+</span>
-                                    <GlowingEffect spread={isAddingNotification ? 35 : 20} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    <GlowingEffect spread={isAddingNotification ? 35 : 20} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                 </button>
                             </div>
 
@@ -971,7 +984,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             <div className="flex items-center gap-2.5">
                                                 <Bell className="w-4 h-4 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
                                                 <span className="text-[13px] font-medium text-white/90 tracking-wide">
-                                                    {offset === 0 ? "En el momento" : `${offset} min antes`}
+                                                    {offset === 0 ? copy.atTime : copy.minutesBefore(offset)}
                                                 </span>
                                             </div>
                                             <button
@@ -1040,7 +1053,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         <>
                             <div className="flex flex-col items-center justify-center group-hover:scale-[1.05] transition-transform duration-300">
                                 <span className="text-xl font-bold tracking-tight text-white mb-1 max-w-[150px] truncate text-center relative z-10 transition-colors group-hover:text-indigo-100">
-                                    {block.title || "Agendo Block"}
+                                    {block.title || copy.agendoBlock}
                                 </span>
                                 <span className="text-xs text-white/40 tabular-nums relative z-10 flex items-center gap-1.5 transition-colors group-hover:text-white/60">
                                     {localTime.start?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1086,7 +1099,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         pillHeightClass,
                                         pn.id === "focus" && isFocusConfirming ? pillWidthExpanded :
                                             pn.id === "delete" && isDeleteConfirming && !block.recurrenceId ? `${pillWidthExpanded} bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] ${scaleExpanded}` :
-                                                isFocused && pn.id === "time" ? "w-28 flex-shrink-0 rounded-full" : `${pillWidthDefault} hover:${scaleExpanded}`,
+                                                isFocused && pn.id === "time" ? (isMobile ? "h-20 w-20 flex-shrink-0 rounded-full" : "h-24 w-24 flex-shrink-0 rounded-full") : `${pillWidthDefault} hover:${scaleExpanded}`,
                                         "active:scale-95",
                                         pn.color,
                                         isFocused && pn.id === "time"
@@ -1097,7 +1110,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         pn.id === "focus" && !isFocusConfirming && "hover:shadow-[0_0_25px_currentColor] hover:border-purple-500/50" // Distinctive focus hover
                                     )}
                                 >
-                                    <GlowingEffect spread={35} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    <GlowingEffect spread={35} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                     {isFocused && pn.id !== "focus" && (
                                         <div className="absolute inset-0 rounded-full animate-ping opacity-20 border border-current" />
                                     )}
@@ -1110,7 +1123,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             const mins = diffMins % 60;
                                             const durationStr = hrs === 0 ? `${mins}m` : mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
                                             return (
-                                                <span className="text-lg font-bold text-white tracking-tight whitespace-nowrap">
+                                                <span className="max-w-[4.5rem] text-center text-lg font-bold leading-[1.05] tracking-tight text-white whitespace-normal">
                                                     {durationStr}
                                                 </span>
                                             );
@@ -1124,7 +1137,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     isFocusConfirming ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0 overflow-hidden"
                                                 )}
                                             >
-                                                Modo Foco
+                                                {copy.focusMode}
                                             </span>
                                         )}
                                         {pn.id === "delete" && (
@@ -1134,7 +1147,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     isDeleteConfirming && !block.recurrenceId ? "opacity-100 max-w-[100px]" : "opacity-0 max-w-0 overflow-hidden"
                                                 )}
                                             >
-                                                Confirmar
+                                                {copy.confirm}
                                             </span>
                                         )}
                                     </div>
@@ -1201,7 +1214,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             isPressing && "border-transparent"
                                                         )}
                                                     >
-                                                        <GlowingEffect spread={25} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                                        <GlowingEffect spread={25} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                                         <div className={cn(
                                                             "flex items-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] relative z-10 shrink-0",
                                                             isPressing ? "justify-start gap-2.5 w-auto" : "justify-center gap-0 w-full group-hover:justify-start group-hover:gap-2.5 group-hover:w-auto"
@@ -1217,7 +1230,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                                     : "opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[150px] group-hover:text-white",
                                                                 tn.color
                                                             )}>
-                                                                {tn.label}
+                                                                {getBlockTypeLabel(language, tn.value)}
                                                             </span>
                                                         </div>
                                                     </button>
@@ -1234,7 +1247,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             const lPos = calculateNodePosition(j, STATUS_OPTS.length, statusOrbitRadius, -90);
                                             const LIcon = sn.icon;
                                             const isSelected = sn.value === activeStatus.value;
-                                            const statusLabel = sn.label;
+                                            const statusLabel = getBlockStatusLabel(language, sn.value);
                                             return (
                                                 <div
                                                     key={sn.value}
@@ -1254,7 +1267,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             isSelected ? `${sn.bg} border ${sn.color.replace('text-', 'border-')} shadow-[0_0_20px_currentColor]` : `bg-black/80 border border-white/10 backdrop-blur-sm hover:${sn.bg} hover:border-${sn.color.replace('text-', '')}/30 hover:shadow-[0_0_15px_currentColor]`
                                                         )}
                                                     >
-                                                        <GlowingEffect spread={30} proximity={70} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                                        <GlowingEffect spread={30} proximity={70} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                                         <div className="flex items-center gap-2 relative z-10 text-current">
                                                             <LIcon className="w-4 h-4" />
                                                             <span className="text-xs font-bold truncate">{statusLabel}</span>
@@ -1269,16 +1282,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             <div
                                                 className="absolute pointer-events-auto flex items-center justify-center touch-none"
                                                 style={{ animation: `spring-out 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) BOTH` }}
-                                                onClick={e => e.stopPropagation()}
-                                                onPointerDown={e => e.stopPropagation()}
-                                                onPointerMove={e => e.stopPropagation()}
-                                                onTouchMove={e => e.stopPropagation()}
                                             >
                                                 <CircularTimePicker
                                                     hideCenterText
                                                     startMins={localTime.start!.getHours() * 60 + localTime.start!.getMinutes()}
                                                     endMins={localTime.end!.getHours() * 60 + localTime.end!.getMinutes() +
                                                         (localTime.end!.getDate() !== localTime.start!.getDate() ? 1440 : 0)}
+                                                    onDragStateChange={setIsTimeDragging}
                                                     busyBlocks={blocks.filter(b =>
                                                         b.id !== block.id &&
                                                         b.startAt.getFullYear() === localTime.start!.getFullYear() &&
@@ -1290,7 +1300,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         if (b.endAt.getDate() !== b.startAt.getDate()) eMins += 1440;
                                                         return { start: sMins, end: eMins };
                                                     })}
-                                                    onChange={(start: number, end: number) => {
+                                                    onChangeEnd={(start: number, end: number) => {
                                                         const newStart = new Date(localTime.start!);
                                                         newStart.setHours(Math.floor(start / 60), start % 60, 0, 0);
 
@@ -1304,19 +1314,6 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         }
 
                                                         setLocalTime({ start: newStart, end: newEnd });
-                                                    }}
-                                                    onChangeEnd={(start: number, end: number) => {
-                                                        const newStart = new Date(localTime.start!);
-                                                        newStart.setHours(Math.floor(start / 60), start % 60, 0, 0);
-
-                                                        const newEnd = new Date(localTime.end!);
-                                                        newEnd.setHours(Math.floor(end / 60), end % 60, 0, 0);
-
-                                                        if (newEnd < newStart) {
-                                                            newEnd.setDate(newEnd.getDate() + 1);
-                                                        } else if (newEnd.getTime() - newStart.getTime() > 86400000) {
-                                                            newEnd.setDate(newEnd.getDate() - 1);
-                                                        }
 
                                                         const newBlockData = { ...block, startAt: newStart, endAt: newEnd };
                                                         const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== block.id);
@@ -1347,7 +1344,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         }}
                                                         className="absolute top-[calc(100%+30px)] left-1/2 -translate-x-1/2 px-6 py-2.5 rounded-xl bg-indigo-500/80 border border-indigo-400/50 text-indigo-50 font-bold text-sm shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:bg-indigo-500 hover:shadow-[0_0_30px_rgba(99,102,241,0.6)] hover:scale-[1.05] active:scale-95 transition-all duration-300 backdrop-blur-md whitespace-nowrap"
                                                     >
-                                                        {guidedStep === "time" ? "Confirmar y Continuar" : "Confirmar"}
+                                                        {guidedStep === "time" ? copy.confirmAndContinue : copy.confirm}
                                                     </button>
                                                 )}
                                             </div>
@@ -1381,7 +1378,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             : "bg-black/80 border border-white/10 hover:bg-white/[0.05]"
                                     )}
                                 >
-                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                     {isSelected && (
                                         <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", tn.bg)} />
                                     )}
@@ -1395,7 +1392,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         "text-xs font-bold uppercase tracking-wider z-10 transition-colors whitespace-nowrap",
                                         isSelected ? "text-white" : "text-white/50"
                                     )}>
-                                        {tn.label}
+                                        {getBlockTypeLabel(language, tn.value)}
                                     </span>
                                 </button>
                             );
@@ -1424,7 +1421,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             : "bg-black/80 border border-white/10 hover:bg-white/[0.05]"
                                     )}
                                 >
-                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" />
+                                    <GlowingEffect spread={30} proximity={60} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
                                     {isSelected && (
                                         <div className={cn("absolute inset-0 opacity-20 blur-xl transition-all", sn.bg)} />
                                     )}
@@ -1438,7 +1435,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                         "text-xs font-bold uppercase tracking-wider z-10 transition-colors whitespace-nowrap",
                                         isSelected ? "text-white" : "text-white/50"
                                     )}>
-                                        {sn.label}
+                                        {getBlockStatusLabel(language, sn.value)}
                                     </span>
                                 </button>
                             );
@@ -1454,7 +1451,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                         onClick={() => setIsAgendoOptionsOpen(true)}
                         className="pointer-events-auto px-6 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all font-semibold text-xs uppercase tracking-widest backdrop-blur-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)]"
                     >
-                        Opciones de Agendo
+                        {copy.agendoOptions}
                     </button>
                 </div>
             )}
@@ -1465,8 +1462,8 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     <div className="w-full max-w-md bg-[#09090b] border border-white/10 rounded-[2rem] p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                         <div className="flex justify-between items-start mb-6">
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">Sugerencias de Agendo</h3>
-                                <p className="text-xs text-white/50 mt-1">Ajustes tácticos recomendados por IA para este bloque.</p>
+                                <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-white/90">{copy.agendoSuggestions}</h3>
+                                <p className="text-xs text-white/50 mt-1">{copy.aiRecommended}</p>
                             </div>
                             <button
                                 onClick={() => setIsAgendoOptionsOpen(false)}
@@ -1481,14 +1478,14 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 onClick={() => void refreshPlanning()}
                                 className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white w-full"
                             >
-                                {planningLoading ? "Analizando..." : "Refrescar Sugerencias"}
+                                {planningLoading ? copy.analyzing : copy.refreshSuggestions}
                             </button>
                         </div>
 
                         <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                             {!planningLoading && planningRecommendations.length === 0 && (
                                 <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52 text-center">
-                                    Este bloque está bien estructurado y no requiere intervención por ahora.
+                                    {copy.noSuggestions}
                                 </div>
                             )}
 
@@ -1536,27 +1533,27 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     className="z-[460] bg-black/90 border-white/10 backdrop-blur-2xl text-white"
                 >
                     <AlertDialogHeader>
-                        <AlertDialogTitle>¿Eliminar bloque repetitivo?</AlertDialogTitle>
+                        <AlertDialogTitle>{copy.deleteRecurringTitle}</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/50">
-                            Este bloque forma parte de una repetición. ¿Deseas eliminar solo este horario o todos los horarios vinculados?
+                            {copy.deleteRecurringDescription}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
                         <AlertDialogCancel className="bg-white/5 border-transparent text-white hover:bg-white/10 hover:text-white mt-0 h-10">
-                            Cancelar
+                            {copy.cancel}
                         </AlertDialogCancel>
                         <div className="flex gap-2 w-full sm:w-auto">
                             <AlertDialogAction
                                 onClick={() => confirmDelete('one')}
                                 className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/20 w-full sm:w-auto h-10 flex-1"
                             >
-                                Solo este
+                                {copy.onlyThis}
                             </AlertDialogAction>
                             <AlertDialogAction
                                 onClick={() => confirmDelete('series')}
                                 className="bg-red-500 text-white hover:bg-red-600 w-full sm:w-auto h-10 flex-1"
                             >
-                                Todos
+                                {copy.all}
                             </AlertDialogAction>
                         </div>
                     </AlertDialogFooter>

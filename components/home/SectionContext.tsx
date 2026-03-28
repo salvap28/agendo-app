@@ -4,7 +4,7 @@ import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { Block } from "@/lib/types/blocks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Play, Flame, Activity, Clock, Sparkles, CheckCircle2, MinusCircle, SkipForward, BatteryCharging, BatteryMedium, BatteryWarning, Info } from "lucide-react";
+import { Calendar, Play, Sparkles, CheckCircle2, MinusCircle, SkipForward, BatteryCharging, BatteryMedium, BatteryWarning, Info } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -29,16 +29,14 @@ import {
 } from "@/lib/services/planningService";
 import { PlanningRecommendationCard } from "@/components/planning/PlanningRecommendationCard";
 import { GuidedPlanningSheet } from "@/components/planning/GuidedPlanningSheet";
-
-const BLOCK_LABELS: Record<string, string> = {
-    deep_work: "Deep Work",
-    meeting: "Meeting",
-    gym: "Gym",
-    study: "Study",
-    admin: "Admin",
-    break: "Break",
-    other: "Other",
-};
+import { useI18n } from "@/lib/i18n/client";
+import {
+    getActivityOutcomeLabel,
+    getBlockTypeLabel,
+    getEnergyImpactLabel,
+    getIntlLocale,
+    getPerceivedValueLabel,
+} from "@/lib/i18n/app";
 
 interface SectionContextProps {
     onNext: () => void;
@@ -55,13 +53,6 @@ interface HomeSummaryData {
     weekly_sessions_count: number;
     best_focus_window: "morning" | "afternoon" | "evening" | "night" | null;
 }
-
-const FOCUS_WINDOW_LABELS: Record<NonNullable<HomeSummaryData["best_focus_window"]>, string> = {
-    morning: "Morning",
-    afternoon: "Afternoon",
-    evening: "Evening",
-    night: "Night",
-};
 
 function ProfileCalibrationRing({ value, large }: { value: number; large?: boolean }) {
     const size = large ? 110 : 58;
@@ -135,6 +126,8 @@ function ProfileCalibrationRing({ value, large }: { value: number; large?: boole
 }
 
 export function SectionContext({ onNext }: SectionContextProps) {
+    const { language } = useI18n();
+    const intlLocale = getIntlLocale(language);
     const blocks = useBlocksStore((state) => state.blocks);
     const fetchBlocks = useBlocksStore((state) => state.fetchBlocks);
     const activityExperiences = useActivityExperienceStore((state) => state.experiences);
@@ -142,7 +135,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const recordCheckout = useActivityExperienceStore((state) => state.recordCheckout);
     const { session, returnToFocus, openFree } = useFocusStore();
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [userName, setUserName] = useState("Salva");
+    const [userName, setUserName] = useState("");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [summaryData, setSummaryData] = useState<HomeSummaryData | null>(null);
     const [planningRecommendations, setPlanningRecommendations] = useState<PlanningRecommendation[]>([]);
@@ -155,14 +148,105 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [dismissedCheckoutBlockIds, setDismissedCheckoutBlockIds] = useState<string[]>([]);
     const [showProfileInfo, setShowProfileInfo] = useState(false);
     const { settings } = useSettingsStore();
+    const copy = useMemo(() => (
+        language === "es"
+            ? {
+                fallbackName: "amigo",
+                goodMorning: "Buen dia",
+                goodAfternoon: "Buenas tardes",
+                goodEvening: "Buenas noches",
+                blockStartsInMinutes: (minutes: number) => `Empieza en ${minutes} minutos.`,
+                blockStartsNow: "Tu bloque empieza ahora.",
+                blockStartsInHour: "Tu bloque empieza en 1 hora.",
+                blockReminder: "Recordatorio de bloque",
+                dailyBriefing: "Resumen del dia",
+                dailyBriefingBody: (count: number) => `Tienes ${count} bloques preparados para hoy.`,
+                blockEndedTitle: (title: string) => `${title} termino`,
+                blockEndedBody: "Deja un check-in rapido en Agendo mientras todavia esta fresco.",
+                freeFocusSession: "Sesion de foco libre",
+                status: "Estado",
+                scheduleClear: "Tu agenda esta despejada.",
+                scheduleClearHelp: "Usa el dock de abajo para planificar o iniciar un bloque de foco limpio.",
+                focusPaused: "FOCO EN PAUSA · TOCA PARA VOLVER",
+                currentFocus: "FOCO ACTUAL",
+                nextFocusBlock: "SIGUIENTE BLOQUE DE FOCO",
+                unscheduledFocus: "Foco sin agenda",
+                fallbackFocus: "Foco",
+                profileFill: "Perfil cargado",
+                profileFillHelpLine1: "Se calibra con cada check-in, sesion de foco y bloque completado.",
+                profileFillHelpLine2: "Mas señal significa mejores recomendaciones y predicciones mas precisas.",
+                planningAssist: "Asistencia de planning",
+                planningAssistBody: "Ajustes inteligentes basados en tus patrones reales.",
+                nothingToAdjust: "No hay nada para ajustar ahora. Sigue asi.",
+                quickCheckIn: "Check-in rapido",
+                blockJustEnded: (title: string) => `${title} acaba de terminar`,
+                quickCheckInBody: "Unos pocos toques para capturar el resultado real.",
+                openBlock: "Abrir bloque",
+                outcome: "Resultado",
+                energy: "Energia",
+                value: "Valor",
+                later: "Despues",
+                saving: "Guardando...",
+                saveCheckIn: "Guardar check-in",
+                openCalendar: "Abrir calendario",
+                returnToFocus: "Volver al foco",
+                backToFocus: "Regresar al foco",
+                freeFocus: "Foco libre",
+                planDay: "Planificar dia",
+            }
+            : {
+                fallbackName: "there",
+                goodMorning: "Good morning",
+                goodAfternoon: "Good afternoon",
+                goodEvening: "Good evening",
+                blockStartsInMinutes: (minutes: number) => `Starts in ${minutes} minutes.`,
+                blockStartsNow: "Your block starts now.",
+                blockStartsInHour: "Your block starts in 1 hour.",
+                blockReminder: "Block reminder",
+                dailyBriefing: "Daily briefing",
+                dailyBriefingBody: (count: number) => `You have ${count} blocks lined up for today.`,
+                blockEndedTitle: (title: string) => `${title} ended`,
+                blockEndedBody: "Leave a quick check-in in Agendo while it is still fresh.",
+                freeFocusSession: "Free Focus Session",
+                status: "Status",
+                scheduleClear: "Your schedule is clear.",
+                scheduleClearHelp: "Use the dock below to plan or start a clean focus block.",
+                focusPaused: "FOCUS PAUSED · TAP TO RETURN",
+                currentFocus: "CURRENT FOCUS",
+                nextFocusBlock: "NEXT FOCUS BLOCK",
+                unscheduledFocus: "Unscheduled Focus",
+                fallbackFocus: "Focus",
+                profileFill: "Profile fill",
+                profileFillHelpLine1: "It calibrates with every check-in, focus session, and completed block.",
+                profileFillHelpLine2: "More signal means better recommendations and sharper predictions.",
+                planningAssist: "Planning assist",
+                planningAssistBody: "Smart adjustments based on your real patterns.",
+                nothingToAdjust: "Nothing to adjust right now. Keep going.",
+                quickCheckIn: "Quick check-in",
+                blockJustEnded: (title: string) => `${title} just ended`,
+                quickCheckInBody: "A few taps to capture the real outcome.",
+                openBlock: "Open block",
+                outcome: "Outcome",
+                energy: "Energy",
+                value: "Value",
+                later: "Later",
+                saving: "Saving...",
+                saveCheckIn: "Save check-in",
+                openCalendar: "Open Calendar",
+                returnToFocus: "Return to Focus",
+                backToFocus: "Back to Focus",
+                freeFocus: "Free Focus",
+                planDay: "Plan day",
+            }
+    ), [language]);
 
     const sentNotificationsRef = useRef<Set<string>>(new Set());
     const greeting = useMemo(() => {
         const hour = currentTime.getHours();
-        if (hour < 12) return "Good morning";
-        if (hour < 18) return "Good afternoon";
-        return "Good evening";
-    }, [currentTime]);
+        if (hour < 12) return copy.goodMorning;
+        if (hour < 18) return copy.goodAfternoon;
+        return copy.goodEvening;
+    }, [copy, currentTime]);
 
     const planningSignature = useMemo(() => (
         blocks
@@ -221,11 +305,11 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     if (!sentNotificationsRef.current.has(notifId)) {
                         sentNotificationsRef.current.add(notifId);
 
-                        let bodyMsg = `Starts in ${offset} minutes.`;
-                        if (offset === 0) bodyMsg = "Your block starts now.";
-                        else if (offset === 60) bodyMsg = "Your block starts in 1 hour.";
+                        let bodyMsg = copy.blockStartsInMinutes(offset);
+                        if (offset === 0) bodyMsg = copy.blockStartsNow;
+                        else if (offset === 60) bodyMsg = copy.blockStartsInHour;
 
-                        sendNotification(block.title || "Block reminder", {
+                        sendNotification(block.title || copy.blockReminder, {
                             body: bodyMsg,
                             icon: "/favicon.ico"
                         });
@@ -233,7 +317,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 }
             });
         });
-    }, [currentTime, blocks, settings.notify_block_reminders]);
+    }, [blocks, copy, currentTime, settings.notify_block_reminders]);
 
     // Daily Briefing Logic
     useEffect(() => {
@@ -248,15 +332,15 @@ export function SectionContext({ onNext }: SectionContextProps) {
             if (hour >= 6 && hour < 12 && blocks.length > 0) {
                 const todayBlocks = blocks.filter(b => isSameDay(b.startAt, new Date()));
                 if (todayBlocks.length > 0) {
-                    sendNotification("Daily Briefing", {
-                        body: `You have ${todayBlocks.length} blocks lined up for today.`,
+                    sendNotification(copy.dailyBriefing, {
+                        body: copy.dailyBriefingBody(todayBlocks.length),
                         icon: "/favicon.ico"
                     });
                     localStorage.setItem('agendo:lastBriefing', todayStr);
                 }
             }
         }
-    }, [blocks, settings.notify_daily_briefing]);
+    }, [blocks, copy, settings.notify_daily_briefing]);
 
     useEffect(() => {
         void fetchDayExperiences(currentDayKey);
@@ -297,13 +381,13 @@ export function SectionContext({ onNext }: SectionContextProps) {
             && !sentNotificationsRef.current.has(reminderId)
         ) {
             sentNotificationsRef.current.add(reminderId);
-            void sendNotification(`${pendingCheckoutBlock.block.title} ended`, {
-                body: "Leave a quick check-in in Agendo while it is still fresh.",
+            void sendNotification(copy.blockEndedTitle(pendingCheckoutBlock.block.title), {
+                body: copy.blockEndedBody,
                 icon: "/favicon.ico",
                 tag: reminderId,
             });
         }
-    }, [currentTime, pendingCheckoutBlock, settings.notify_block_reminders]);
+    }, [copy, currentTime, pendingCheckoutBlock, settings.notify_block_reminders]);
 
     useEffect(() => {
         if (!pendingCheckoutBlock) return;
@@ -348,7 +432,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
         // Keep current time updated for block checking (every minute)
         const interval = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(interval);
-    }, []);
+    }, [language]);
 
     const refreshPlanning = useCallback(async () => {
         try {
@@ -380,8 +464,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
             await fetchBlocks();
             await refreshPlanning();
         } catch (error) {
-            // "requires manual review" is an expected server guard, not a real error
-            if (error instanceof Error && error.message.includes("manual review")) {
+            const isManualReviewGuard = error instanceof Error
+                && (error.message.toLowerCase().includes("manual review") || error.message.toLowerCase().includes("revision manual"));
+
+            if (isManualReviewGuard) {
                 console.info("[Planning] Recommendation requires manual review, skipping auto-apply.");
             } else {
                 console.error("Failed to apply planning recommendation", error);
@@ -435,7 +521,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                         marginBottom: '0'
                     }}
                 >
-                    {greeting}, {userName}.
+                    {greeting}, {userName || copy.fallbackName}.
                 </h2>
 
                 {/* Next Block Protagonist */}
@@ -451,7 +537,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                 displayBlock = {
                                     id: "free-session",
                                     type: "other",
-                                    title: "Free Focus Session",
+                                    title: copy.freeFocusSession,
                                     startAt: new Date(session.startedAt ?? currentTime.toISOString()),
                                     endAt: currentTime,
                                     status: "active"
@@ -483,7 +569,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                             marginBottom: '16px'
                                         }}
                                     >
-                                        STATUS
+                                        {copy.status}
                                     </span>
                                     <p
                                         className="line-clamp-2 text-center"
@@ -494,10 +580,10 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                             color: '#FFFFFF'
                                         }}
                                     >
-                                        Your schedule is clear.
+                                        {copy.scheduleClear}
                                     </p>
                                     <p className="mt-2 max-w-[420px] text-center text-sm text-white/48">
-                                        Use the dock below to plan or start a clean focus block.
+                                        {copy.scheduleClearHelp}
                                     </p>
                                 </div>
                             );
@@ -520,7 +606,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     }}
                                     className={isSessionPaused ? "animate-pulse" : ""}
                                 >
-                                    {isSessionPaused ? "FOCUS PAUSED - TAP TO RETURN" : isFocusCardActive ? "CURRENT FOCUS" : "NEXT FOCUS BLOCK"}
+                                    {isSessionPaused ? copy.focusPaused : isFocusCardActive ? copy.currentFocus : copy.nextFocusBlock}
                                 </span>
 
                                 {/* Glass Pill for Block */}
@@ -591,9 +677,11 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                                 color: '#FFFFFF'
                                             }}
                                         >
-                                            {displayBlock.id === "free-session" ? "Unscheduled Focus" : `${displayBlock.startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${displayBlock.endAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                                            <span className="mx-2 opacity-30">•</span>
-                                            {BLOCK_LABELS[displayBlock.type] || "Focus"}
+                                            {displayBlock.id === "free-session"
+                                                ? copy.unscheduledFocus
+                                                : `${displayBlock.startAt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" })} - ${displayBlock.endAt.toLocaleTimeString(intlLocale, { hour: "2-digit", minute: "2-digit" })}`}
+                                            <span className="mx-2 opacity-30">·</span>
+                                            {getBlockTypeLabel(language, displayBlock.type) || copy.fallbackFocus}
                                         </p>
                                     </div>
                                 </div>
@@ -615,7 +703,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     WebkitTextFillColor: 'transparent',
                                 }}
                             >
-                                Profile fill
+                                {copy.profileFill}
                             </span>
                             <div
                                 className="relative"
@@ -653,13 +741,13 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                                 WebkitBackgroundClip: 'text',
                                                 WebkitTextFillColor: 'transparent',
                                             }}>
-                                                Profile Fill
+                                                {copy.profileFill}
                                             </p>
                                             <p className="text-[11px] leading-[1.55] text-white/45">
-                                                Se calibra con cada check-in, sesión de focus y bloque completado.
+                                                {copy.profileFillHelpLine1}
                                             </p>
                                             <p className="mt-1.5 text-[11px] leading-[1.55] text-white/35">
-                                                Más lleno → mejores recomendaciones y predicciones más precisas.
+                                                {copy.profileFillHelpLine2}
                                             </p>
                                         </div>
                                     </div>
@@ -687,17 +775,17 @@ export function SectionContext({ onNext }: SectionContextProps) {
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
                         }}>
-                            Planning assist
+                            {copy.planningAssist}
                         </p>
                     </div>
                     <p className="mb-3 text-[13px] font-medium tracking-tight text-white/55">
-                        Smart adjustments based on your real patterns.
+                        {copy.planningAssistBody}
                     </p>
 
                     <div className="grid gap-2">
                         {planningRecommendations.length === 0 ? (
                             <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] px-4 py-4 text-[13px] leading-6 text-white/45 italic">
-                                Nothing to adjust right now. Keep going.
+                                {copy.nothingToAdjust}
                             </div>
                         ) : (
                             planningRecommendations.map((recommendation) => (
@@ -737,37 +825,40 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                             WebkitBackgroundClip: 'text',
                                             WebkitTextFillColor: 'transparent',
                                         }}>
-                                            Quick check-in
+                                            {copy.quickCheckIn}
                                         </p>
                                     </div>
                                     <h3 className="mt-1.5 text-[15px] font-semibold tracking-tight text-white">
-                                        {pendingCheckoutBlock.block.title} just ended
+                                        {copy.blockJustEnded(pendingCheckoutBlock.block.title)}
                                     </h3>
                                     <p className="mt-1 text-[13px] leading-5 text-white/50">
-                                        A few taps to capture the real outcome.
+                                        {copy.quickCheckInBody}
                                     </p>
                                 </div>
                                 <button
                                     onClick={() => setSelectedBlockId(pendingCheckoutBlock.block.id)}
                                     className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/55 transition-all hover:bg-white/[0.08] hover:text-white hover:border-white/20 hover:scale-105"
                                 >
-                                    Open block
+                                    {copy.openBlock}
                                 </button>
                             </div>
 
                             <div className="flex flex-col gap-3">
                                 {/* Outcome — segmented pill */}
                                 <div>
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Outcome</p>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">{copy.outcome}</p>
                                     {(() => {
                                         const outcomeOptions = [
                                             {
                                                 value: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block),
-                                                label: getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block) === "attended" ? "Attended" : "Done",
+                                                label: getActivityOutcomeLabel(
+                                                    language,
+                                                    getDefaultActivityCheckoutOutcome(pendingCheckoutBlock.block),
+                                                ),
                                                 icon: CheckCircle2,
                                             },
-                                            { value: "partial" as ActivityOutcome, label: "Partial", icon: MinusCircle },
-                                            { value: "skipped" as ActivityOutcome, label: "Skipped", icon: SkipForward },
+                                            { value: "partial" as ActivityOutcome, label: getActivityOutcomeLabel(language, "partial"), icon: MinusCircle },
+                                            { value: "skipped" as ActivityOutcome, label: getActivityOutcomeLabel(language, "skipped"), icon: SkipForward },
                                         ];
                                         const activeIdx = outcomeOptions.findIndex(o => o.value === checkoutOutcome);
                                         return (
@@ -808,12 +899,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     <>
                                         {/* Energy — segmented pill */}
                                         <div className="animate-in fade-in zoom-in-95 duration-300">
-                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Energy</p>
+                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">{copy.energy}</p>
                                             {(() => {
                                                 const energyOptions = [
-                                                    { value: "restorative" as EnergyImpact, label: "Restored", icon: BatteryCharging, color: 'rgba(110,231,183,' },
-                                                    { value: "neutral" as EnergyImpact, label: "Neutral", icon: BatteryMedium, color: 'rgba(131,176,255,' },
-                                                    { value: "draining" as EnergyImpact, label: "Drained", icon: BatteryWarning, color: 'rgba(251,113,133,' },
+                                                    { value: "restorative" as EnergyImpact, label: getEnergyImpactLabel(language, "restorative"), icon: BatteryCharging, color: 'rgba(110,231,183,' },
+                                                    { value: "neutral" as EnergyImpact, label: getEnergyImpactLabel(language, "neutral"), icon: BatteryMedium, color: 'rgba(131,176,255,' },
+                                                    { value: "draining" as EnergyImpact, label: getEnergyImpactLabel(language, "draining"), icon: BatteryWarning, color: 'rgba(251,113,133,' },
                                                 ];
                                                 const activeIdx = energyOptions.findIndex(o => o.value === checkoutEnergyImpact);
                                                 const activeColor = activeIdx >= 0 ? energyOptions[activeIdx].color : energyOptions[1].color;
@@ -852,12 +943,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
 
                                         {/* Value — segmented pill */}
                                         <div className="animate-in fade-in zoom-in-95 duration-300 delay-75">
-                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Value</p>
+                                            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">{copy.value}</p>
                                             {(() => {
                                                 const valueOptions = [
-                                                    { value: "low" as PerceivedValue, label: "Low", color: 'rgba(255,255,255,' },
-                                                    { value: "medium" as PerceivedValue, label: "Medium", color: 'rgba(131,176,255,' },
-                                                    { value: "high" as PerceivedValue, label: "High", color: 'rgba(110,231,183,' },
+                                                    { value: "low" as PerceivedValue, label: getPerceivedValueLabel(language, "low"), color: 'rgba(255,255,255,' },
+                                                    { value: "medium" as PerceivedValue, label: getPerceivedValueLabel(language, "medium"), color: 'rgba(131,176,255,' },
+                                                    { value: "high" as PerceivedValue, label: getPerceivedValueLabel(language, "high"), color: 'rgba(110,231,183,' },
                                                 ];
                                                 const activeIdx = valueOptions.findIndex(o => o.value === checkoutPerceivedValue);
                                                 const activeColor = activeIdx >= 0 ? valueOptions[activeIdx].color : valueOptions[1].color;
@@ -900,7 +991,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                     onClick={handleDismissQuickCheckout}
                                     className="rounded-full border border-white/[0.08] px-4 py-1.5 text-[12px] font-medium text-white/45 transition-all hover:bg-white/[0.04] hover:text-white/70 hover:scale-[1.02]"
                                 >
-                                    Later
+                                    {copy.later}
                                 </button>
                                 <button
                                     onClick={handleSaveQuickCheckout}
@@ -911,7 +1002,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                                         boxShadow: '0 4px 20px -4px rgba(251,191,36,0.4)',
                                     }}
                                 >
-                                    {checkoutSaving ? "Saving..." : "Save check-in"}
+                                    {checkoutSaving ? copy.saving : copy.saveCheckIn}
                                 </button>
                             </div>
                         </div>
@@ -932,24 +1023,24 @@ export function SectionContext({ onNext }: SectionContextProps) {
                     <div className="grid gap-2 sm:grid-cols-3">
                         <GlassButton onClick={() => setPlanningOpen(true)} variant="default" className="justify-center">
                             <Sparkles className="h-4 w-4 opacity-80" />
-                            Plan
+                            {copy.planDay}
                         </GlassButton>
                         <GlassButton onClick={onNext} variant="default" className="justify-center">
                             <Calendar className="w-4 h-4 opacity-70" />
-                            Open Calendar
+                            {copy.openCalendar}
                         </GlassButton>
                         {session && !session.isActive ? (
                             <GlassButton onClick={returnToFocus} variant="primary" className="justify-center">
-                                Return to Focus
+                                {copy.returnToFocus}
                             </GlassButton>
                         ) : session ? (
                             <GlassButton onClick={returnToFocus} variant="primary" className="justify-center">
-                                Back to Focus
+                                {copy.backToFocus}
                             </GlassButton>
                         ) : (
                             <GlassButton onClick={openFree} variant="default" className="justify-center">
                                 <Play className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                                Free Focus
+                                {copy.freeFocus}
                             </GlassButton>
                         )}
                     </div>

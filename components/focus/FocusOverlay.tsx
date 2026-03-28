@@ -25,17 +25,9 @@ import { FocusEntryRitual } from './FocusEntryRitual';
 import { GlassButton } from '@/components/ui/glass-button';
 import { useFocusNow } from '@/hooks/useFocusNow';
 import { useFocusRuntimeSignals } from '@/hooks/useFocusRuntimeSignals';
-
-const BLOCK_TYPE_LABELS: Record<string, string> = {
-    deep_work: "Deep Work",
-    study: "Study",
-    gym: "Training",
-    meeting: "Meeting",
-    admin: "Admin",
-    break: "Break",
-    other: "Focus",
-    free: "Free Focus",
-};
+import { useI18n } from "@/lib/i18n/client";
+import { getBlockTypeLabel } from "@/lib/i18n/app";
+import { getFocusOverlayCopy } from "@/lib/i18n/ui";
 
 type RuntimeToast = FocusCardType & { source: "engine" | "system" };
 const CARD_FOREGROUND_EXPOSURE_MS = 900;
@@ -52,8 +44,8 @@ function createSystemToast(id: string, title: string, description?: string): Run
     };
 }
 
-function ModeBadge({ type }: { type?: string }) {
-    const label = BLOCK_TYPE_LABELS[type ?? "other"] ?? "Focus";
+function ModeBadge({ type, language }: { type?: string; language: "en" | "es" }) {
+    const label = getBlockTypeLabel(language, type === "free" ? "free" : (type ?? "other"));
     return (
         <div
             className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 backdrop-blur-sm"
@@ -66,23 +58,26 @@ function ModeBadge({ type }: { type?: string }) {
     );
 }
 
-function getLayerLabel(session: NonNullable<ReturnType<typeof useFocusStore.getState>["session"]>) {
+function getLayerLabel(
+    session: NonNullable<ReturnType<typeof useFocusStore.getState>["session"]>,
+    copy: ReturnType<typeof getFocusOverlayCopy>,
+) {
     if (!session.activeLayer) return null;
     if (session.activeLayer.kind === "studyTechnique") {
-        if (session.activeLayer.id === "study_50_10") return "50/10 - Focus";
+        if (session.activeLayer.id === "study_50_10") return copy.layerLabels.study5010;
         if (session.activeLayer.id === "active_recall") return "Active Recall";
-        return "Pomodoro 25/5";
+        return copy.layerLabels.pomodoro;
     }
     if (session.activeLayer.kind === "gymMode") {
-        return "Gym Mode";
+        return copy.layerLabels.gymMode;
     }
     if (session.activeLayer.id === "micro_commit_layer") {
-        return "Micro Commit 5:00";
+        return copy.layerLabels.microCommit;
     }
     if (session.activeLayer.id === "focus_protection_layer") {
-        return "Proteccion de foco";
+        return copy.layerLabels.focusProtection;
     }
-    return "Intervencion activa";
+    return copy.layerLabels.activeIntervention;
 }
 
 function getAttentionAidRemaining(session: NonNullable<ReturnType<typeof useFocusStore.getState>["session"]>, now: number) {
@@ -106,6 +101,7 @@ function getAttentionAidRemaining(session: NonNullable<ReturnType<typeof useFocu
 }
 
 export function FocusOverlay() {
+    const { language } = useI18n();
     const {
         session,
         lastSession,
@@ -152,6 +148,7 @@ export function FocusOverlay() {
     const [exitGuardArmed, setExitGuardArmed] = React.useState(false);
     const [activeCarouselCardId, setActiveCarouselCardId] = React.useState<string | null>(null);
     const [activeEngineToastId, setActiveEngineToastId] = React.useState<string | null>(null);
+    const copy = React.useMemo(() => getFocusOverlayCopy(language), [language]);
 
     React.useEffect(() => {
         requestNotificationPermission();
@@ -171,9 +168,9 @@ export function FocusOverlay() {
 
     const engineResult = React.useMemo(() => (
         context
-            ? evaluateFocusContext(context)
+            ? evaluateFocusContext(context, language)
             : { visibleCards: [], toastCards: [], suggestedLayers: [], sessionState: null }
-    ), [context]);
+    ), [context, language]);
 
     const isMicroCommitActive = session?.activeLayer?.kind === "attentionAid" && session.activeLayer.id === "micro_commit_layer";
     const isFocusProtectionActive = session?.activeLayer?.kind === "attentionAid" && session.activeLayer.id === "focus_protection_layer";
@@ -184,7 +181,7 @@ export function FocusOverlay() {
         if (!isMicroCommitActive || !session || !attentionAidTimer || attentionAidTimer.remainingSec > 0) return;
 
         setLayer(null);
-        addToHistory("Micro commit completed");
+        addToHistory(copy.microCommitCompleted);
         recordIntervention({
             type: "micro_commit_layer",
             sourceCard: "card_micro_commit",
@@ -193,10 +190,10 @@ export function FocusOverlay() {
         });
         setSystemToast(createSystemToast(
             "system_micro_commit_complete",
-            "Bien. Ya arrancaste.",
-            "Ahora segui con el bloque principal."
+            copy.startedTitle,
+            copy.startedBody,
         ));
-    }, [addToHistory, attentionAidTimer, isMicroCommitActive, recordIntervention, session, setLayer]);
+    }, [addToHistory, attentionAidTimer, copy.microCommitCompleted, copy.startedBody, copy.startedTitle, isMicroCommitActive, recordIntervention, session, setLayer]);
 
     React.useEffect(() => {
         if (!systemToast) return;
@@ -306,7 +303,7 @@ export function FocusOverlay() {
                     recordCardOutcome(card.id, "accepted", now);
                     const layerId = String(action.payload.layerId) as "micro_commit_layer" | "focus_protection_layer";
                     setLayer(createAttentionAidLayer(layerId));
-                    addToHistory(`Attention aid enabled: ${layerId}`);
+                    addToHistory(copy.attentionAidEnabled(layerId));
                     recordIntervention({
                         type: layerId,
                         ...interventionSource,
@@ -316,7 +313,7 @@ export function FocusOverlay() {
                 } else if (action.payload?.layerId === 'active_recall') {
                     recordCardOutcome(card.id, "accepted", now);
                     setLayer(createStudyLayer('active_recall'));
-                    addToHistory("Active recall prompt opened");
+                    addToHistory(copy.activeRecallOpened);
                     recordIntervention({
                         type: "active_recall",
                         ...interventionSource,
@@ -384,7 +381,7 @@ export function FocusOverlay() {
                         if (previousNextStep) {
                             setSessionNextStep(previousNextStep);
                         }
-                        addToHistory("Previous intention restored");
+                addToHistory(copy.previousRestored);
                         recordIntervention({
                             type: card.id,
                             ...interventionSource,
@@ -424,7 +421,7 @@ export function FocusOverlay() {
                     });
                 } else if (action.payload?.action === "completeClosureBridge") {
                     recordCardOutcome(card.id, "accepted", now);
-                    addToHistory("Closure bridge acknowledged");
+                    addToHistory(copy.closureBridgeAcknowledged);
                     recordIntervention({
                         type: card.id,
                         ...interventionSource,
@@ -452,8 +449,8 @@ export function FocusOverlay() {
             setExitGuardArmed(true);
             setSystemToast(createSystemToast(
                 "system_focus_protection",
-                "Proteccion de foco activa",
-                "Presiona otra vez si igual queres salir."
+                copy.focusProtectionActive,
+                language === "es" ? "Presiona otra vez si igual quieres salir." : "Press again if you still want to leave."
             ));
             return;
         }
@@ -485,7 +482,7 @@ export function FocusOverlay() {
 
                 <div className="relative z-10 flex shrink-0 items-start justify-between px-4 pb-0 pt-6 sm:px-8 sm:pt-8">
                     <div className="flex flex-col gap-2">
-                        <ModeBadge type={session.blockType} />
+                <ModeBadge type={session.blockType} language={language} />
                     </div>
 
                     <button
@@ -513,12 +510,12 @@ export function FocusOverlay() {
 
             <div className="relative z-10 flex shrink-0 items-start justify-between px-4 pb-0 pt-6 animate-in slide-in-from-top-8 fade-in duration-1000 delay-150 fill-mode-both sm:px-8 sm:pt-8">
                 <div className="flex flex-col gap-2">
-                    <ModeBadge type={session.blockType} />
+                <ModeBadge type={session.blockType} language={language} />
 
                     {session.activeLayer && (
                         <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 shadow-sm backdrop-blur-md">
                             <span className="text-[11px] font-medium tracking-wide text-white/50">
-                                {getLayerLabel(session)}
+                            {getLayerLabel(session, copy)}
                             </span>
                             <button
                                 onClick={() => setLayer(null)}
@@ -547,7 +544,7 @@ export function FocusOverlay() {
                                         openIntentEditor(true, "nextStep");
                                     }}
                                     className="flex h-5 w-5 items-center justify-center rounded-full border border-white/20 text-transparent transition-all hover:border-green-400 hover:bg-green-400/10 hover:text-green-400"
-                                    title="Marcar avance y definir el siguiente paso"
+                                title={copy.markProgress}
                                 >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             </button>
@@ -557,7 +554,7 @@ export function FocusOverlay() {
                             <button
                                 onClick={() => useFocusStore.getState().setSessionIntention("")}
                                 className="flex h-5 w-5 items-center justify-center rounded-full text-white/30 opacity-0 transition-all hover:bg-white/10 hover:text-white/80 group-hover:opacity-100"
-                                title="Eliminar"
+                                title={copy.remove}
                             >
                                 <X className="h-3 w-3" />
                             </button>
@@ -609,7 +606,7 @@ export function FocusOverlay() {
 
                         {currentPhase && session.activeLayer?.kind === "studyTechnique" && session.activeLayer.id !== "active_recall" && (
                             <span className="text-sm font-medium uppercase tracking-widest text-white/60">
-                                {session.activeLayer.id === "study_50_10" ? "50/10" : "Pomodoro"} - {currentPhase === "focus" ? "Focus" : "Break"}
+                                {session.activeLayer.id === "study_50_10" ? "50/10" : "Pomodoro"} - {currentPhase === "focus" ? copy.currentPhaseFocus : copy.currentPhaseBreak}
                             </span>
                         )}
                         {isMicroCommitActive && (
@@ -619,7 +616,7 @@ export function FocusOverlay() {
                         )}
                         {isFocusProtectionActive && (
                             <span className="text-sm font-medium uppercase tracking-widest text-emerald-200/70">
-                                Proteccion de foco activa
+                                {copy.focusProtectionActive}
                             </span>
                         )}
                     </div>

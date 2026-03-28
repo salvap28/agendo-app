@@ -5,6 +5,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { login, signup } from "./actions";
 import { cn } from "@/lib/cn";
+import type { AppLanguage } from "@/lib/i18n/messages";
+import { getMessages } from "@/lib/i18n/messages";
 
 type Tab = "signin" | "signup";
 type Direction = 1 | -1;
@@ -15,43 +17,24 @@ type Message = {
 
 const TAB_ORDER: Tab[] = ["signin", "signup"];
 
-const TAB_CONTENT: Record<
-    Tab,
-    {
-        title: string;
-        description: string;
-        submitLabel: string;
-        helper: string;
-    }
-> = {
-    signin: {
-        title: "Entrá en tu ritmo.",
-        description: "Ingresá con tu email o usuario para retomar tu espacio.",
-        submitLabel: "Sincronizar mi espacio",
-        helper: "Tu sesión te devuelve al día donde lo dejaste.",
-    },
-    signup: {
-        title: "Creá tu sistema.",
-        description: "Creá tu cuenta y activá tu sistema desde el correo de confirmación.",
-        submitLabel: "Crear mi sistema",
-        helper: "Recibirás un email para confirmar tu cuenta.",
-    },
-};
-
 function SegmentedTabs({
     active,
     onChange,
     disabled,
+    language,
 }: {
     active: Tab;
     onChange: (tab: Tab) => void;
     disabled: boolean;
+    language: AppLanguage;
 }) {
+    const t = getMessages(language);
+
     return (
         <div className="grid grid-cols-2 rounded-[1.15rem] border border-white/8 bg-white/[0.02] p-1 backdrop-blur-xl">
             {([
-                { id: "signin" as const, label: "Entrar" },
-                { id: "signup" as const, label: "Crear cuenta" },
+                { id: "signin" as const, label: t.login.signInTab },
+                { id: "signup" as const, label: t.login.signUpTab },
             ]).map((tab) => {
                 const isActive = active === tab.id;
 
@@ -112,6 +95,7 @@ function AuthField({
     autoComplete,
     maxLength,
     autoFocus,
+    language,
 }: {
     id: string;
     name: string;
@@ -122,7 +106,9 @@ function AuthField({
     autoComplete?: string;
     maxLength?: number;
     autoFocus?: boolean;
+    language: AppLanguage;
 }) {
+    const t = getMessages(language);
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === "password";
     const resolvedType = isPassword ? (showPassword ? "text" : "password") : type;
@@ -156,7 +142,7 @@ function AuthField({
                         tabIndex={-1}
                         onClick={() => setShowPassword((current) => !current)}
                         className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-white/28 transition-colors hover:bg-white/[0.03] hover:text-white/60"
-                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        aria-label={showPassword ? t.login.hidePassword : t.login.showPassword}
                     >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -169,10 +155,13 @@ function AuthField({
 export function LoginForm({
     error: initialError,
     success: initialSuccess,
+    language,
 }: {
     error?: string;
     success?: string;
+    language: AppLanguage;
 }) {
+    const t = getMessages(language);
     const [isPending, startTransition] = useTransition();
     const [tab, setTab] = useState<Tab>("signin");
     const [tabDirection, setTabDirection] = useState<Direction>(1);
@@ -184,7 +173,20 @@ export function LoginForm({
                 : null
     );
     const reducedMotion = useReducedMotion();
-    const copy = TAB_CONTENT[tab];
+
+    const copy = tab === "signin"
+        ? {
+            title: t.login.signInTitle,
+            description: t.login.signInDescription,
+            submitLabel: t.login.signInCta,
+            helper: t.login.signInHelper,
+        }
+        : {
+            title: t.login.signUpTitle,
+            description: t.login.signUpDescription,
+            submitLabel: t.login.signUpCta,
+            helper: t.login.signUpHelper,
+        };
 
     const formMotion = reducedMotion
         ? {}
@@ -235,6 +237,7 @@ export function LoginForm({
         setMessage(null);
 
         const formData = new FormData(event.currentTarget);
+        formData.set("language", language);
 
         startTransition(async () => {
             const result = tab === "signin" ? await login(formData) : await signup(formData);
@@ -256,7 +259,7 @@ export function LoginForm({
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0))]" />
 
                 <div className="relative p-5 sm:p-7">
-                    <SegmentedTabs active={tab} onChange={handleTabChange} disabled={isPending} />
+                    <SegmentedTabs active={tab} onChange={handleTabChange} disabled={isPending} language={language} />
 
                     <AnimatePresence mode="wait" initial={false} custom={tabDirection}>
                         <motion.div key={tab} className="mt-7" custom={tabDirection} {...contentMotion}>
@@ -274,17 +277,20 @@ export function LoginForm({
                             </div>
 
                             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
+                                <input type="hidden" name="language" value={language} />
+
                                 {tab === "signup" && (
                                     <AuthField
                                         id="username"
                                         name="username"
-                                        label="Usuario"
+                                        label={t.login.username}
                                         type="text"
-                                        placeholder="Nombre de usuario"
+                                        placeholder={t.login.usernamePlaceholder}
                                         icon={UserRound}
                                         maxLength={20}
                                         autoComplete="username"
                                         autoFocus
+                                        language={language}
                                     />
                                 )}
 
@@ -292,39 +298,42 @@ export function LoginForm({
                                     <AuthField
                                         id="loginId"
                                         name="loginId"
-                                        label="Email o usuario"
+                                        label={t.login.emailOrUsername}
                                         type="text"
-                                        placeholder="tu@email.com o tu usuario"
+                                        placeholder={t.login.emailOrUsernamePlaceholder}
                                         icon={Mail}
                                         autoComplete="username"
                                         autoFocus
+                                        language={language}
                                     />
                                 ) : (
                                     <AuthField
                                         id="email"
                                         name="email"
-                                        label="Email"
+                                        label={t.login.email}
                                         type="email"
-                                        placeholder="tu@email.com"
+                                        placeholder={t.login.emailPlaceholder}
                                         icon={Mail}
                                         autoComplete="email"
+                                        language={language}
                                     />
                                 )}
 
                                 <AuthField
                                     id="password"
                                     name="password"
-                                    label="Contraseña"
+                                    label={t.login.password}
                                     type="password"
-                                    placeholder={tab === "signin" ? "Tu contraseña" : "Crea una contraseña segura"}
+                                    placeholder={tab === "signin" ? t.login.passwordPlaceholderSignIn : t.login.passwordPlaceholderSignUp}
                                     icon={LockKeyhole}
                                     autoComplete={tab === "signin" ? "current-password" : "new-password"}
+                                    language={language}
                                 />
 
                                 {tab === "signin" && (
                                     <div className="-mt-1 flex justify-end">
                                         <button type="button" className="text-xs text-white/50 transition-colors hover:text-white">
-                                            ¿Olvidaste tu contraseña?
+                                            {t.login.forgotPassword}
                                         </button>
                                     </div>
                                 )}
@@ -333,11 +342,12 @@ export function LoginForm({
                                     <AuthField
                                         id="confirmPassword"
                                         name="confirmPassword"
-                                        label="Confirmar contraseña"
+                                        label={t.login.confirmPassword}
                                         type="password"
-                                        placeholder="Repite tu contraseña"
+                                        placeholder={t.login.confirmPasswordPlaceholder}
                                         icon={CheckCircle2}
                                         autoComplete="new-password"
+                                        language={language}
                                     />
                                 )}
 
@@ -360,7 +370,7 @@ export function LoginForm({
                                             {isPending ? (
                                                 <span className="inline-flex items-center gap-3">
                                                     <span className="h-4 w-4 animate-spin rounded-full border border-white/25 border-t-white/90" />
-                                                    Sincronizando...
+                                                    {t.login.syncing}
                                                 </span>
                                             ) : (
                                                 <>

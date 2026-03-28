@@ -5,6 +5,8 @@ import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { createAttentionAidLayer } from "@/lib/engines/layersEngine";
+import { useI18n } from "@/lib/i18n/client";
+import { getFocusInterventionCopy } from "@/lib/i18n/ui";
 
 type Option = {
     label: string;
@@ -16,6 +18,7 @@ export function FocusInterventionModal({
 }: {
     onOpenIntentInput: (field?: "intention" | "nextStep") => void;
 }) {
+    const { language } = useI18n();
     const {
         intervention,
         closeIntervention,
@@ -29,6 +32,8 @@ export function FocusInterventionModal({
         recordCardOutcome,
     } = useFocusStore();
 
+    const copy = React.useMemo(() => getFocusInterventionCopy(language), [language]);
+
     const initialClosureNote = String(intervention?.payload?.closureNote || "").trim();
     const [closureDraft, setClosureDraft] = React.useState(initialClosureNote);
 
@@ -41,19 +46,19 @@ export function FocusInterventionModal({
     const payloadIntention = String(intervention.payload?.intention || "").trim();
     const payloadNextStep = String(intervention.payload?.nextStep || "").trim();
     const payloadMinimumViable = String(intervention.payload?.minimumViable || "").trim();
-    const fallbackMinimumViable = payloadMinimumViable || payloadNextStep || payloadIntention || "Hacer una parte mas chica";
-    const fallbackNextStep = payloadNextStep || payloadMinimumViable || payloadIntention || "Definir el siguiente paso";
+    const fallbackMinimumViable = payloadMinimumViable || payloadNextStep || payloadIntention || copy.defaultMinimumViable;
+    const fallbackNextStep = payloadNextStep || payloadMinimumViable || payloadIntention || copy.defaultNextStep;
 
     let title = "";
     let description = "";
     let options: Option[] = [];
 
     if (intervention.kind === "reduce_scope") {
-        title = "Reduci el alcance";
-        description = "Elegi la version minima que todavia te haga avanzar.";
+        title = copy.reduceScope.title;
+        description = copy.reduceScope.description;
         options = [
             {
-                label: "Trabajar 5 min",
+                label: copy.reduceScope.workFive,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -65,7 +70,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Hacer primer paso",
+                label: copy.reduceScope.firstStep,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -82,7 +87,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Dividir tarea",
+                label: copy.reduceScope.splitTask,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -97,13 +102,13 @@ export function FocusInterventionModal({
             },
         ];
     } else if (intervention.kind === "reset_clarity") {
-        title = "Volve al objetivo";
+        title = copy.resetClarity.title;
         description = payloadIntention
-            ? `Tu objetivo actual es: "${payloadIntention}".`
-            : "No hay un objetivo definido para esta sesion.";
+            ? copy.resetClarity.currentGoal(payloadIntention)
+            : copy.resetClarity.noGoal;
         options = [
             {
-                label: "Mantener objetivo",
+                label: copy.resetClarity.keepObjective,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -115,7 +120,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Reescribir objetivo",
+                label: copy.resetClarity.rewriteObjective,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -129,13 +134,13 @@ export function FocusInterventionModal({
             },
         ];
     } else if (intervention.kind === "refocus_prompt") {
-        title = "Volve al bloque";
+        title = copy.refocus.title;
         description = payloadIntention
-            ? `Retoma desde: "${payloadIntention}".`
-            : "Elegi una sola accion y retoma desde ahi.";
+            ? copy.refocus.resumeFrom(payloadIntention)
+            : copy.refocus.chooseOne;
         options = [
             {
-                label: "Volver ahora",
+                label: copy.refocus.returnNow,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -147,7 +152,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Definir foco",
+                label: copy.refocus.defineFocus,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -165,11 +170,11 @@ export function FocusInterventionModal({
             },
         ];
     } else if (intervention.kind === "progress_check") {
-        title = "Chequeo rapido";
-        description = "Marca como viene la sesion para ajustar el foco sin cortar el ritmo.";
+        title = copy.progress.title;
+        description = copy.progress.description;
         options = [
             {
-                label: "Avanzando bien",
+                label: copy.progress.advancing,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -180,7 +185,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Mas lento",
+                label: copy.progress.slower,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -195,7 +200,7 @@ export function FocusInterventionModal({
                 },
             },
             {
-                label: "Estoy trabado",
+                label: copy.progress.blocked,
                 action: () => {
                     if (intervention.sourceCard) recordCardOutcome(intervention.sourceCard, "accepted");
                     if (intervention.sourceToast) recordCardOutcome(intervention.sourceToast, "accepted");
@@ -213,8 +218,8 @@ export function FocusInterventionModal({
             },
         ];
     } else if (intervention.kind === "closure_bridge") {
-        title = "Cerrando el bloque";
-        description = "Si queres, deja en una frase lo mas importante que avanzaste.";
+        title = copy.closure.title;
+        description = copy.closure.description;
     }
 
     const shouldFinishAfterClosure = intervention.kind === "closure_bridge" && intervention.trigger === "manual_finish";
@@ -242,7 +247,7 @@ export function FocusInterventionModal({
                             type="text"
                             value={closureDraft}
                             onChange={(event) => setClosureDraft(event.target.value.slice(0, 120))}
-                            placeholder="Ej: cerré el algoritmo y dejé listo el siguiente paso"
+                            placeholder={copy.closure.placeholder}
                             className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-white/85 outline-none transition-all duration-200 placeholder:text-white/28 focus:border-white/20 focus:bg-black/25"
                             maxLength={120}
                         />
@@ -267,7 +272,7 @@ export function FocusInterventionModal({
                             className="h-11 w-full justify-center rounded-xl"
                             disabled={!trimmedClosureDraft}
                         >
-                            Guardar
+                            {copy.closure.save}
                         </GlassButton>
                         <GlassButton
                             onClick={async () => {
@@ -279,7 +284,7 @@ export function FocusInterventionModal({
                             variant="ghost"
                             className="h-10 w-full justify-center rounded-xl"
                         >
-                            Saltar
+                            {copy.closure.skip}
                         </GlassButton>
                     </div>
                 </div>
@@ -316,7 +321,7 @@ export function FocusInterventionModal({
                         variant="ghost"
                         className="h-10 w-full justify-center rounded-xl"
                     >
-                        Cerrar
+                        {copy.close}
                     </GlassButton>
                 </div>
             </div>

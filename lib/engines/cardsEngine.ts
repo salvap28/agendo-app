@@ -1,4 +1,5 @@
 import { FocusContext, FocusCard, FocusLayer } from '@/lib/types/focus';
+import { AppLanguage } from "@/lib/i18n/messages";
 
 export interface EngineResult {
     visibleCards: FocusCard[];
@@ -21,7 +22,7 @@ export type CardRule = {
     id: string;
     priority: number;
     when: (ctx: FocusContext, state: SessionState) => boolean;
-    build: (ctx: FocusContext) => FocusCard;
+    build: (ctx: FocusContext, language: AppLanguage) => FocusCard;
 };
 
 type CardMemoryPolicy = {
@@ -50,6 +51,116 @@ const cardMemoryPolicies: Record<string, CardMemoryPolicy> = {
     card_closure_bridge: { maxShows: 1 },
     toast_active_recall: { maxShows: 1 },
 };
+
+function getCardsCopy(language: AppLanguage) {
+    return language === "es"
+        ? {
+            takeYourTime: "Tomate tu tiempo",
+            breatheAndReturn: "Respira profundo. Vuelve cuando estes listo para continuar.",
+            blockEnding: "Fin del bloque",
+            blockEndingBody: "Estas llegando al final del tiempo planificado.",
+            extend5: "Extender 5 min",
+            finish: "Finalizar",
+            exitsTitle: "Salir seguido rompe el hilo",
+            exitsBody: "Reducimos alcance para volver mas facil?",
+            reduceScope: "Reducir alcance",
+            activeRecallBody: "Haz una pausa corta y recupera lo aprendido en una oracion.",
+            answer: "Responder",
+            later: "Luego",
+            defineGoal: "Define tu objetivo",
+            defineGoalBody: "Que quieres lograr en este bloque?",
+            define: "Definir",
+            resumePrevious: "Retomar lo ultimo",
+            suggestedFirstStep: (step: string) => `Primer paso sugerido: ${step}`,
+            resumeWhereYouLeft: "Sigue desde donde habias quedado.",
+            resume: "Retomar",
+            shortCommitment: "Compromiso corto",
+            shortCommitmentBody: "Prueba 5 minutos sin interrupciones.",
+            activate: "Activar",
+            makeItSmaller: "Hazlo mas chico",
+            makeItSmallerBody: "Si el bloque se siente grande, elige una version minima.",
+            refocusTitle: "Perdiste el hilo?",
+            refocusBody: "Vuelve al objetivo del bloque.",
+            refocus: "Reenfocar",
+            returnToBlock: "Vuelve al bloque",
+            minimumVersion: (value: string) => `Vuelve por esta version minima: ${value}`,
+            firstStep: (value: string) => `Vuelve por este primer paso: ${value}`,
+            return: "Volver",
+            inRhythm: "Entraste en ritmo",
+            inRhythmBody: "Evita interrupciones ahora.",
+            protect: "Proteger",
+            progressTitle: "Avanzaste?",
+            progressBody: "Marca progreso rapido.",
+            mark: "Marcar",
+            closingTitle: "Cerrando el bloque",
+            closingBody: "Tomate un segundo. Que fue lo mas importante que avanzaste?",
+            done: "Listo",
+            noteProgress: "Anotar avance",
+            playlistTitle: "Playlist sugerida",
+            playlistBody: "Musica ideal para este momento.",
+            openPlaylist: "Abrir playlist",
+            nextStepTitle: "Cual es el siguiente paso?",
+            nextStepBody: "Define la accion concreta para seguir.",
+            chooseTechnique: "Elige tecnica",
+            chooseTechniqueBody: "Estructura tu sesion para maximizar el aprendizaje.",
+            configure: "Configurar",
+            trainingMode: "Modo entrenamiento",
+            trainingModeBody: "Registra tus series y descansos.",
+        }
+        : {
+            takeYourTime: "Take your time",
+            breatheAndReturn: "Take a deep breath. Come back when you are ready to continue.",
+            blockEnding: "Block ending",
+            blockEndingBody: "You are reaching the end of the planned time.",
+            extend5: "Extend 5 min",
+            finish: "Finish",
+            exitsTitle: "Repeated exits break the thread",
+            exitsBody: "Should we reduce the scope to make it easier to return?",
+            reduceScope: "Reduce scope",
+            activeRecallBody: "Pause briefly and retrieve what you learned in one sentence.",
+            answer: "Answer",
+            later: "Later",
+            defineGoal: "Define your goal",
+            defineGoalBody: "What do you want to achieve in this block?",
+            define: "Define",
+            resumePrevious: "Resume the last thread",
+            suggestedFirstStep: (step: string) => `Suggested first step: ${step}`,
+            resumeWhereYouLeft: "Continue from where you left off.",
+            resume: "Resume",
+            shortCommitment: "Short commitment",
+            shortCommitmentBody: "Try 5 uninterrupted minutes.",
+            activate: "Activate",
+            makeItSmaller: "Make it smaller",
+            makeItSmallerBody: "If the block feels large, choose a minimum version.",
+            refocusTitle: "Lost the thread?",
+            refocusBody: "Return to the goal of the block.",
+            refocus: "Refocus",
+            returnToBlock: "Return to the block",
+            minimumVersion: (value: string) => `Return through this minimum version: ${value}`,
+            firstStep: (value: string) => `Return through this first step: ${value}`,
+            return: "Return",
+            inRhythm: "You found the rhythm",
+            inRhythmBody: "Avoid interruptions now.",
+            protect: "Protect",
+            progressTitle: "Did you move forward?",
+            progressBody: "Mark progress quickly.",
+            mark: "Mark",
+            closingTitle: "Closing the block",
+            closingBody: "Take a second. What was the most important thing you moved forward?",
+            done: "Done",
+            noteProgress: "Note progress",
+            playlistTitle: "Suggested playlist",
+            playlistBody: "Music that fits this moment.",
+            openPlaylist: "Open playlist",
+            nextStepTitle: "What is the next step?",
+            nextStepBody: "Define the concrete action to continue.",
+            chooseTechnique: "Choose technique",
+            chooseTechniqueBody: "Structure your session for stronger learning.",
+            configure: "Configure",
+            trainingMode: "Training mode",
+            trainingModeBody: "Track your sets and rests.",
+        };
+}
 
 function getMemoryKey(cardId: string) {
     if (cardId.startsWith("toast_active_recall_")) return "toast_active_recall";
@@ -97,14 +208,15 @@ export function shouldOfferClosureBridgeOnFinish(ctx: FocusContext, state: Sessi
     return isClosureBridgeEligible(ctx, state, 0.75);
 }
 
-function buildContextualCards(context: FocusContext, sessionState: SessionState) {
+function buildContextualCards(context: FocusContext, sessionState: SessionState, language: AppLanguage = "en") {
     return rules
         .filter((rule) => rule.when(context, sessionState))
-        .map((rule) => ({ ...rule.build(context), priority: rule.priority }))
+        .map((rule) => ({ ...rule.build(context, language), priority: rule.priority }))
         .filter((card) => !isSuppressedByMemory(context, card.id));
 }
 
-function buildToastCards(ctx: FocusContext): FocusCard[] {
+function buildToastCards(ctx: FocusContext, language: AppLanguage = "en"): FocusCard[] {
+    const copy = getCardsCopy(language);
     const toastCards: FocusCard[] = [];
     const remainingMs = Math.max(0, ctx.plannedDurationMs - ctx.elapsedMs);
 
@@ -112,8 +224,8 @@ function buildToastCards(ctx: FocusContext): FocusCard[] {
         toastCards.push({
             id: "toast_pause",
             type: "reactive",
-            title: "Tomate tu tiempo",
-            description: "Respira profundo. Volve cuando estes listo para continuar.",
+            title: copy.takeYourTime,
+            description: copy.breatheAndReturn,
             isToast: true,
             priority: 100,
         });
@@ -123,15 +235,15 @@ function buildToastCards(ctx: FocusContext): FocusCard[] {
         toastCards.push({
             id: "toast_near_end",
             type: "reactive",
-            title: "Fin del bloque",
-            description: "Estas llegando al final del tiempo planificado.",
+            title: copy.blockEnding,
+            description: copy.blockEndingBody,
             action: {
-                label: "Extender 5 min",
+                label: copy.extend5,
                 type: "custom",
                 payload: { action: "extend" },
             },
             secondaryAction: {
-                label: "Finalizar",
+                label: copy.finish,
                 type: "custom",
                 payload: { action: "finish" },
             },
@@ -144,10 +256,10 @@ function buildToastCards(ctx: FocusContext): FocusCard[] {
         toastCards.push({
             id: "toast_exits",
             type: "reactive",
-            title: "Salir seguido rompe el hilo",
-            description: "Reducimos alcance para volver mas facil?",
+            title: copy.exitsTitle,
+            description: copy.exitsBody,
             action: {
-                label: "Reducir alcance",
+                label: copy.reduceScope,
                 type: "custom",
                 payload: { action: "reduceScopeFlow" },
             },
@@ -167,14 +279,14 @@ function buildToastCards(ctx: FocusContext): FocusCard[] {
             id: `toast_active_recall_${activeRecallWindow}`,
             type: "study",
             title: "Active Recall",
-            description: "Hace una pausa corta y recupera lo aprendido en una oracion.",
+            description: copy.activeRecallBody,
             action: {
-                label: "Responder",
+                label: copy.answer,
                 type: "layer",
                 payload: { layerId: "active_recall" },
             },
             secondaryAction: {
-                label: "Luego",
+                label: copy.later,
                 type: "resolve",
                 payload: { action: "dismiss" },
             },
@@ -213,17 +325,20 @@ const rules: CardRule[] = [
         id: "card_define_intention",
         priority: 100,
         when: (ctx, state) => !ctx.intention && (state === SessionState.ENTRY || state === SessionState.SLOW_START),
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_define_intention",
             type: "work",
-            title: "Defini tu objetivo",
-            description: "Que queres lograr en este bloque?",
+            title: copy.defineGoal,
+            description: copy.defineGoalBody,
             action: {
-                label: "Definir",
+                label: copy.define,
                 type: "setIntent",
             },
             priority: 100,
-        }),
+            });
+        },
     },
     {
         id: "card_continue_previous",
@@ -232,15 +347,17 @@ const rules: CardRule[] = [
             state === SessionState.ENTRY ||
             (state === SessionState.SLOW_START && !ctx.nextStep)
         ),
-        build: (ctx) => ({
+        build: (ctx, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_continue_previous",
             type: "universal",
-            title: "Retomar lo ultimo",
+            title: copy.resumePrevious,
             description: ctx.lastSession?.nextStep
-                ? `Primer paso sugerido: ${ctx.lastSession.nextStep}`
-                : "Segui desde donde habias quedado.",
+                ? copy.suggestedFirstStep(ctx.lastSession.nextStep)
+                : copy.resumeWhereYouLeft,
             action: {
-                label: "Retomar",
+                label: copy.resume,
                 type: "custom",
                 payload: {
                     action: "restorePreviousIntent",
@@ -249,154 +366,179 @@ const rules: CardRule[] = [
                 },
             },
             priority: 70,
-        }),
+            });
+        },
     },
     {
         id: "card_micro_commit",
         priority: 85,
         when: (_, state) => state === SessionState.SLOW_START,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_micro_commit",
             type: "work",
-            title: "Compromiso corto",
-            description: "Proba 5 minutos sin interrupciones.",
+            title: copy.shortCommitment,
+            description: copy.shortCommitmentBody,
             action: {
-                label: "Activar",
+                label: copy.activate,
                 type: "layer",
                 payload: { layerId: "micro_commit_layer" },
             },
             priority: 85,
-        }),
+            });
+        },
     },
     {
         id: "card_reduce_scope",
         priority: 80,
         when: (ctx, state) => state === SessionState.FRICTION && !ctx.minimumViable,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_reduce_scope",
             type: "work",
-            title: "Hacelo mas chico",
-            description: "Si el bloque se siente grande, elegi una version minima.",
+            title: copy.makeItSmaller,
+            description: copy.makeItSmallerBody,
             action: {
-                label: "Reducir",
+                label: copy.reduceScope,
                 type: "custom",
                 payload: { action: "reduceScopeFlow" },
             },
             priority: 80,
-        }),
+            });
+        },
     },
     {
         id: "card_reset_clarity",
         priority: 90,
         when: (ctx, state) => state === SessionState.FRICTION && ctx.recentExitCount >= 1,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_reset_clarity",
             type: "work",
-            title: "Perdiste el hilo?",
-            description: "Volve al objetivo del bloque.",
+            title: copy.refocusTitle,
+            description: copy.refocusBody,
             action: {
-                label: "Reenfocar",
+                label: copy.refocus,
                 type: "custom",
                 payload: { action: "resetClarityFlow" },
             },
             priority: 90,
-        }),
+            });
+        },
     },
     {
         id: "card_return_to_focus",
         priority: 95,
         when: (_, state) => state === SessionState.DISTRACTED,
-        build: (ctx) => ({
+        build: (ctx, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_return_to_focus",
             type: "reactive",
-            title: "Volve al bloque",
+            title: copy.returnToBlock,
             description: ctx.minimumViable
-                ? `Volve por esta version minima: ${ctx.minimumViable}`
+                ? copy.minimumVersion(ctx.minimumViable)
                 : ctx.nextStep
-                    ? `Volve por este primer paso: ${ctx.nextStep}`
+                    ? copy.firstStep(ctx.nextStep)
                     : ctx.intention
-                        ? `Saliste varias veces del foco. Objetivo actual: ${ctx.intention}`
-                        : "Saliste varias veces del foco.",
+                        ? `${copy.exitsTitle}. ${ctx.intention}`
+                        : copy.exitsTitle,
             action: {
-                label: "Volver",
+                label: copy.return,
                 type: "custom",
                 payload: { action: "refocusPrompt" },
             },
             priority: 95,
-        }),
+            });
+        },
     },
     {
         id: "card_lock_in_focus",
         priority: 60,
         when: (_, state) => state === SessionState.FLOW,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_lock_in_focus",
             type: "universal",
-            title: "Entraste en ritmo",
-            description: "Evita interrupciones ahora.",
+            title: copy.inRhythm,
+            description: copy.inRhythmBody,
             action: {
-                label: "Proteger",
+                label: copy.protect,
                 type: "layer",
                 payload: { layerId: "focus_protection_layer" },
             },
             priority: 60,
-        }),
+            });
+        },
     },
     {
         id: "card_progress_check",
         priority: 75,
         when: (ctx, state) => state === SessionState.MID_PROGRESS && !ctx.minimumViable,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_progress_check",
             type: "universal",
-            title: "Avanzaste?",
-            description: "Marca progreso rapido.",
+            title: copy.progressTitle,
+            description: copy.progressBody,
             action: {
-                label: "Marcar",
+                label: copy.mark,
                 type: "custom",
                 payload: { action: "progressQuickCheck" },
             },
             priority: 75,
-        }),
+            });
+        },
     },
     {
         id: "card_closure_bridge",
         priority: 92,
         when: (ctx, state) => isClosureBridgeEligible(ctx, state, 0.9),
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_closure_bridge",
             type: "universal",
-            title: "Cerrando el bloque",
-            description: "Tomate un segundo. Que fue lo mas importante que avanzaste?",
+            title: copy.closingTitle,
+            description: copy.closingBody,
             action: {
-                label: "Listo",
+                label: copy.done,
                 type: "custom",
                 payload: { action: "completeClosureBridge" },
             },
             secondaryAction: {
-                label: "Anotar avance",
+                label: copy.noteProgress,
                 type: "custom",
                 payload: { action: "openClosureBridge" },
             },
             priority: 92,
-        }),
+            });
+        },
     },
     {
         id: "card_playlist",
         priority: 0,
         when: (_, state) => state === SessionState.NORMAL_FLOW,
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_playlist",
             type: "universal",
-            title: "Playlist sugerida",
-            description: "Musica ideal para este momento.",
+            title: copy.playlistTitle,
+            description: copy.playlistBody,
             action: {
-                label: "Abrir playlist",
+                label: copy.openPlaylist,
                 type: "externalLink",
                 payload: { url: "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS" },
             },
             priority: 0,
-        }),
+            });
+        },
     },
     {
         id: "card_next_step",
@@ -407,52 +549,61 @@ const rules: CardRule[] = [
             !ctx.nextStep &&
             ctx.sessionProgress >= 0.18
         ),
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_next_step",
             type: "universal",
-            title: "Cual es el siguiente paso?",
-            description: "Defini la accion concreta para seguir.",
+            title: copy.nextStepTitle,
+            description: copy.nextStepBody,
             action: {
-                label: "Definir",
+                label: copy.define,
                 type: "custom",
                 payload: { action: "openNextStepEditor" },
             },
             priority: 20,
-        }),
+            });
+        },
     },
     {
         id: "card_study_technique",
         priority: 50,
         when: (ctx) => (ctx.blockType === "study" || ctx.mode === "free") && ctx.activeLayerKind !== "studyTechnique",
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_study_technique",
             type: "study",
-            title: "Elegi tecnica",
-            description: "Estructura tu sesion para maximo aprendizaje.",
+            title: copy.chooseTechnique,
+            description: copy.chooseTechniqueBody,
             action: {
-                label: "Configurar",
+                label: copy.configure,
                 type: "layer",
                 payload: { showPicker: true },
             },
             priority: 50,
-        }),
+            });
+        },
     },
     {
         id: "card_gym_mode",
         priority: 60,
         when: (ctx) => (ctx.blockType === "gym" || ctx.mode === "free") && ctx.activeLayerKind !== "gymMode",
-        build: () => ({
+        build: (_, language) => {
+            const copy = getCardsCopy(language);
+            return ({
             id: "card_gym_mode",
             type: "gym",
-            title: "Modo entrenamiento",
-            description: "Registra tus series y descansos.",
+            title: copy.trainingMode,
+            description: copy.trainingModeBody,
             action: {
-                label: "Activar",
+                label: copy.activate,
                 type: "layer",
                 payload: { layerId: "gym_set_tracker" },
             },
             priority: 60,
-        }),
+            });
+        },
     },
 ];
 
@@ -499,9 +650,9 @@ export function detectSessionState(ctx: FocusContext): SessionState {
     return SessionState.NORMAL_FLOW;
 }
 
-export function evaluateFocusContext(context: FocusContext): EngineResult {
+export function evaluateFocusContext(context: FocusContext, language: AppLanguage = "en"): EngineResult {
     const sessionState = detectSessionState(context);
-    const contextualCards = sortByPriority(resolveCardConflicts(buildContextualCards(context, sessionState)));
+    const contextualCards = sortByPriority(resolveCardConflicts(buildContextualCards(context, sessionState, language)));
     const visibleCards = contextualCards.slice(0, 4);
 
     const suggestedLayers: FocusLayer[] = [];
@@ -516,7 +667,7 @@ export function evaluateFocusContext(context: FocusContext): EngineResult {
 
     return {
         visibleCards,
-        toastCards: buildToastCards(context),
+        toastCards: buildToastCards(context, language),
         suggestedLayers,
         sessionState,
     };
