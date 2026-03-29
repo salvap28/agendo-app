@@ -18,6 +18,8 @@ interface GlowingEffectProps {
     customGradient?: string;
 }
 
+const GLOW_EASE = [0.16, 1, 0.3, 1] as const;
+
 const GlowingEffect = memo(
     ({
         blur = 0,
@@ -90,7 +92,7 @@ const GlowingEffect = memo(
 
                     animate(currentAngle, newAngle, {
                         duration: movementDuration,
-                        ease: [0.16, 1, 0.3, 1],
+                        ease: GLOW_EASE,
                         onUpdate: (value) => {
                             element.style.setProperty("--start", String(value));
                         },

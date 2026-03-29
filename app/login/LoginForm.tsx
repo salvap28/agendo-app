@@ -16,6 +16,8 @@ type Message = {
 };
 
 const TAB_ORDER: Tab[] = ["signin", "signup"];
+const SOFT_EASE = [0.22, 1, 0.36, 1] as const;
+const EMPHASIZED_EASE = [0.16, 1, 0.3, 1] as const;
 
 function SegmentedTabs({
     active,
@@ -71,7 +73,7 @@ function StatusBanner({ message }: { message: Message }) {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.22, ease: SOFT_EASE }}
             aria-live="polite"
             className={cn(
                 "rounded-[1.05rem] border px-4 py-3 text-sm leading-6 backdrop-blur-xl",
@@ -193,7 +195,7 @@ export function LoginForm({
         : {
             initial: { opacity: 0, y: 24, filter: "blur(10px)" },
             animate: { opacity: 1, y: 0, filter: "blur(0px)" },
-            transition: { duration: 0.68, ease: [0.16, 1, 0.3, 1], delay: 0.12 },
+            transition: { duration: 0.68, ease: EMPHASIZED_EASE, delay: 0.12 },
         };
 
     const contentMotion = reducedMotion
@@ -222,7 +224,7 @@ export function LoginForm({
             initial: "enter",
             animate: "center",
             exit: "exit",
-            transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+            transition: { duration: 0.3, ease: SOFT_EASE },
         };
 
     function handleTabChange(nextTab: Tab) {

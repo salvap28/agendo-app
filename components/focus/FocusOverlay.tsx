@@ -13,6 +13,7 @@ import { createAttentionAidLayer, createStudyLayer } from '@/lib/engines/layersE
 import { isEntryRitualBlockingRuntime } from '@/lib/engines/focusEntryRitual';
 import { requestNotificationPermission } from '@/lib/utils/notifications';
 import { FocusCard as FocusCardType } from '@/lib/types/focus';
+import type { BlockType } from '@/lib/types/blocks';
 import { FocusWaveBackground } from './FocusWaveBackground';
 import { ReflectionSheet } from './ReflectionSheet';
 import { GymTrackerPanel } from './GymTrackerPanel';
@@ -44,7 +45,7 @@ function createSystemToast(id: string, title: string, description?: string): Run
     };
 }
 
-function ModeBadge({ type, language }: { type?: string; language: "en" | "es" }) {
+function ModeBadge({ type, language }: { type?: BlockType | "free"; language: "en" | "es" }) {
     const label = getBlockTypeLabel(language, type === "free" ? "free" : (type ?? "other"));
     return (
         <div

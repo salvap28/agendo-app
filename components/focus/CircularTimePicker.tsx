@@ -18,6 +18,7 @@ interface CircularTimePickerProps {
 
 type DragTarget = "start" | "end" | "arc";
 type Range = { start: number; end: number };
+type TextAnchor = React.SVGAttributes<SVGTextElement>["textAnchor"];
 
 const DAY_MINUTES = 1440;
 const DIAL_MINUTES = 720;
@@ -142,11 +143,11 @@ function getUpdatedRange(range: Range, target: DragTarget, delta: number): Range
     return { start: mod(range.start, DAY_MINUTES), end: nextEnd };
 }
 
-function getHandleLabelPosition(point: { x: number; y: number }, center: number) {
+function getHandleLabelPosition(point: { x: number; y: number }, center: number): { x: number; align: TextAnchor } {
     const isRightSide = point.x >= center;
     return {
         x: isRightSide ? 18 : -18,
-        align: isRightSide ? "start" : "end" as const,
+        align: isRightSide ? "start" : "end",
     };
 }
 

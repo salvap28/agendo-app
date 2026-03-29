@@ -24,8 +24,8 @@ type FocusSessionRow = {
     difficulty?: number | null;
     clarity?: number | null;
     energy_before?: number | null;
-    mood_before?: string | null;
-    mood_after?: string | null;
+    mood_before?: number | null;
+    mood_after?: number | null;
     progress_feeling_after?: number | null;
     start_delay_ms?: number | null;
 };

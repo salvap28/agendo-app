@@ -67,12 +67,14 @@ export function getFocusInterventionCopy(language: AppLanguage) {
                 noGoal: "No hay un objetivo definido para esta sesion.",
                 keepObjective: "Mantener objetivo",
                 rewriteObjective: "Reescribir objetivo",
+                currentGoal: (value: string) => `Tu objetivo actual es: "${value}".`,
             },
             refocus: {
                 title: "Vuelve al bloque",
                 chooseOne: "Elige una sola accion y retoma desde ahi.",
                 returnNow: "Volver ahora",
                 defineFocus: "Definir foco",
+                resumeFrom: (value: string) => `Retoma desde: "${value}".`,
             },
             progress: {
                 title: "Chequeo rapido",
@@ -89,8 +91,6 @@ export function getFocusInterventionCopy(language: AppLanguage) {
                 skip: "Saltar",
             },
             close: "Cerrar",
-            currentGoal: (value: string) => `Tu objetivo actual es: "${value}".`,
-            resumeFrom: (value: string) => `Retoma desde: "${value}".`,
         }
         : {
             defaultMinimumViable: "Do a smaller version",
@@ -107,12 +107,14 @@ export function getFocusInterventionCopy(language: AppLanguage) {
                 noGoal: "There is no defined objective for this session.",
                 keepObjective: "Keep objective",
                 rewriteObjective: "Rewrite objective",
+                currentGoal: (value: string) => `Your current objective is: "${value}".`,
             },
             refocus: {
                 title: "Return to the block",
                 chooseOne: "Choose one action and resume from there.",
                 returnNow: "Return now",
                 defineFocus: "Define focus",
+                resumeFrom: (value: string) => `Resume from: "${value}".`,
             },
             progress: {
                 title: "Quick check-in",
@@ -129,8 +131,6 @@ export function getFocusInterventionCopy(language: AppLanguage) {
                 skip: "Skip",
             },
             close: "Close",
-            currentGoal: (value: string) => `Your current objective is: "${value}".`,
-            resumeFrom: (value: string) => `Resume from: "${value}".`,
         };
 }
 
@@ -184,9 +184,17 @@ export function getFocusEntryCopy(language: AppLanguage) {
                     objective: "Ej: completar pecho y hombro",
                     nextStep: "Ej: empezar por pecho inclinado",
                 },
+                meeting: {
+                    objective: "Ej: salir con las decisiones clave definidas",
+                    nextStep: "Ej: abrir la agenda y revisar el primer punto",
+                },
                 admin: {
                     objective: "Ej: ordenar pendientes clave",
                     nextStep: "Ej: responder el primer mail importante",
+                },
+                break: {
+                    objective: "Ej: recuperar energia y despejar la cabeza",
+                    nextStep: "Ej: alejarme de la pantalla y respirar un minuto",
                 },
                 other: {
                     objective: "Ej: avanzar una parte concreta",
@@ -246,9 +254,17 @@ export function getFocusEntryCopy(language: AppLanguage) {
                     objective: "Ex: complete chest and shoulders",
                     nextStep: "Ex: start with incline bench",
                 },
+                meeting: {
+                    objective: "Ex: leave with the key decisions clarified",
+                    nextStep: "Ex: open the agenda and review the first point",
+                },
                 admin: {
                     objective: "Ex: organize the key pending items",
                     nextStep: "Ex: answer the first important email",
+                },
+                break: {
+                    objective: "Ex: recover energy and clear your head",
+                    nextStep: "Ex: step away from the screen and breathe for a minute",
                 },
                 other: {
                     objective: "Ex: move one concrete part forward",

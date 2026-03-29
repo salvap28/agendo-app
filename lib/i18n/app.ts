@@ -87,13 +87,27 @@ const ACTIVITY_OUTCOME_LABELS: Record<AppLanguage, Record<ActivityOutcome, strin
         attended: "Attended",
         completed: "Done",
         partial: "Partial",
+        joined_late: "Joined late",
+        left_early: "Left early",
         skipped: "Skipped",
+        cancelled: "Cancelled",
+        postponed: "Postponed",
+        rescheduled: "Rescheduled",
+        interrupted: "Interrupted",
+        unknown: "Unknown",
     },
     es: {
         attended: "Asistí",
         completed: "Hecho",
         partial: "Parcial",
+        joined_late: "LleguÃ© tarde",
+        left_early: "Me fui antes",
         skipped: "Omitido",
+        cancelled: "Cancelado",
+        postponed: "Pospuesto",
+        rescheduled: "Reprogramado",
+        interrupted: "Interrumpido",
+        unknown: "Sin clasificar",
     },
 };
 
@@ -101,14 +115,18 @@ const ENERGY_IMPACT_LABELS: Record<AppLanguage, Record<EnergyImpact, string>> = 
     en: {
         restorative: "Restored",
         neutral: "Neutral",
+        demanding: "Demanding",
         draining: "Drained",
         energizing: "Energized",
+        unknown: "Unknown",
     },
     es: {
         restorative: "Recuperado",
         neutral: "Neutral",
+        demanding: "Demandante",
         draining: "Drenado",
         energizing: "Activado",
+        unknown: "Sin clasificar",
     },
 };
 
@@ -117,11 +135,13 @@ const PERCEIVED_VALUE_LABELS: Record<AppLanguage, Record<PerceivedValue, string>
         low: "Low",
         medium: "Medium",
         high: "High",
+        unknown: "Unknown",
     },
     es: {
         low: "Bajo",
         medium: "Medio",
         high: "Alto",
+        unknown: "Sin clasificar",
     },
 };
 
