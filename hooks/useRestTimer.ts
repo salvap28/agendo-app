@@ -37,7 +37,7 @@ export function useRestTimer() {
                 warningSentRef.current = startedAt;
                 sendNotification("1 minuto restante", {
                     body: "Va terminando tu descanso libre. ¡Alistate!",
-                    icon: "/favicon.ico",
+                    icon: "/icon.png",
                     requireInteraction: true
                 });
             }
@@ -50,7 +50,7 @@ export function useRestTimer() {
         const timeout = window.setTimeout(() => {
             sendNotification("Tiempo de descanso terminado", {
                 body: "Preparado para seguir. ¡A darle!",
-                icon: "/favicon.ico",
+                icon: "/icon.png",
                 requireInteraction: true
             });
             stopRest();

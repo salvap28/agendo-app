@@ -34,7 +34,7 @@ function RestOverlay({ config, language }: { config: GymLayerConfig; language: "
                     warningSentRef.current = config.rest.restStartedAt ?? null;
                     sendNotification("Falta 1 minuto", {
                         body: "Tu descanso en el gimnasio está por terminar. ¡Prepárate para la siguiente serie!",
-                        icon: "/favicon.ico",
+                        icon: "/icon.png",
                         requireInteraction: true,
                     });
                 }
@@ -44,7 +44,7 @@ function RestOverlay({ config, language }: { config: GymLayerConfig; language: "
                 if (settings.notify_gym_rest !== false) {
                     sendNotification(copy.restFinishedTitle, {
                         body: copy.restFinishedBody,
-                        icon: "/favicon.ico",
+                        icon: "/icon.png",
                         requireInteraction: true,
                     });
                 }
