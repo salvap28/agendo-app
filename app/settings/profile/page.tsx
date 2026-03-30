@@ -22,6 +22,7 @@ export default function ProfileTab() {
     const [currentEmail, setCurrentEmail] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isTestingPush, setIsTestingPush] = useState(false);
     const [message, setMessage] = useState("");
 
     useEffect(() => {
@@ -89,6 +90,23 @@ export default function ProfileTab() {
         }
     };
 
+    const handleTestPush = async () => {
+        setIsTestingPush(true);
+        setMessage("Enviando ping en 8 seg... Cierra la app ahora.");
+        try {
+            // Re-request permissions just in case
+            if ("Notification" in window && Notification.permission !== "granted") {
+                await Notification.requestPermission();
+            }
+            await fetch("/api/notifications/test-ping", { method: "POST" });
+            setMessage("Ping enviado exitosamente por el servidor.");
+        } catch (e) {
+            setMessage("Error al probar las notificaciones.");
+        } finally {
+            setIsTestingPush(false);
+        }
+    };
+
     if (isLoading) return null;
 
     return (
@@ -145,6 +163,24 @@ export default function ProfileTab() {
                         />
                     </div>
                 )}
+
+                <div className="flex flex-col gap-3 rounded-2xl bg-[#a855f7]/10 border border-[#a855f7]/20 p-5 mt-2">
+                    <div>
+                        <h4 className="text-sm font-semibold text-[#c084fc]">Notificaciones (Test)</h4>
+                        <p className="text-xs text-foreground/60 mt-1">
+                            Pon a prueba si llegan las alertas remotas cuando estás fuera de la app. 
+                            Oprime el botón, ve al inicio de tu celular, y espera 8 segundos.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleTestPush}
+                        disabled={isTestingPush}
+                        className="bg-[#c084fc]/20 hover:bg-[#c084fc]/30 border border-[#c084fc]/30 text-[#f3e8ff] px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 mt-1 w-max"
+                    >
+                        {isTestingPush ? "Ping en progreso..." : "🛎️ Enviar Ping de 8 Segs"}
+                    </button>
+                </div>
 
                 <div className="pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-white/5 mt-2">
                     <span className="text-sm text-emerald-400/90 font-medium">{message}</span>
