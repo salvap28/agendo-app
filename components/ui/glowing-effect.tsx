@@ -40,8 +40,6 @@ const GlowingEffect = memo(
         const lastPosition = useRef({ x: 0, y: 0 });
         const animationFrameRef = useRef<number>(0);
 
-        if (isLowEnd) return null;
-
         const handleMove = useCallback(
             (e?: MouseEvent | { x: number; y: number }) => {
                 if (!containerRef.current) return;
@@ -181,6 +179,8 @@ const GlowingEffect = memo(
           #a855f7 calc(100% / var(--repeating-conic-gradient-times))
         )`;
         })();
+
+        if (isLowEnd) return null;
 
         return (
             <>
