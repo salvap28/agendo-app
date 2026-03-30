@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 
 interface AnimatedGlowingBackgroundProps {
     /** 'pill' for circular buttons, 'block' for rectangular calendar cards */
@@ -22,6 +23,29 @@ export function AnimatedGlowingBackground({ variant = "pill", radius = 16, color
 
     const outerRadius = isPill ? "9999px" : `${radius}px`;
     const innerRadius = isPill ? "9999px" : `${Math.max(0, radius - 1.5)}px`;
+
+    const { isLowEnd } = usePerformancePreference();
+
+    if (isLowEnd) {
+        return (
+            <div
+                className="absolute inset-0 z-0 overflow-hidden pointer-events-none"
+                style={{ borderRadius: outerRadius }}
+            >
+                <div 
+                    className="absolute inset-0 z-[-2]" 
+                    style={{ background: `linear-gradient(135deg, ${p}30, ${s}10)` }} 
+                />
+                <div
+                    className="absolute z-[-1] bg-[#020208]"
+                    style={{
+                        inset: isPill ? "1.5px" : "1px",
+                        borderRadius: innerRadius,
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <div

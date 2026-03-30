@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
 import { animate } from "motion/react";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 
 interface GlowingEffectProps {
     blur?: number;
@@ -34,9 +35,12 @@ const GlowingEffect = memo(
         disabled = false,
         customGradient,
     }: GlowingEffectProps) => {
+        const { isLowEnd } = usePerformancePreference();
         const containerRef = useRef<HTMLDivElement>(null);
         const lastPosition = useRef({ x: 0, y: 0 });
         const animationFrameRef = useRef<number>(0);
+
+        if (isLowEnd) return null;
 
         const handleMove = useCallback(
             (e?: MouseEvent | { x: number; y: number }) => {

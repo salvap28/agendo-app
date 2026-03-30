@@ -40,6 +40,8 @@ import {
     getIntlLocale,
     getWeekdayNamesSundayFirst,
 } from "@/lib/i18n/app";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
+import { cn } from "@/lib/cn";
 
 function buildMonthGrid(month: Date) {
     const monthStart = startOfMonth(month);
@@ -114,6 +116,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
     const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
     const [searchQuery, setSearchQuery] = useState("");
     const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
+    const { isLowEnd } = usePerformancePreference();
 
     useEffect(() => {
         const interval = window.setInterval(() => {
@@ -318,7 +321,10 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <div className="hidden min-w-[280px] items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/40 backdrop-blur-md xl:flex">
+                        <div className={cn(
+                            "hidden min-w-[280px] items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/40 xl:flex",
+                            isLowEnd ? "bg-[#11131e]" : "backdrop-blur-md"
+                        )}>
                             <Search className="h-4 w-4" />
                             <input
                                 type="text"
@@ -343,7 +349,10 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                         <button
                             type="button"
                             onClick={handleCreateBlock}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white/80 backdrop-blur-md transition-all duration-300 hover:bg-white/[0.1] hover:text-white motion-reduce:transition-none"
+                            className={cn(
+                                "inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/10 px-4 text-sm font-medium text-white/80 transition-all duration-300 motion-reduce:transition-none hover:text-white",
+                                isLowEnd ? "bg-[#11131e] hover:bg-[#1a1d2e]" : "bg-white/[0.06] backdrop-blur-md hover:bg-white/[0.1]"
+                            )}
                         >
                             <Plus className="h-4 w-4" />
                             {copy.newEvent}
@@ -352,7 +361,10 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                 </div>
 
                 <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,7fr)_minmax(300px,3fr)] gap-4 xl:gap-5">
-                    <div className="relative flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-black/25 p-5 backdrop-blur-2xl">
+                    <div className={cn(
+                        "relative flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 p-5",
+                        isLowEnd ? "bg-[#0b0c16]" : "bg-black/25 backdrop-blur-2xl"
+                    )}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <button
@@ -412,7 +424,10 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                         </div>
                     </div>
 
-                    <aside className="flex min-h-0 flex-col overflow-visible rounded-[2rem] border border-white/10 bg-black/30 p-5 backdrop-blur-2xl">
+                    <aside className={cn(
+                        "flex min-h-0 flex-col overflow-visible rounded-[2rem] border border-white/10 p-5",
+                        isLowEnd ? "bg-[#0b0c16]/95" : "bg-black/30 backdrop-blur-2xl"
+                    )}>
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <h3 className="text-2xl font-semibold tracking-tight text-white/90">{copy.scheduled}</h3>

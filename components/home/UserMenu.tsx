@@ -6,6 +6,7 @@ import { LogOut, Settings, ChevronDown, Orbit } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useI18n } from "@/lib/i18n/client";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 
 export function UserMenu() {
     const { language } = useI18n();
@@ -27,6 +28,7 @@ export function UserMenu() {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+    const { isLowEnd } = usePerformancePreference();
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -101,7 +103,8 @@ export function UserMenu() {
 
                 <div
                     className={cn(
-                        "absolute top-full left-1/2 mt-3 w-48 -translate-x-1/2 origin-top overflow-hidden rounded-[20px] border border-white/10 bg-[#0a0b12]/95 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all duration-300",
+                        "absolute top-full left-1/2 mt-3 w-48 -translate-x-1/2 origin-top overflow-hidden rounded-[20px] border border-white/10 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.5)] transition-all duration-300",
+                        isLowEnd ? "bg-[#0a0b12]" : "bg-[#0a0b12]/95 backdrop-blur-2xl",
                         isOpen ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none -translate-y-2 scale-95 opacity-0",
                     )}
                 >

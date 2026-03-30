@@ -28,6 +28,7 @@ import {
     startOfDay,
 } from "date-fns";
 import { cn } from "@/lib/cn";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useActivityExperienceStore } from "@/lib/stores/activityExperienceStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -73,6 +74,7 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
     const { language } = useI18n();
     const dateFnsLocale = getDateFnsLocale(language);
     const [isHovered, setIsHovered] = useState(false);
+    const { isLowEnd } = usePerformancePreference();
 
     return (
         <div
@@ -91,7 +93,7 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
-            {!isSessionPaused && (
+            {!isSessionPaused && !isLowEnd && (
                 <>
                     <div
                         className="pointer-events-none absolute top-1/2 left-1/2 h-[300%] w-[300%] -translate-x-1/2 -translate-y-1/2 animate-[spin_3s_linear_infinite]"
@@ -104,10 +106,19 @@ function ActiveBlockCard({ block, isDeepWork, colors, isSessionPaused, onOpen }:
                 </>
             )}
 
+            {/* Static background for low-end devices without pause */}
+            {!isSessionPaused && isLowEnd && (
+                <div
+                    className="pointer-events-none absolute inset-0 opacity-40"
+                    style={{ background: `linear-gradient(135deg, ${colors.primary}40, ${colors.secondary}20)` }}
+                />
+            )}
+
             <button
                 onClick={onOpen}
                 className={cn(
-                    "absolute p-5 text-left backdrop-blur-xl transition-colors duration-200",
+                    "absolute p-5 text-left transition-colors duration-200",
+                    isLowEnd ? "" : "backdrop-blur-xl",
                     isSessionPaused ? "rounded-[24px] bg-[#11131e]/90 hover:bg-[#1a1d2e]/90" : "rounded-[22.5px] bg-[#0a0b12] hover:bg-[#11131e]",
                 )}
                 style={{

@@ -10,6 +10,7 @@ import { isSameDay, isAfter, isBefore } from "date-fns";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { GlassButton } from "@/components/ui/glass-button";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
+import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { getBlockColors } from "@/lib/utils/blockColors";
@@ -147,6 +148,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const [checkoutPerceivedValue, setCheckoutPerceivedValue] = useState<PerceivedValue>("medium");
     const [dismissedCheckoutBlockIds, setDismissedCheckoutBlockIds] = useState<string[]>([]);
     const [showProfileInfo, setShowProfileInfo] = useState(false);
+    const { isLowEnd } = usePerformancePreference();
     const { settings } = useSettingsStore();
     const copy = useMemo(() => (
         language === "es"
@@ -758,9 +760,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 )}
 
                 {/* Planning Assist */}
-                <div className="relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4 backdrop-blur-2xl"
+                <div className={cn(
+                    "relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4",
+                    isLowEnd ? "bg-[#11131e]" : "backdrop-blur-2xl"
+                )}
                     style={{
-                        background: 'linear-gradient(180deg, rgba(193,167,255,0.04) 0%, rgba(131,176,255,0.02) 50%, rgba(0,0,0,0.2) 100%)',
+                        background: isLowEnd ? undefined : 'linear-gradient(180deg, rgba(193,167,255,0.04) 0%, rgba(131,176,255,0.02) 50%, rgba(0,0,0,0.2) 100%)',
                         border: '1px solid rgba(193,167,255,0.12)',
                     }}
                 >
@@ -804,9 +809,12 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 </div>
 
                 {pendingCheckoutBlock && (
-                    <div className="relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4 backdrop-blur-2xl"
+                    <div className={cn(
+                        "relative w-full max-w-[760px] rounded-[24px] overflow-hidden p-4",
+                        isLowEnd ? "bg-[#16130b]" : "backdrop-blur-2xl"
+                    )}
                         style={{
-                            background: 'linear-gradient(180deg, rgba(255,214,153,0.06) 0%, rgba(251,191,36,0.03) 40%, rgba(0,0,0,0.25) 100%)',
+                            background: isLowEnd ? undefined : 'linear-gradient(180deg, rgba(255,214,153,0.06) 0%, rgba(251,191,36,0.03) 40%, rgba(0,0,0,0.25) 100%)',
                             border: '1px solid rgba(251,191,36,0.15)',
                             boxShadow: '0 20px 80px -44px rgba(251,191,36,0.4), inset 0 1px 0 rgba(251,191,36,0.1)',
                         }}
