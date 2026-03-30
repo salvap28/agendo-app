@@ -40,7 +40,10 @@ export async function syncActiveSession(session: FocusSession) {
     if (typeof window === "undefined") return;
     const supabase = createClient();
     const user = await getClientUser(supabase);
-    if (!user) return;
+    if (!user) {
+        console.log("[Sync] Aborted upsert: no user found");
+        return;
+    }
 
     const sessionPayload = {
         id: session.id,
@@ -58,9 +61,15 @@ export async function syncActiveSession(session: FocusSession) {
         updated_at: new Date().toISOString(),
     };
 
+    console.log("[Sync] Dispatching upsert for session:", session.id, "isPaused:", session.isPaused);
+
     // Fire and forget without awaited errors blocking UI
     supabase.from("focus_sessions").upsert(sessionPayload, { onConflict: "id" }).then(({ error }) => {
-        if (error) console.error("[Sync] Error pushing active session:", error);
+        if (error) {
+            console.error("[Sync] Error pushing active session:", error);
+        } else {
+            console.log("[Sync] Upsert successful for:", session.id);
+        }
     });
 }
 
