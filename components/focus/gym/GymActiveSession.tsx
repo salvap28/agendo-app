@@ -182,7 +182,7 @@ export function GymActiveSession({ config }: { config: GymLayerConfig }) {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                    {activeExercise?.sets.map((set, index) => (
+                    {activeExercise?.sets?.map((set, index) => (
                         <div
                             key={set.id}
                             className={cn(
