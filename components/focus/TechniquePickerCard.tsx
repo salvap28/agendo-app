@@ -145,22 +145,79 @@ export function TechniquePickerCard({ onClose }: { onClose: () => void }) {
                 <h4 className="text-xl font-bold tracking-tight mb-2">{info.name}</h4>
                 <p className="text-sm text-white/50 leading-relaxed mb-6 flex-1">{info.desc}</p>
 
-                <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="flex flex-col gap-1">
-                        <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">{copy.focus}</span>
-                        <div className="flex items-end gap-1">
-                            <span className="text-2xl font-bold leading-none">{info.focus}</span>
-                            <span className="text-xs text-white/50 mb-0.5">{t.common.minuteShort}</span>
+                {selectedId === "custom_pomodoro" ? (
+                    <div className="grid grid-cols-4 gap-2 mb-8 mt-2">
+                        <div className="flex flex-col gap-1 items-center bg-white/5 p-2 rounded-xl border border-white/10 transition-colors focus-within:border-white/30 focus-within:bg-white/10">
+                            <span className="text-[9px] uppercase tracking-widest text-white/50 font-medium text-center">Foco</span>
+                            <div className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min="1" max="180"
+                                    value={settings.pomodoro_custom_focus}
+                                    onChange={(e) => useSettingsStore.getState().updateSetting("pomodoro_custom_focus", Number(e.target.value) || 1)}
+                                    className="w-9 bg-transparent text-white text-center font-bold text-lg outline-none appearance-none"
+                                />
+                                <span className="text-[10px] text-white/40 font-medium tracking-wide">m</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1 items-center bg-white/5 p-2 rounded-xl border border-white/10 transition-colors focus-within:border-white/30 focus-within:bg-white/10">
+                            <span className="text-[9px] uppercase tracking-widest text-white/50 font-medium text-center">Corto</span>
+                            <div className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min="1" max="60"
+                                    value={settings.pomodoro_custom_short_break}
+                                    onChange={(e) => useSettingsStore.getState().updateSetting("pomodoro_custom_short_break", Number(e.target.value) || 1)}
+                                    className="w-9 bg-transparent text-white text-center font-bold text-lg outline-none appearance-none"
+                                />
+                                <span className="text-[10px] text-white/40 font-medium tracking-wide">m</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1 items-center bg-white/5 p-2 rounded-xl border border-white/10 transition-colors focus-within:border-white/30 focus-within:bg-white/10">
+                            <span className="text-[9px] uppercase tracking-widest text-white/50 font-medium text-center">Largo</span>
+                            <div className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min="1" max="60"
+                                    value={settings.pomodoro_custom_long_break}
+                                    onChange={(e) => useSettingsStore.getState().updateSetting("pomodoro_custom_long_break", Number(e.target.value) || 1)}
+                                    className="w-9 bg-transparent text-white text-center font-bold text-lg outline-none appearance-none"
+                                />
+                                <span className="text-[10px] text-white/40 font-medium tracking-wide">m</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1 items-center bg-white/5 p-2 rounded-xl border border-white/10 transition-colors focus-within:border-white/30 focus-within:bg-white/10">
+                            <span className="text-[9px] uppercase tracking-widest text-white/50 font-medium text-center">Ciclos</span>
+                            <div className="flex items-center gap-0.5">
+                                <input
+                                    type="number"
+                                    min="1" max="10"
+                                    value={settings.pomodoro_custom_cycles}
+                                    onChange={(e) => useSettingsStore.getState().updateSetting("pomodoro_custom_cycles", Number(e.target.value) || 1)}
+                                    className="w-9 bg-transparent text-white text-center font-bold text-lg outline-none appearance-none"
+                                />
+                                <span className="text-[10px] text-white/40 font-medium tracking-wide">#</span>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">{copy.rest}</span>
-                        <div className="flex items-end gap-1">
-                            <span className="text-2xl font-bold leading-none">{info.break}</span>
-                            <span className="text-xs text-white/50 mb-0.5">{t.common.minuteShort}</span>
+                ) : (
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">{copy.focus}</span>
+                            <div className="flex items-end gap-1">
+                                <span className="text-2xl font-bold leading-none">{info.focus}</span>
+                                <span className="text-xs text-white/50 mb-0.5">{t.common.minuteShort}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">{copy.rest}</span>
+                            <div className="flex items-end gap-1">
+                                <span className="text-2xl font-bold leading-none">{info.break}</span>
+                                <span className="text-xs text-white/50 mb-0.5">{t.common.minuteShort}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 <div className="flex flex-col gap-2 mt-auto">
                     {isUpdating ? (

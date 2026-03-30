@@ -130,7 +130,7 @@ export function resolveEntryStartLayer(
         case "study_technique":
             return session.activeLayer?.kind === "studyTechnique"
                 ? session.activeLayer
-                : resolveStudyStartLayer(session, blocks);
+                : null;
         case "gym":
             return session.activeLayer?.kind === "gymMode"
                 ? session.activeLayer

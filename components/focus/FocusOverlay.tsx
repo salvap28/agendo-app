@@ -142,7 +142,9 @@ export function FocusOverlay() {
     const { formatted: countUpFormatted } = useFocusTimer(session, now);
     const { countdownFormatted, currentPhase } = useStudyCountdown(now);
 
-    const [showPicker, setShowPicker] = React.useState(false);
+    const [showPicker, setShowPicker] = React.useState(() => {
+        return session?.entryRitual?.selectedStartMode === "study_technique" && !session.activeLayer;
+    });
     const [showIntentInput, setShowIntentInput] = React.useState(false);
     const [isIntentCompletion, setIsIntentCompletion] = React.useState(false);
     const [intentInputField, setIntentInputField] = React.useState<"intention" | "nextStep">("intention");
