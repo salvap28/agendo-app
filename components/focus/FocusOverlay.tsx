@@ -7,6 +7,7 @@ import { useBlocksStore } from '@/lib/stores/blocksStore';
 import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { useFocusTimer } from '@/hooks/useFocusTimer';
 import { useStudyCountdown } from '@/hooks/useStudyCountdown';
+import { useFocusRemoteSync } from '@/hooks/useFocusRemoteSync';
 import { buildFocusContext } from '@/lib/engines/focusContext';
 import { evaluateFocusContext, shouldOfferClosureBridgeOnFinish } from '@/lib/engines/cardsEngine';
 import { createAttentionAidLayer, createStudyLayer } from '@/lib/engines/layersEngine';
@@ -129,6 +130,8 @@ export function FocusOverlay() {
     const { blocks, updateBlock } = useBlocksStore();
     const { settings } = useSettingsStore();
     const isEntryRitualActive = isEntryRitualBlockingRuntime(session);
+
+    useFocusRemoteSync();
 
     const now = useFocusNow({
         isRunning: Boolean(session && session.isActive && !session.endedAt && !session.isPaused && !isEntryRitualActive),

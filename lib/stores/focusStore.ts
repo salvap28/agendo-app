@@ -32,7 +32,7 @@ import { useBlocksStore } from '@/lib/stores/blocksStore';
 import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { BlockType } from '@/lib/types/blocks';
 import { focusCardCooldowns } from '@/lib/engines/cardsEngine';
-import { persistCompletedSession } from '@/lib/services/focusService';
+import { persistCompletedSession, syncActiveSession } from '@/lib/services/focusService';
 import { resolveSessionClosureType } from '@/lib/engines/personalIntelligence/sessionAnalytics';
 
 type StudyTechniqueLayerConfig = {
@@ -342,6 +342,7 @@ interface FocusState {
     exit: () => void;
     returnToFocus: () => void;
     finish: () => Promise<void>;
+    dangerouslyInjectRemoteSession: (remoteSession: FocusSession) => void;
     extendBlock: (additionalMinutes: number) => void;
     setLayer: (layer: FocusLayer | null) => void;
     setSessionIntention: (intention: string) => void;
@@ -463,6 +464,7 @@ export const useFocusStore = create<FocusState>()(
                     set({
                         session: resumedSession
                     });
+                    syncActiveSession(resumedSession);
                     return;
                 }
 
@@ -502,6 +504,7 @@ export const useFocusStore = create<FocusState>()(
                 set({
                     session: nextSession
                 });
+                syncActiveSession(nextSession);
                 get().startEntryRitual();
             },
 
@@ -531,6 +534,7 @@ export const useFocusStore = create<FocusState>()(
                     set({
                         session: resumedSession
                     });
+                    syncActiveSession(resumedSession);
                     return;
                 }
 
@@ -566,6 +570,7 @@ export const useFocusStore = create<FocusState>()(
                 set({
                     session: nextSession
                 });
+                syncActiveSession(nextSession);
                 get().startEntryRitual();
             },
 
@@ -595,6 +600,7 @@ export const useFocusStore = create<FocusState>()(
                 set({
                     session: nextSession
                 });
+                syncActiveSession(nextSession);
             },
 
             resume: () => {
@@ -662,6 +668,7 @@ export const useFocusStore = create<FocusState>()(
                 set({
                     session: resumedSession
                 });
+                syncActiveSession(resumedSession);
             },
 
             exit: () => {
@@ -824,14 +831,18 @@ export const useFocusStore = create<FocusState>()(
                 const { session } = get();
                 if (!session) return;
                 const interactionState = noteSessionInteraction(session);
-                set({
-                    session: {
-                        ...session,
-                        activeLayer: layer,
-                        ...interactionState,
-                        history: [...(session.history || []), layer ? `Activated layer ${layer.kind}` : 'Layer cleared']
-                    }
-                });
+                const nextSession = {
+                    ...session,
+                    activeLayer: layer,
+                    ...interactionState,
+                    history: [...(session.history || []), layer ? `Activated layer ${layer.kind}` : 'Layer cleared']
+                };
+                set({ session: nextSession });
+                syncActiveSession(nextSession);
+            },
+
+            dangerouslyInjectRemoteSession: (remoteSession) => {
+                set({ session: remoteSession });
             },
 
             setSessionIntention: (intention) => {

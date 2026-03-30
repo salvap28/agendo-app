@@ -36,6 +36,34 @@ export async function triggerPersonalIntelligenceSync(
     }
 }
 
+export async function syncActiveSession(session: FocusSession) {
+    if (typeof window === "undefined") return;
+    const supabase = createClient();
+    const user = await getClientUser(supabase);
+    if (!user) return;
+
+    const sessionPayload = {
+        id: session.id,
+        user_id: user.id,
+        mode: session.mode,
+        block_id: session.blockId,
+        block_type: session.blockType,
+        initiated_at: session.initiatedAt ?? session.startedAt,
+        started_at: session.startedAt,
+        is_active: true,
+        is_paused: session.isPaused,
+        paused_at: session.pausedAt ?? null,
+        total_paused_ms: session.totalPausedMs,
+        active_layer: session.activeLayer ?? null,
+        updated_at: new Date().toISOString(),
+    };
+
+    // Fire and forget without awaited errors blocking UI
+    supabase.from("focus_sessions").upsert(sessionPayload, { onConflict: "id" }).then(({ error }) => {
+        if (error) console.error("[Sync] Error pushing active session:", error);
+    });
+}
+
 export async function persistCompletedSession(
     session: FocusSession,
     interventions: FocusInterventionRecord[] = []
