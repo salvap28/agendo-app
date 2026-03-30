@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         const payload = JSON.stringify({
             title,
             body: options?.body,
-            icon: options?.icon || "/favicon.ico",
+            icon: options?.icon || "/icon.png",
         });
 
         const promises = subscriptions.map((sub) => {

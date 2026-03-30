@@ -147,7 +147,7 @@ export function GymActiveSession({ config }: { config: GymLayerConfig }) {
             </div>
 
             <div className="flex gap-2 px-6 overflow-x-auto scrollbar-none pb-4">
-                {config.exercises.map((exercise) => (
+                {config.exercises?.map((exercise) => (
                     <button
                         key={exercise.id}
                         onClick={() => selectGymExercise(exercise.id)}

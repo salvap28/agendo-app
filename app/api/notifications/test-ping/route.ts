@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         const payload = JSON.stringify({
             title: "¡Test Exitoso!",
             body: "Agendo te puede notificar con la app cerrada. 🎯",
-            icon: "/favicon.ico",
+            icon: "/icon.png",
         });
 
         const promises = subscriptions.map((sub) => {
