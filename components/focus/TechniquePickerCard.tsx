@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFocusStore } from "@/lib/stores/focusStore";
+import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { createStudyLayer, StudyTechniqueState } from "@/lib/engines/layersEngine";
 import { Clock, Brain, RefreshCw, Play, Save, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -10,7 +11,7 @@ import { GlassButton } from "@/components/ui/glass-button";
 import { useI18n } from "@/lib/i18n/client";
 import { getTechniquePickerCopy } from "@/lib/i18n/ui";
 
-type TechId = "pomodoro_25_5" | "study_50_10" | "active_recall";
+type TechId = "pomodoro_25_5" | "custom_pomodoro" | "study_50_10" | "active_recall";
 
 type TechniqueCopy = {
     name: string;
@@ -32,6 +33,12 @@ export function TechniquePickerCard({ onClose }: { onClose: () => void }) {
             ...copy.techniques.pomodoro_25_5,
             focus: 25,
             break: 5,
+            icon: Clock,
+        },
+        custom_pomodoro: {
+            ...copy.techniques.custom_pomodoro,
+            focus: useSettingsStore.getState().settings.pomodoro_custom_focus,
+            break: useSettingsStore.getState().settings.pomodoro_custom_short_break,
             icon: Clock,
         },
         study_50_10: {
