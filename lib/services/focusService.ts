@@ -63,10 +63,13 @@ export async function syncActiveSession(session: FocusSession) {
 
     console.log("[Sync] Dispatching upsert for session:", session.id, "isPaused:", session.isPaused);
 
-    // Fire and forget without awaited errors blocking UI
+    // Fire and forget, alerting if from mobile
     supabase.from("focus_sessions").upsert(sessionPayload, { onConflict: "id" }).then(({ error }) => {
         if (error) {
             console.error("[Sync] Error pushing active session:", error);
+            if (typeof window !== "undefined") {
+                alert(`Supabase Sync Error:\n${JSON.stringify(error, null, 2).slice(0, 200)}`);
+            }
         } else {
             console.log("[Sync] Upsert successful for:", session.id);
         }
@@ -131,6 +134,9 @@ export async function persistCompletedSession(
 
     if (sessionError) {
         console.error("Error saving focus session:", JSON.stringify(sessionError, null, 2));
+        if (typeof window !== "undefined") {
+            alert(`Supabase Finish Error:\n${JSON.stringify(sessionError, null, 2).slice(0, 200)}`);
+        }
         throw sessionError;
     }
 
