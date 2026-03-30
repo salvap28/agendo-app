@@ -70,7 +70,7 @@ export function useFocusRemoteSync() {
                     },
                     (payload) => {
                         console.log("[Focus Sync] Websocket received payload:", payload);
-                        const newRow = payload.new;
+                        const newRow = payload.new as Record<string, any>;
                         const local = useFocusStore.getState().session;
 
                         // If user ended the session elsewhere
