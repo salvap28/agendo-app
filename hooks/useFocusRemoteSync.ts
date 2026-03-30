@@ -63,12 +63,13 @@ export function useFocusRemoteSync() {
                 .on(
                     'postgres_changes',
                     {
-                        event: 'UPDATE',
+                        event: '*',
                         schema: 'public',
                         table: 'focus_sessions',
                         filter: `user_id=eq.${user.id}`,
                     },
                     (payload) => {
+                        console.log("[Focus Sync] Websocket received payload:", payload);
                         const newRow = payload.new;
                         const local = useFocusStore.getState().session;
 
