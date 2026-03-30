@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
 import { sendNotification } from '@/lib/utils/notifications';
 import { useFocusNow } from './useFocusNow';
@@ -26,13 +26,32 @@ export function useRestTimer() {
         return Math.max(0, targetSecs - elapsedSecs);
     }, [now, startedAt, targetSecs]);
 
+    const warningSentRef = useRef<number | null>(null);
+
+    // 1-minute warning effect
+    useEffect(() => {
+        if (remainingSecs === null || targetSecs === null || startedAt === null) return;
+
+        if (targetSecs > 60 && remainingSecs <= 60 && remainingSecs > 0) {
+            if (warningSentRef.current !== startedAt) {
+                warningSentRef.current = startedAt;
+                sendNotification("1 minuto restante", {
+                    body: "Va terminando tu descanso libre. ¡Alistate!",
+                    icon: "/favicon.ico",
+                    requireInteraction: true
+                });
+            }
+        }
+    }, [remainingSecs, targetSecs, startedAt]);
+
     useEffect(() => {
         if (remainingSecs === null || remainingSecs > 0) return;
 
         const timeout = window.setTimeout(() => {
             sendNotification("Tiempo de descanso terminado", {
-                body: "Preparado para seguir.",
-                icon: "/favicon.ico"
+                body: "Preparado para seguir. ¡A darle!",
+                icon: "/favicon.ico",
+                requireInteraction: true
             });
             stopRest();
         }, 0);

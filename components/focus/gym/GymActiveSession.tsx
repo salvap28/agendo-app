@@ -18,6 +18,7 @@ function RestOverlay({ config, language }: { config: GymLayerConfig; language: "
     const [left, setLeft] = useState(config.rest.selectedSec || 0);
     const workoutColor = config.workoutColor || "#10b981";
     const copy = getGymActiveSessionCopy(language);
+    const warningSentRef = React.useRef<string | null>(null);
 
     useEffect(() => {
         if (!config.rest.isResting || !config.rest.restStartedAt) return;
@@ -28,11 +29,23 @@ function RestOverlay({ config, language }: { config: GymLayerConfig; language: "
             const remaining = Math.max(0, (config.rest.selectedSec || 0) - elapsed);
             setLeft(Math.ceil(remaining));
 
+            if (config.rest.selectedSec && config.rest.selectedSec > 60 && remaining <= 60 && remaining > 0) {
+                if (warningSentRef.current !== config.rest.restStartedAt) {
+                    warningSentRef.current = config.rest.restStartedAt ?? null;
+                    sendNotification("Falta 1 minuto", {
+                        body: "Tu descanso en el gimnasio está por terminar. ¡Prepárate para la siguiente serie!",
+                        icon: "/favicon.ico",
+                        requireInteraction: true,
+                    });
+                }
+            }
+
             if (remaining <= 0) {
-                if (settings.notify_gym_rest) {
+                if (settings.notify_gym_rest !== false) {
                     sendNotification(copy.restFinishedTitle, {
                         body: copy.restFinishedBody,
                         icon: "/favicon.ico",
+                        requireInteraction: true,
                     });
                 }
                 finishGymRest();

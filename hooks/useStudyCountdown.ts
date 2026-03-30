@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFocusStore } from '@/lib/stores/focusStore';
 import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { StudyTechniqueState } from '@/lib/engines/layersEngine';
@@ -40,6 +40,31 @@ export function useStudyCountdown(now: number) {
         return Math.max(0, targetDurationSecs - elapsedSecs);
     }, [now, session, studyConfig]);
 
+    const warningSentRef = useRef<string | null>(null);
+
+    // 1-minute warning effect (runs autonomously from the phase change effect)
+    useEffect(() => {
+        if (!session || !studyConfig?.state?.phaseStartedAt || remainingSecs === null || session.isPaused) return;
+
+        const targetDurationSecs = studyConfig.state.phase === "focus"
+            ? studyConfig.focusMin * 60
+            : studyConfig.breakMin * 60;
+
+        if (targetDurationSecs > 60 && remainingSecs <= 60 && remainingSecs > 0) {
+            if (warningSentRef.current !== studyConfig.state.phaseStartedAt) {
+                warningSentRef.current = studyConfig.state.phaseStartedAt;
+                
+                sendNotification("Falta 1 minuto", {
+                    body: studyConfig.state.phase === "focus"
+                        ? "Queda 1 minuto de estudio. ¡Ve cerrando el ciclo!"
+                        : "Queda 1 minuto de descanso. ¡Prepárate para enfocarte!",
+                    icon: "/favicon.ico",
+                    requireInteraction: true
+                });
+            }
+        }
+    }, [remainingSecs, session, studyConfig]);
+
     useEffect(() => {
         if (!session || !studyConfig || session.isPaused || remainingSecs === null || remainingSecs > 0) {
             return;
@@ -49,14 +74,15 @@ export function useStudyCountdown(now: number) {
         const nextPhase = state.phase === "focus" ? "break" : "focus";
         const currentCount = state.cycleCount;
 
-        if (settings.notify_focus_timer) {
+        if (settings.notify_focus_timer !== false) { // Enforce it to fire by default
             sendNotification(
                 state.phase === "focus" ? "Tiempo de descanso" : "De vuelta al enfoque",
                 {
                     body: state.phase === "focus"
                         ? "Tomate un respiro, te lo ganaste."
                         : "Es hora de volver a concentrarte.",
-                    icon: "/favicon.ico"
+                    icon: "/favicon.ico",
+                    requireInteraction: true
                 }
             );
         }

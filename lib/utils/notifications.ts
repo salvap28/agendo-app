@@ -108,4 +108,30 @@ export async function sendNotification(title: string, options?: NotificationOpti
             new Notification(title, options);
         }
     }
+
+    // Broadcast explicitly to other synced devices
+    try {
+        let currentEndpoint: string | undefined = undefined;
+        if ("serviceWorker" in navigator && "PushManager" in window) {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                const subscription = await registration.pushManager.getSubscription();
+                if (subscription) {
+                    currentEndpoint = subscription.endpoint;
+                }
+            }
+        }
+
+        fetch("/api/notifications/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                title, 
+                options,
+                excludeEndpoint: currentEndpoint
+            })
+        }).catch(err => console.error("Cross-device sync failed", err));
+    } catch (e) {
+        console.error("Failed to broadcast notification:", e);
+    }
 }
