@@ -5,7 +5,7 @@ import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { tryCreateClient } from "@/lib/supabase/client";
 import { GlassSwitch } from "@/components/ui/glass-switch";
 import { BellRing, Check } from "lucide-react";
-import { requestNotificationPermission } from "@/lib/utils/notifications";
+import { requestNotificationPermission, sendNotification } from "@/lib/utils/notifications";
 import { useI18n } from "@/lib/i18n/client";
 
 export default function NotificationsTab() {
@@ -75,7 +75,7 @@ export default function NotificationsTab() {
         if (permission === "granted") {
             setTestStatus("waiting");
             setTimeout(() => {
-                new Notification(t.settingsNotifications.testSuccessTitle, {
+                sendNotification(t.settingsNotifications.testSuccessTitle, {
                     body: t.settingsNotifications.testSuccessBody,
                     icon: "/icon.png"
                 });
