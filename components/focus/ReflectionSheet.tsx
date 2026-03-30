@@ -22,6 +22,7 @@ import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { useI18n } from "@/lib/i18n/client";
 import { getReflectionCopy } from "@/lib/i18n/ui";
+import { BlockType } from "@/lib/types/blocks";
 
 type ReflectionMetrics = {
     difficulty: number;
@@ -145,6 +146,7 @@ export function ReflectionSheet() {
     });
     const [reflection, setReflection] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [saveAsBlock, setSaveAsBlock] = useState(true);
 
     const question = useMemo(
         () => copy.questions[Math.floor(Math.random() * copy.questions.length)],
@@ -179,10 +181,14 @@ export function ReflectionSheet() {
                 notes: reflection.trim() || undefined,
             });
 
-            if (session.mode === "free") {
+            if (session.mode === "free" && saveAsBlock) {
+                let blockType: BlockType = "deep_work";
+                if (session.entryRitual?.selectedStartMode === "study_technique") blockType = "study";
+                else if (session.entryRitual?.selectedStartMode === "gym") blockType = "gym";
+
                 createBlock({
                     title: blockTitle,
-                    type: "deep_work",
+                    type: blockType,
                     startAt: new Date(session.startedAt),
                     endAt: new Date(session.endedAt),
                     status: "completed",
@@ -284,6 +290,36 @@ export function ReflectionSheet() {
                                 onChange={(event) => setReflection(event.target.value)}
                                 className="min-h-[88px] w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-relaxed text-white/85 placeholder:text-white/28 outline-none transition-all duration-200 focus:border-white/20 focus:bg-black/25 motion-reduce:transition-none sm:min-h-[92px]"
                             />
+
+                            {isFree && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSaveAsBlock((prev) => !prev)}
+                                    className="group flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition-all duration-300 hover:border-white/15 hover:bg-white/[0.08]"
+                                >
+                                    <div className="space-y-0.5">
+                                        <p className="text-[13px] font-semibold tracking-tight text-white/90 sm:text-sm">
+                                            {copy.saveFreeBlockToggle}
+                                        </p>
+                                        <p className="text-[11px] text-white/45">
+                                            {copy.saveFreeBlockDesc}
+                                        </p>
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full p-1 transition-colors duration-300",
+                                            saveAsBlock ? "bg-[#7C3AED]" : "bg-black/30 border border-white/10"
+                                        )}
+                                    >
+                                        <div
+                                            className={cn(
+                                                "h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-300",
+                                                saveAsBlock ? "translate-x-4" : "translate-x-0 bg-white/40"
+                                            )}
+                                        />
+                                    </div>
+                                </button>
+                            )}
                         </div>
                     </div>
 

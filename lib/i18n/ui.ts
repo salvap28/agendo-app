@@ -416,6 +416,8 @@ export function getReflectionCopy(language: AppLanguage) {
             notePlaceholder: "Nota mental opcional...",
             saving: "Guardando...",
             saveAndFinish: "Guardar y finalizar",
+            saveFreeBlockToggle: "Guardar este bloque en la agenda",
+            saveFreeBlockDesc: "Registrar este tiempo como un bloque completado.",
         }
         : {
             questions: [
@@ -455,6 +457,8 @@ export function getReflectionCopy(language: AppLanguage) {
             notePlaceholder: "Optional mental note...",
             saving: "Saving...",
             saveAndFinish: "Save and finish",
+            saveFreeBlockToggle: "Save this block to schedule",
+            saveFreeBlockDesc: "Record this time as a completed block.",
         };
 }
 
