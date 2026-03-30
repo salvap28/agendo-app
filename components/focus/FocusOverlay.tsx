@@ -66,6 +66,7 @@ function getLayerLabel(
     if (!session.activeLayer) return null;
     if (session.activeLayer.kind === "studyTechnique") {
         if (session.activeLayer.id === "study_50_10") return copy.layerLabels.study5010;
+        if (session.activeLayer.id === "custom_pomodoro") return copy.layerLabels.custom_pomodoro;
         if (session.activeLayer.id === "active_recall") return "Active Recall";
         return copy.layerLabels.pomodoro;
     }
@@ -607,7 +608,7 @@ export function FocusOverlay() {
 
                         {currentPhase && session.activeLayer?.kind === "studyTechnique" && session.activeLayer.id !== "active_recall" && (
                             <span className="text-sm font-medium uppercase tracking-widest text-white/60">
-                                {session.activeLayer.id === "study_50_10" ? "50/10" : "Pomodoro"} - {currentPhase === "focus" ? copy.currentPhaseFocus : copy.currentPhaseBreak}
+                                {session.activeLayer.id === "study_50_10" ? "50/10" : session.activeLayer.id === "custom_pomodoro" ? "Pom. Personal" : "Pomodoro"} - {currentPhase === "focus" ? copy.currentPhaseFocus : copy.currentPhaseBreak}
                             </span>
                         )}
                         {isMicroCommitActive && (

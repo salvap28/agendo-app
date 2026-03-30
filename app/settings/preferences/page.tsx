@@ -150,6 +150,135 @@ export default function PreferencesTab() {
                         />
                     </div>
                 </div>
+
+                <div className="w-full h-px bg-white/5"></div>
+
+                <div className="flex flex-col gap-6">
+                    <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Pomodoro Personalizado ⚙️</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="flex flex-col gap-3">
+                            <label className="text-sm text-foreground/80 font-medium">Bloque de Concentración</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_focus', Math.max(1, settings.pomodoro_custom_focus - 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.pomodoro_custom_focus}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('pomodoro_custom_focus', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_focus', Math.min(180, settings.pomodoro_custom_focus + 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <span className="text-base text-foreground/50 font-medium">{t.common.minuteShort}</span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <label className="text-sm text-foreground/80 font-medium">Descanso Corto</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_short_break', Math.max(1, settings.pomodoro_custom_short_break - 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.pomodoro_custom_short_break}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('pomodoro_custom_short_break', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_short_break', Math.min(60, settings.pomodoro_custom_short_break + 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <span className="text-base text-foreground/50 font-medium">{t.common.minuteShort}</span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <label className="text-sm text-foreground/80 font-medium">Descanso Extendido (Largo)</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_long_break', Math.max(5, settings.pomodoro_custom_long_break - 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.pomodoro_custom_long_break}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('pomodoro_custom_long_break', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_long_break', Math.min(120, settings.pomodoro_custom_long_break + 5))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <span className="text-base text-foreground/50 font-medium">{t.common.minuteShort}</span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <label className="text-sm text-foreground/80 font-medium">Disparo de Descanso Largo</label>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center bg-black/20 border border-white/10 rounded-xl overflow-hidden h-12">
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_cycles', Math.max(1, settings.pomodoro_custom_cycles - 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-r border-white/5"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        value={settings.pomodoro_custom_cycles}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            if (!isNaN(val)) updateSetting('pomodoro_custom_cycles', val);
+                                        }}
+                                        className="w-16 bg-transparent text-center text-lg focus:outline-none"
+                                    />
+                                    <button
+                                        onClick={() => updateSetting('pomodoro_custom_cycles', Math.min(10, settings.pomodoro_custom_cycles + 1))}
+                                        className="h-full px-4 text-foreground/70 hover:text-foreground hover:bg-white/5 transition-colors border-l border-white/5"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                                <span className="text-base text-foreground/50 font-medium">ciclos completados</span>
+                            </div>
+                            <p className="text-xs text-foreground/40 max-w-[85%] mt-1">El descanso largo se activará cada {settings.pomodoro_custom_cycles} bloques terminados.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );

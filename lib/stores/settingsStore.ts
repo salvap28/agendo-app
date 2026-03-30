@@ -16,6 +16,10 @@ export interface UserSettings {
     notify_focus_timer: boolean;
     notify_gym_rest: boolean;
     notify_daily_briefing: boolean;
+    pomodoro_custom_focus: number;
+    pomodoro_custom_short_break: number;
+    pomodoro_custom_long_break: number;
+    pomodoro_custom_cycles: number;
 }
 
 const defaultSettings: UserSettings = {
@@ -31,6 +35,10 @@ const defaultSettings: UserSettings = {
     notify_focus_timer: true,
     notify_gym_rest: true,
     notify_daily_briefing: true,
+    pomodoro_custom_focus: 25,
+    pomodoro_custom_short_break: 5,
+    pomodoro_custom_long_break: 15,
+    pomodoro_custom_cycles: 4,
 };
 
 function mergeSettings(data?: Partial<UserSettings> | null): UserSettings {

@@ -1,4 +1,5 @@
 import { FocusLayer, GymLayerConfig, AttentionAidConfig } from '@/lib/types/focus';
+import { useSettingsStore } from '@/lib/stores/settingsStore';
 
 export type StudyTechniqueState = {
     phase: "focus" | "break";
@@ -11,11 +12,25 @@ export const STUDY_CONFIGS = {
     "study_50_10": { focusMin: 50, breakMin: 10 }
 };
 
-export function createStudyLayer(id: "pomodoro_25_5" | "study_50_10" | "active_recall"): FocusLayer {
+export function createStudyLayer(id: "pomodoro_25_5" | "study_50_10" | "custom_pomodoro" | "active_recall"): FocusLayer {
     if (id === "active_recall") {
         return { id, kind: "studyTechnique" };
     }
-    const config = STUDY_CONFIGS[id];
+
+    let config: { focusMin: number; breakMin: number; longBreakMin?: number; cyclesUntilLongBreak?: number };
+
+    if (id === "custom_pomodoro") {
+        const settings = useSettingsStore.getState().settings;
+        config = {
+            focusMin: settings.pomodoro_custom_focus,
+            breakMin: settings.pomodoro_custom_short_break,
+            longBreakMin: settings.pomodoro_custom_long_break,
+            cyclesUntilLongBreak: settings.pomodoro_custom_cycles,
+        };
+    } else {
+        config = STUDY_CONFIGS[id as keyof typeof STUDY_CONFIGS];
+    }
+
     return {
         id,
         kind: "studyTechnique",

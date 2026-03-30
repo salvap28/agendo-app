@@ -17,6 +17,8 @@ export function useStudyCountdown(now: number) {
             state?: StudyTechniqueState;
             focusMin: number;
             breakMin: number;
+            longBreakMin?: number;
+            cyclesUntilLongBreak?: number;
         };
 
         if (!config?.state?.phaseStartedAt) return null;
@@ -28,9 +30,19 @@ export function useStudyCountdown(now: number) {
     const remainingSecs = useMemo(() => {
         if (!session || !studyConfig?.state?.phaseStartedAt) return null;
 
-        const targetDurationSecs = studyConfig.state.phase === "focus"
-            ? studyConfig.focusMin * 60
-            : studyConfig.breakMin * 60;
+        let targetDurationSecs = 0;
+        if (studyConfig.state.phase === "focus") {
+            targetDurationSecs = studyConfig.focusMin * 60;
+        } else {
+            const isLongBreak = studyConfig.cyclesUntilLongBreak
+                && studyConfig.state.cycleCount > 0
+                && studyConfig.state.cycleCount % studyConfig.cyclesUntilLongBreak === 0;
+
+            targetDurationSecs = isLongBreak
+                ? (studyConfig.longBreakMin || studyConfig.breakMin) * 60
+                : studyConfig.breakMin * 60;
+        }
+
         const effectiveNow = session.isPaused && session.pausedAt
             ? new Date(session.pausedAt).getTime()
             : now;
@@ -46,9 +58,18 @@ export function useStudyCountdown(now: number) {
     useEffect(() => {
         if (!session || !studyConfig?.state?.phaseStartedAt || remainingSecs === null || session.isPaused) return;
 
-        const targetDurationSecs = studyConfig.state.phase === "focus"
-            ? studyConfig.focusMin * 60
-            : studyConfig.breakMin * 60;
+        let targetDurationSecs = 0;
+        if (studyConfig.state.phase === "focus") {
+            targetDurationSecs = studyConfig.focusMin * 60;
+        } else {
+            const isLongBreak = studyConfig.cyclesUntilLongBreak
+                && studyConfig.state.cycleCount > 0
+                && studyConfig.state.cycleCount % studyConfig.cyclesUntilLongBreak === 0;
+
+            targetDurationSecs = isLongBreak
+                ? (studyConfig.longBreakMin || studyConfig.breakMin) * 60
+                : studyConfig.breakMin * 60;
+        }
 
         if (targetDurationSecs > 60 && remainingSecs <= 60 && remainingSecs > 0) {
             if (warningSentRef.current !== studyConfig.state.phaseStartedAt) {
@@ -74,17 +95,28 @@ export function useStudyCountdown(now: number) {
         const nextPhase = state.phase === "focus" ? "break" : "focus";
         const currentCount = state.cycleCount;
 
+        let title = "";
+        let body = "";
+        if (state.phase === "focus") {
+            const isLongBreak = studyConfig.cyclesUntilLongBreak
+                && state.cycleCount > 0
+                && state.cycleCount % studyConfig.cyclesUntilLongBreak === 0;
+
+            title = isLongBreak ? "¡Descanso Largo!" : "Tiempo de descanso";
+            body = isLongBreak
+                ? "Te lo ganaste. Disfruta un merecido descanso extendido."
+                : "Tómate un respiro, bien hecho.";
+        } else {
+            title = "De vuelta al enfoque";
+            body = "Es hora de volver a concentrarte. ¡Vamos!";
+        }
+
         if (settings.notify_focus_timer !== false) { // Enforce it to fire by default
-            sendNotification(
-                state.phase === "focus" ? "Tiempo de descanso" : "De vuelta al enfoque",
-                {
-                    body: state.phase === "focus"
-                        ? "Tomate un respiro, te lo ganaste."
-                        : "Es hora de volver a concentrarte.",
-                    icon: "/favicon.ico",
-                    requireInteraction: true
-                }
-            );
+            sendNotification(title, {
+                body,
+                icon: "/icon.png",
+                requireInteraction: true
+            });
         }
 
         useFocusStore.setState((currentState) => {

@@ -11,6 +11,10 @@ export function getTechniquePickerCopy(language: AppLanguage) {
             keepTimer: "Mantener timer",
             select: "Seleccionar",
             techniques: {
+                custom_pomodoro: {
+                    name: "Pomodoro Personalizado",
+                    desc: "Tiempos flexibles y descansos largos automáticos configurables desde Ajustes.",
+                },
                 pomodoro_25_5: {
                     name: "Pomodoro (25/5)",
                     desc: "Trabaja 25 minutos y descansa 5. Ideal para arrancar con suavidad y sostener un ritmo estable.",
@@ -34,6 +38,10 @@ export function getTechniquePickerCopy(language: AppLanguage) {
             keepTimer: "Keep timer",
             select: "Select",
             techniques: {
+                custom_pomodoro: {
+                    name: "Custom Pomodoro",
+                    desc: "Flexible intervals and automatic long breaks configurable from Settings.",
+                },
                 pomodoro_25_5: {
                     name: "Pomodoro (25/5)",
                     desc: "Work for 25 minutes, then rest for 5. Ideal for easing in and keeping a sustainable rhythm.",
@@ -344,6 +352,7 @@ export function getFocusOverlayCopy(language: AppLanguage) {
             closureBridgeAcknowledged: "Cierre confirmado",
             attentionAidEnabled: (layerId: string) => `Ayuda de atencion activada: ${layerId}`,
             layerLabels: {
+                custom_pomodoro: "Pomodoro Personalizado",
                 study5010: "50/10 - Foco",
                 pomodoro: "Pomodoro 25/5",
                 gymMode: "Modo gym",
@@ -366,6 +375,7 @@ export function getFocusOverlayCopy(language: AppLanguage) {
             closureBridgeAcknowledged: "Closure bridge acknowledged",
             attentionAidEnabled: (layerId: string) => `Attention aid enabled: ${layerId}`,
             layerLabels: {
+                custom_pomodoro: "Custom Pomodoro",
                 study5010: "50/10 - Focus",
                 pomodoro: "Pomodoro 25/5",
                 gymMode: "Gym mode",
