@@ -23,13 +23,10 @@ import {
     X,
 } from "lucide-react";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
-import { Block } from "@/lib/types/blocks";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { sortBlocksByStart } from "@/lib/utils/blockState";
-import { findNextFreeSlot, isOverlapping, snapTo15 } from "@/lib/utils/scheduling";
+import { snapTo15 } from "@/lib/utils/scheduling";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
-import { OverlapResolutionModal, OverlapResolutionType } from "./OverlapResolutionModal";
-import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
 import { MonthDayCell } from "./glass-calendar-dashboard/MonthDayCell";
 import { ScheduledEventCard } from "./glass-calendar-dashboard/ScheduledEventCard";
 import { CalendarEvent } from "./glass-calendar-dashboard/types";
@@ -68,11 +65,6 @@ interface GlassCalendarDashboardProps {
     onOpenBlock: (blockId: string, isNewBlock?: boolean) => void;
 }
 
-type PendingConflict = {
-    newBlock: Partial<Block> & Pick<Block, "startAt" | "endAt">;
-    overlaps: Block[];
-};
-
 export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardProps) {
     const { language } = useI18n();
     const dateFnsLocale = getDateFnsLocale(language);
@@ -108,14 +100,13 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             createBlock: "Create block",
         };
 
-    const { blocks, createBlock, updateBlock } = useBlocksStore();
+    const { blocks, createBlock } = useBlocksStore();
     const { session, openFromBlock } = useFocusStore();
 
     const [currentTime, setCurrentTime] = useState(() => new Date());
     const [displayMonth, setDisplayMonth] = useState(() => startOfMonth(new Date()));
     const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
     const [searchQuery, setSearchQuery] = useState("");
-    const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
     const { isLowEnd } = usePerformancePreference();
 
     useEffect(() => {
@@ -242,12 +233,7 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             desiredStart.setHours(9, 0, 0, 0);
         }
 
-        const dayBlocks = blocks.filter(
-            (block) => getDayKey(block.startAt) === getDayKey(effectiveSelectedDate) && block.status !== "canceled",
-        );
         const endAt = addMinutes(desiredStart, durationMinutes);
-
-        const overlaps = dayBlocks.filter((block) => isOverlapping(desiredStart, endAt, block.startAt, block.endAt));
 
         const enriched = enrichNewBlockWithPlanningMetadata({
             startAt: desiredStart,
@@ -256,51 +242,8 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
             type: "other",
         });
 
-        if (overlaps.length > 0) {
-            setPendingConflict({ newBlock: enriched, overlaps });
-        } else {
-            const newBlock = createBlock(enriched);
-            if (newBlock) onOpenBlock(newBlock.id, true);
-        }
-    };
-
-    const handleResolveConflict = (resolution: OverlapResolutionType) => {
-        if (!pendingConflict) return;
-        const { newBlock, overlaps } = pendingConflict;
-
-        let resultingId = newBlock.id;
-        const isCreation = !newBlock.id;
-        const currentBlocks = blocks.filter((block) => block.status !== "canceled" && block.id !== newBlock.id);
-
-        if (resolution === "slice_underlying") {
-            const result = resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
-            if (result && isCreation) resultingId = result.id;
-        } else if (resolution === "shrink_new") {
-            const result = resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock);
-            if (result && isCreation) resultingId = result.id;
-        } else if (resolution === "move_forward") {
-            const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
-            const slot = findNextFreeSlot(currentBlocks, newBlock.startAt, durationMins, newBlock.id);
-
-            if (slot) {
-                const movedBlock = {
-                    ...newBlock,
-                    startAt: slot.startAt,
-                    endAt: slot.endAt,
-                };
-                const result = createBlock(movedBlock);
-                if (result && isCreation) resultingId = result.id;
-            }
-        } else if (resolution === "keep_overlap") {
-            const result = createBlock(newBlock);
-            if (result && isCreation) resultingId = result.id;
-        }
-
-        if (isCreation && resultingId) {
-            onOpenBlock(resultingId, true);
-        }
-
-        setPendingConflict(null);
+        const newBlock = createBlock(enriched);
+        if (newBlock) onOpenBlock(newBlock.id, true);
     };
 
     const monthSummary = normalizedSearch
@@ -524,14 +467,6 @@ export function GlassCalendarDashboard({ onOpenBlock }: GlassCalendarDashboardPr
                     }
                 }
             `}</style>
-
-            <OverlapResolutionModal
-                isOpen={!!pendingConflict}
-                onClose={() => setPendingConflict(null)}
-                pendingBlock={pendingConflict?.newBlock || null}
-                overlappingCount={pendingConflict?.overlaps.length || 0}
-                onResolve={handleResolveConflict}
-            />
         </div>
     );
 }

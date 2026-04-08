@@ -23,10 +23,12 @@ import {
     ArrowLeft,
     Repeat,
     Layers,
+    ChevronDown,
     type LucideIcon
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
+import { GlassSwitch } from "@/components/ui/glass-switch";
 import { CircularTimePicker } from "@/components/focus/CircularTimePicker";
 import { Input } from "@/components/ui/input";
 import { PlanningRecommendation } from "@/lib/types/planning";
@@ -270,6 +272,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
 
     // Draft state para no aplicar repeticiones instantáneamente
     const [draftRecurrence, setDraftRecurrence] = useState<RecurrencePattern | undefined>(block?.recurrencePattern);
+    const [isAdvancedPlanningOpen, setIsAdvancedPlanningOpen] = useState(false);
 
     // Fast local state for 60fps radial dragging without entire WeekView re-rendering
     const [localTime, setLocalTime] = useState({ start: block?.startAt, end: block?.endAt });
@@ -281,6 +284,79 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
             setLocalTime({ start: block.startAt, end: block.endAt });
         }
     }, [activePrimaryNode, block, block?.recurrencePattern, block?.startAt, block?.endAt]);
+
+    useEffect(() => {
+        if (activePrimaryNode !== "center") {
+            setIsAdvancedPlanningOpen(false);
+        }
+    }, [activePrimaryNode, block?.id]);
+
+    const commitDraftRecurrence = useCallback(() => {
+        if (!block) return;
+        if (JSON.stringify(draftRecurrence) === JSON.stringify(block.recurrencePattern)) return;
+
+        if (!draftRecurrence) {
+            void updateBlock(block.id, { recurrencePattern: undefined, recurrenceId: undefined });
+            return;
+        }
+
+        void applyRecurrence(block.id, draftRecurrence);
+    }, [applyRecurrence, block, draftRecurrence, updateBlock]);
+
+    const scheduleSummary = React.useMemo(() => {
+        if (!localTime.start || !localTime.end) return null;
+
+        const locale = language === "es" ? "es-AR" : "en-US";
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const targetDay = new Date(localTime.start);
+        targetDay.setHours(0, 0, 0, 0);
+
+        const diffDays = Math.round((targetDay.getTime() - today.getTime()) / 86400000);
+        const dayLabel = diffDays === 0
+            ? copy.today
+            : diffDays === 1
+                ? copy.tomorrow
+                : new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(localTime.start);
+
+        const timeFormatter = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" });
+        const durationMinutes = Math.max(15, Math.round((localTime.end.getTime() - localTime.start.getTime()) / 60000));
+        const hours = Math.floor(durationMinutes / 60);
+        const remainingMinutes = durationMinutes % 60;
+        const durationLabel = hours > 0
+            ? remainingMinutes > 0
+                ? `${hours} h ${remainingMinutes} min`
+                : `${hours} h`
+            : `${durationMinutes} min`;
+
+        return {
+            dayLabel,
+            timeRange: `${timeFormatter.format(localTime.start)} - ${timeFormatter.format(localTime.end)}`,
+            durationLabel,
+            metaLabel: `${dayLabel} · ${durationLabel}`,
+        };
+    }, [copy.today, copy.tomorrow, language, localTime.end, localTime.start]);
+
+    const importanceLevel = React.useMemo(() => {
+        const priority = block?.priority ?? 3;
+        if (priority >= 4) return "high";
+        if (priority <= 2) return "low";
+        return "medium";
+    }, [block?.priority]);
+
+    const canMove = (block?.flexibility ?? "moderate") !== "fixed";
+    const canSplit = block?.splittable ?? true;
+    const isRequired = !(block?.optional ?? false);
+    const getScheduleOverlaps = useCallback((startAt: Date, endAt: Date) => {
+        if (!block) return [];
+
+        return blocks.filter((entry) => (
+            entry.status !== "canceled"
+            && entry.id !== block.id
+            && isOverlapping(startAt, endAt, entry.startAt, entry.endAt)
+        ));
+    }, [block, blocks]);
 
     const setOrbitPosition = (el: HTMLElement, x: number, y: number) => {
         // Use transform3d for strict GPU hardware acceleration, critical for mobile 60fps
@@ -493,10 +569,47 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
         setIsTimeDragging(false);
     }, [activePrimaryNode]);
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         setIsClosing(true);
         setTimeout(onClose, 500);
-    };
+    }, [onClose]);
+
+    const handleCenterSave = useCallback(() => {
+        commitDraftRecurrence();
+
+        if (!isNewBlock) {
+            setActivePrimaryNode(null);
+            return;
+        }
+
+        if (!block || !localTime.start || !localTime.end) {
+            handleClose();
+            return;
+        }
+
+        const overlaps = getScheduleOverlaps(localTime.start, localTime.end);
+
+        if (overlaps.length > 0) {
+            setPendingConflict({
+                newBlock: {
+                    ...block,
+                    startAt: localTime.start,
+                    endAt: localTime.end,
+                },
+                overlaps,
+            });
+            return;
+        }
+
+        if (
+            localTime.start.getTime() !== block.startAt.getTime()
+            || localTime.end.getTime() !== block.endAt.getTime()
+        ) {
+            void updateBlock(block.id, { startAt: localTime.start, endAt: localTime.end });
+        }
+
+        handleClose();
+    }, [block, commitDraftRecurrence, getScheduleOverlaps, handleClose, isNewBlock, localTime.end, localTime.start, updateBlock]);
 
     // Handlers directos
     const handleBackgroundClick = (e: React.MouseEvent) => {
@@ -681,7 +794,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     className={cn(
                         "group absolute pointer-events-auto flex flex-col items-center justify-center transition-all duration-500",
                         activePrimaryNode && activePrimaryNode !== "center" && activePrimaryNode !== "notifications" ? "z-10 opacity-30 scale-95 blur-sm cursor-pointer" : "z-[100] opacity-100",
-                        activePrimaryNode === "center" ? `p-6 ${isMobile ? "w-[240px]" : "w-[280px]"} cursor-default rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl shadow-[0_0_30px_rgba(255,255,255,0.05)] hover:shadow-[0_0_60px_rgba(255,255,255,0.15)]` :
+                        activePrimaryNode === "center" ? "p-4 sm:p-6 w-[min(336px,calc(100vw-32px))] max-h-[calc(100vh-7.5rem)] md:max-h-[min(82vh,720px)] overflow-hidden cursor-default rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl shadow-[0_0_30px_rgba(255,255,255,0.05)] hover:shadow-[0_0_60px_rgba(255,255,255,0.15)]" :
                             activePrimaryNode === "notifications" ? "cursor-default border-none bg-transparent shadow-none w-0 h-0" :
                                 "p-6 rounded-[2rem] bg-black/80 border border-white/20 backdrop-blur-2xl shadow-[0_0_30px_rgba(255,255,255,0.05)] hover:shadow-[0_0_60px_rgba(255,255,255,0.15)] w-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] border-white/30"
                     )}
@@ -697,121 +810,54 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                     <GlowingEffect spread={40} proximity={80} inactiveZone={0.01} borderWidth={1} variant="subtle" disabled={radialGlowDisabled} />
 
                     {activePrimaryNode === "center" ? (
-                        <div className="flex flex-col w-full gap-5 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="flex h-full min-h-0 w-full flex-col relative z-10 animate-in fade-in zoom-in-95 duration-300">
+                            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1 overscroll-contain">
                             {/* Editable Title */}
-                            <div className="flex flex-col gap-1.5">
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">{copy.title}</span>
+                            <div className="flex flex-col">
                                 <Input
                                     value={block.title}
                                     onChange={(e) => updateBlock(block.id, { title: e.target.value })}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             e.preventDefault();
-                                            // Trigger the same logic as "Guardar/Siguiente"
-                                            if (JSON.stringify(draftRecurrence) !== JSON.stringify(block.recurrencePattern)) {
-                                                if (!draftRecurrence) updateBlock(block.id, { recurrencePattern: undefined, recurrenceId: undefined });
-                                                else applyRecurrence(block.id, draftRecurrence);
-                                            }
-                                            if (guidedStep === "center") {
-                                                setGuidedStep("time");
-                                                setActivePrimaryNode("time");
-                                            } else {
-                                                setActivePrimaryNode(null);
-                                            }
+                                            handleCenterSave();
                                         }
                                     }}
-                                    className={cn("font-bold tracking-tight text-white bg-black/40 border border-white/10 rounded-xl px-3 h-10 focus-visible:ring-1 focus-visible:ring-indigo-500/50 placeholder:text-white/20 shadow-inner",
-                                        isMobile ? "text-base" : "text-lg")}
+                                    className={cn(
+                                        "h-12 rounded-[1.35rem] border border-white/10 bg-white/[0.04] px-4 font-semibold tracking-tight text-white shadow-inner placeholder:text-white/22 focus-visible:ring-1 focus-visible:ring-indigo-500/50",
+                                        isMobile ? "text-[1.05rem]" : "text-lg"
+                                    )}
                                     placeholder={copy.blockNamePlaceholder}
                                     autoFocus
                                 />
                             </div>
 
-                            <div className="flex flex-col gap-2">
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">
-                                    {copy.planningMetadata}
-                                </span>
-                                <div className="space-y-2 rounded-2xl border border-white/8 bg-black/20 p-3">
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {[1, 2, 3, 4, 5].map((priority) => (
-                                            <button
-                                                key={`priority-${priority}`}
-                                                onClick={() => updateBlock(block.id, { priority: priority as Block["priority"] })}
-                                                className={cn(
-                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
-                                                    (block.priority ?? 3) === priority
-                                                        ? "bg-indigo-500/25 text-indigo-100"
-                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
-                                                )}
-                                            >
-                                                P{priority}
-                                            </button>
-                                        ))}
+                            {scheduleSummary && (
+                                <button
+                                    type="button"
+                                    onClick={() => setActivePrimaryNode("time")}
+                                    className="group rounded-[1.6rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-4 py-3.5 text-left transition-all duration-300 hover:border-white/20 hover:bg-white/[0.06]"
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <span className="block text-[11px] font-medium text-white/42">
+                                                {scheduleSummary.metaLabel}
+                                            </span>
+                                            <span className="mt-1 block text-[1.15rem] font-semibold leading-tight tracking-tight text-white">
+                                                {scheduleSummary.timeRange}
+                                            </span>
+                                        </div>
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-400/18 bg-indigo-500/10 text-indigo-100/80 transition-all duration-300 group-hover:border-indigo-300/35 group-hover:bg-indigo-500/15">
+                                            <Clock size={16} />
+                                        </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {(["light", "medium", "high"] as const).map((intensity) => (
-                                            <button
-                                                key={intensity}
-                                                onClick={() => updateBlock(block.id, {
-                                                    intensity,
-                                                    cognitivelyHeavy: intensity === "high" ? true : block.cognitivelyHeavy,
-                                                })}
-                                                className={cn(
-                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
-                                                    (block.intensity ?? "medium") === intensity
-                                                        ? "bg-amber-500/20 text-amber-100"
-                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
-                                                )}
-                                            >
-                                                {intensity === "light" ? copy.intensityLight : intensity === "medium" ? copy.intensityMedium : copy.intensityHigh}
-                                            </button>
-                                        ))}
-                                        {(["fixed", "moderate", "flexible"] as const).map((flexibility) => (
-                                            <button
-                                                key={flexibility}
-                                                onClick={() => updateBlock(block.id, { flexibility })}
-                                                className={cn(
-                                                    "rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all",
-                                                    (block.flexibility ?? "moderate") === flexibility
-                                                        ? "bg-sky-500/20 text-sky-100"
-                                                        : "bg-white/[0.04] text-white/45 hover:text-white/80",
-                                                )}
-                                            >
-                                                {flexibility === "fixed" ? copy.flexibilityFixed : flexibility === "moderate" ? copy.flexibilityModerate : copy.flexibilityFlexible}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            onClick={() => updateBlock(block.id, { splittable: !(block.splittable ?? true) })}
-                                            className={cn(
-                                                "rounded-2xl border px-3 py-2 text-left text-xs transition-all",
-                                                (block.splittable ?? true)
-                                                    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
-                                                    : "border-white/8 bg-white/[0.03] text-white/48",
-                                            )}
-                                        >
-                                            {(block.splittable ?? true) ? copy.splittableYes : copy.splittableNo}
-                                        </button>
-                                        <button
-                                            onClick={() => updateBlock(block.id, { optional: !(block.optional ?? false) })}
-                                            className={cn(
-                                                "rounded-2xl border px-3 py-2 text-left text-xs transition-all",
-                                                (block.optional ?? false)
-                                                    ? "border-white/20 bg-white/[0.08] text-white"
-                                                    : "border-white/8 bg-white/[0.03] text-white/48",
-                                            )}
-                                        >
-                                            {(block.optional ?? false) ? copy.optionalYes : copy.optionalNo}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                                </button>
+                            )}
 
                             {/* Recurrence Selector */}
-                            <div className="flex flex-col gap-1.5">
-                                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30 ml-1">{copy.recurrence}</span>
-                                <div className="grid grid-cols-2 gap-1.5">
+                            <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/28">{copy.recurrence}</span>
+                                <div className="grid grid-cols-2 gap-2">
                                     {[
                                         { label: copy.recurrenceNone, value: undefined },
                                         { label: getRecurrenceLabel(language, "daily"), value: "daily" },
@@ -832,13 +878,12 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                     }
                                                 }}
                                                 className={cn(
-                                                    "flex items-center justify-center gap-1.5 h-9 rounded-xl transition-all duration-300 text-xs font-semibold border backdrop-blur-md",
+                                                    "flex items-center justify-center h-10 rounded-[1.15rem] px-3 transition-all duration-300 text-[13px] font-semibold border backdrop-blur-md",
                                                     isSelected
                                                         ? "bg-indigo-500/20 text-indigo-100 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.25)]"
                                                         : "bg-black/40 text-white/50 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white/90"
                                                 )}
                                             >
-                                                {opt.value && <Repeat size={12} className={isSelected ? "text-indigo-400" : ""} />}
                                                 <span>{opt.label}</span>
                                             </button>
                                         );
@@ -853,20 +898,19 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                             });
                                         }}
                                         className={cn(
-                                            "flex items-center justify-center gap-1.5 h-9 rounded-xl transition-all duration-300 text-xs font-semibold border backdrop-blur-md",
+                                            "flex items-center justify-center h-10 rounded-[1.15rem] px-3 transition-all duration-300 text-[13px] font-semibold border backdrop-blur-md",
                                             draftRecurrence?.type === "custom"
                                                 ? "bg-indigo-500/20 text-indigo-100 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.25)]"
                                                 : "bg-black/40 text-white/50 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white/90"
                                         )}
                                     >
-                                        <Repeat size={12} className={draftRecurrence?.type === "custom" ? "text-indigo-400" : ""} />
                                         <span>{copy.custom}</span>
                                     </button>
                                 </div>
 
                                 {/* Custom day picker inline */}
                                 {draftRecurrence?.type === "custom" && (
-                                    <div className="flex justify-between mt-2 animate-in slide-in-from-top-1 fade-in duration-200">
+                                    <div className="mt-1 grid grid-cols-7 gap-1.5 rounded-[1.15rem] border border-white/8 bg-white/[0.03] p-2 animate-in slide-in-from-top-1 fade-in duration-200">
                                         {recurrenceDayLabels.map((day, idx) => {
                                             const isActive = draftRecurrence?.days?.includes(idx);
                                             return (
@@ -885,7 +929,7 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                         });
                                                     }}
                                                     className={cn(
-                                                        "w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-300 border",
+                                                        "h-8 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-300 border",
                                                         isActive
                                                             ? "bg-indigo-500 text-white border-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.6)]"
                                                             : "bg-black/40 text-white/40 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white/90"
@@ -899,12 +943,104 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 )}
                             </div>
 
-                            {/* Acciones de Edición */}
-                            <div className="flex justify-end gap-2 mt-2 pt-4 border-t border-white/[0.05]">
+                            {/* Opciones avanzadas */}
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAdvancedPlanningOpen((prev) => !prev)}
+                                    className={cn(
+                                        "group flex items-center justify-between rounded-[1.4rem] border px-4 py-3 text-left text-sm font-semibold transition-all duration-300",
+                                        isAdvancedPlanningOpen
+                                            ? "border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                                            : "border-white/8 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                                    )}
+                                >
+                                    <span className="text-white/92">
+                                        {isAdvancedPlanningOpen ? copy.hideMoreOptions : copy.showMoreOptions}
+                                    </span>
+                                    <div className={cn(
+                                        "flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300",
+                                        isAdvancedPlanningOpen
+                                            ? "border-indigo-400/25 bg-indigo-500/12 text-indigo-100"
+                                            : "border-white/10 bg-white/[0.03] text-white/50 group-hover:border-white/20 group-hover:text-white/80"
+                                    )}>
+                                        <ChevronDown className={cn("h-4 w-4 transition-transform duration-300", isAdvancedPlanningOpen && "rotate-180")} />
+                                    </div>
+                                </button>
+
+                                {isAdvancedPlanningOpen && (
+                                    <div className="space-y-3 rounded-[1.65rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] animate-in slide-in-from-top-1 fade-in duration-200">
+                                        <div className="space-y-2">
+                                            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/28">
+                                                {copy.importance}
+                                            </span>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {([
+                                                    { value: "high", label: copy.importanceHigh, tone: "from-rose-500/25 to-orange-400/10 border-rose-400/30 text-rose-50" },
+                                                    { value: "medium", label: copy.importanceMedium, tone: "from-indigo-500/25 to-violet-400/10 border-indigo-400/30 text-indigo-50" },
+                                                    { value: "low", label: copy.importanceLow, tone: "from-sky-500/20 to-cyan-400/10 border-sky-400/25 text-sky-50" },
+                                                ] as const).map((option) => (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        onClick={() => updateBlock(block.id, {
+                                                            priority: option.value === "high" ? 4 : option.value === "low" ? 2 : 3,
+                                                        })}
+                                                        className={cn(
+                                                            "h-12 rounded-[1.1rem] border bg-white/[0.03] px-3 text-sm font-semibold transition-all duration-300",
+                                                            importanceLevel === option.value
+                                                                ? `bg-gradient-to-br ${option.tone} shadow-[0_10px_24px_-16px_rgba(99,102,241,0.9)]`
+                                                                : "border-white/8 text-white/58 hover:border-white/20 hover:bg-white/[0.05] hover:text-white/88",
+                                                        )}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between rounded-[1.25rem] border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                                                <span className="text-sm font-semibold text-white/92">{copy.flexibilityLabel}</span>
+                                                <GlassSwitch
+                                                    checked={canMove}
+                                                    onCheckedChange={(checked) => updateBlock(block.id, { flexibility: checked ? "flexible" : "fixed" })}
+                                                    activeColor="bg-sky-500/20"
+                                                    className="ml-1"
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between rounded-[1.25rem] border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                                                <span className="text-sm font-semibold text-white/92">{copy.splittableYes}</span>
+                                                <GlassSwitch
+                                                    checked={canSplit}
+                                                    onCheckedChange={(checked) => updateBlock(block.id, { splittable: checked })}
+                                                    activeColor="bg-emerald-500/20"
+                                                    className="ml-1"
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between rounded-[1.25rem] border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                                                <span className="text-sm font-semibold text-white/92">{copy.requiredLabel}</span>
+                                                <GlassSwitch
+                                                    checked={isRequired}
+                                                    onCheckedChange={(checked) => updateBlock(block.id, { optional: !checked })}
+                                                    activeColor="bg-amber-500/20"
+                                                    className="ml-1"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            </div>
+
+                            <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-white/[0.05] pt-4">
                                 <button
                                     onClick={() => {
-                                        if (guidedStep === "center") {
-                                            deleteBlock(block.id);
+                                        if (isNewBlock) {
+                                            void deleteBlock(block.id);
                                             handleClose();
                                         } else {
                                             setActivePrimaryNode(null);
@@ -916,24 +1052,11 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                 </button>
                                 <button
                                     onClick={() => {
-                                        // Aplicar estado 'draft' de repetición
-                                        if (JSON.stringify(draftRecurrence) !== JSON.stringify(block.recurrencePattern)) {
-                                            if (!draftRecurrence) {
-                                                updateBlock(block.id, { recurrencePattern: undefined, recurrenceId: undefined });
-                                            } else {
-                                                applyRecurrence(block.id, draftRecurrence);
-                                            }
-                                        }
-                                        if (guidedStep === "center") {
-                                            setGuidedStep("time");
-                                            setActivePrimaryNode("time");
-                                        } else {
-                                            setActivePrimaryNode(null);
-                                        }
+                                        handleCenterSave();
                                     }}
                                     className="px-5 py-2 rounded-xl text-xs font-bold text-indigo-50 bg-indigo-500/80 border border-indigo-400/50 shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:bg-indigo-500 hover:shadow-[0_0_25px_rgba(99,102,241,0.6)] hover:scale-[1.02] active:scale-95 transition-all duration-300 backdrop-blur-md"
                                 >
-                                    {guidedStep === "center" ? copy.next : copy.save}
+                                    {isNewBlock ? copy.createBlock : copy.save}
                                 </button>
                             </div>
                         </div>
@@ -1322,6 +1445,13 @@ export function RadialBlockMenu({ blockId, isNewBlock = false, onClose }: { bloc
                                                             isOverlapping(newStart, newEnd, b.startAt, b.endAt)
                                                         );
                                                         const hasOverlap = actualOverlaps.length > 0;
+
+                                                        if (isNewBlock) {
+                                                            if (!hasOverlap) {
+                                                                updateBlock(block.id, { startAt: newStart, endAt: newEnd });
+                                                            }
+                                                            return;
+                                                        }
 
                                                         if (hasOverlap) {
                                                             setPendingConflict({ newBlock: newBlockData, overlaps: actualOverlaps });

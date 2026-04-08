@@ -6,24 +6,16 @@ import { DailyAgendaView } from "@/components/calendar/DailyAgendaView";
 import { GlassCalendarDashboard } from "@/components/calendar/GlassCalendarDashboard";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
-import { findNextFreeSlot, isOverlapping, snapTo15 } from "@/lib/utils/scheduling";
-import { OverlapResolutionModal, OverlapResolutionType } from "@/components/calendar/OverlapResolutionModal";
-import { resolveOverlapBySlicingUnderlying, resolveOverlapByShrinkingNew } from "@/lib/utils/overlapResolution";
+import { snapTo15 } from "@/lib/utils/scheduling";
 import { isSameDay, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 
-type PendingConflict = {
-    newBlock: Partial<import("@/lib/types/blocks").Block> & Pick<import("@/lib/types/blocks").Block, "startAt" | "endAt">;
-    overlaps: import("@/lib/types/blocks").Block[];
-};
-
 export function SectionCalendar() {
-    const { blocks, createBlock, updateBlock } = useBlocksStore();
+    const { createBlock } = useBlocksStore();
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isNewBlock, setIsNewBlock] = useState(false);
     const [mobileSelectedDate, setMobileSelectedDate] = useState<Date>(startOfDay(new Date()));
-    const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
 
     const handleMobilePlusCreate = () => {
         const selectedDay = startOfDay(mobileSelectedDate);
@@ -38,10 +30,7 @@ export function SectionCalendar() {
             desiredStart.setHours(9, 0, 0, 0);
         }
 
-        const dayBlocks = blocks.filter((block) => isSameDay(block.startAt, selectedDay) && block.status !== "canceled");
         const endAt = new Date(desiredStart.getTime() + durationMinutes * 60000);
-        
-        const overlaps = dayBlocks.filter(b => isOverlapping(desiredStart, endAt, b.startAt, b.endAt));
 
         const enriched = enrichNewBlockWithPlanningMetadata({
             startAt: desiredStart,
@@ -50,60 +39,11 @@ export function SectionCalendar() {
             type: "other"
         });
 
-        if (overlaps.length > 0) {
-            setPendingConflict({ newBlock: enriched, overlaps });
-        } else {
-            const newBlock = createBlock(enriched);
-            if (newBlock) {
-                setSelectedBlockId(newBlock.id);
-                setIsNewBlock(true);
-            }
-        }
-    };
-
-    
-    const handleResolveConflict = (resolution: OverlapResolutionType) => {
-        if (!pendingConflict) return;
-        const { newBlock, overlaps } = pendingConflict;
-        
-        let resultingId = newBlock.id;
-        const isCreation = !newBlock.id;
-
-        const _currentBlocks = blocks.filter(b => b.status !== "canceled" && b.id !== newBlock.id);
-
-        if (resolution === 'slice_underlying') {
-            const result = resolveOverlapBySlicingUnderlying(newBlock, overlaps, updateBlock, createBlock);
-            if (result && isCreation) resultingId = result.id;
-        } 
-        else if (resolution === 'shrink_new') {
-            const result = resolveOverlapByShrinkingNew(newBlock, overlaps, createBlock);
-            if (result && isCreation) resultingId = result.id;
-        }
-        else if (resolution === 'move_forward') {
-            const durationMins = (newBlock.endAt.getTime() - newBlock.startAt.getTime()) / 60000;
-            const slot = findNextFreeSlot(_currentBlocks, newBlock.startAt, durationMins, newBlock.id);
-            
-            if (slot) {
-                const movedBlock = {
-                    ...newBlock,
-                    startAt: slot.startAt,
-                    endAt: slot.endAt,
-                };
-                const result = createBlock(movedBlock);
-                if (result && isCreation) resultingId = result.id;
-            }
-        }
-        else if (resolution === 'keep_overlap') {
-            const result = createBlock(newBlock);
-            if (result && isCreation) resultingId = result.id;
-        }
-
-        if (isCreation && resultingId) {
-            setSelectedBlockId(resultingId);
+        const newBlock = createBlock(enriched);
+        if (newBlock) {
+            setSelectedBlockId(newBlock.id);
             setIsNewBlock(true);
         }
-        
-        setPendingConflict(null);
     };
 
 
@@ -175,15 +115,6 @@ export function SectionCalendar() {
                     }}
                 />
             )}
-
-        
-            <OverlapResolutionModal
-                isOpen={!!pendingConflict}
-                onClose={() => setPendingConflict(null)}
-                pendingBlock={pendingConflict?.newBlock || null}
-                overlappingCount={pendingConflict?.overlaps?.length || 0}
-                onResolve={handleResolveConflict}
-            />
         </section>
     );
 }

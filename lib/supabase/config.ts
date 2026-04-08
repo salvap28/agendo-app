@@ -1,5 +1,5 @@
 export const SUPABASE_SETUP_HINT =
-    "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local."
+    "Add real NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY values to .env.local."
 
 export const SUPABASE_SETUP_ERROR = `Supabase is not configured. ${SUPABASE_SETUP_HINT}`
 
@@ -8,11 +8,24 @@ type SupabaseConfig = {
     anonKey: string
 }
 
+function isPlaceholderValue(value: string | undefined) {
+    if (!value) return true
+
+    const normalized = value.trim().toLowerCase()
+
+    return (
+        normalized.length === 0
+        || normalized.startsWith("your-")
+        || normalized.includes("placeholder")
+        || normalized === "changeme"
+    )
+}
+
 export function getSupabaseConfig(): SupabaseConfig | null {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
 
-    if (!url || !anonKey) {
+    if (!url || isPlaceholderValue(url) || !anonKey || isPlaceholderValue(anonKey)) {
         return null
     }
 
@@ -31,4 +44,8 @@ export function requireSupabaseConfig(): SupabaseConfig {
     }
 
     return config
+}
+
+export function hasValidSupabaseServiceRoleKey() {
+    return !isPlaceholderValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
