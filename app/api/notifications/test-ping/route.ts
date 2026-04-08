@@ -4,7 +4,11 @@ import webpush from "web-push";
 import { cookies } from "next/headers";
 import { requireSupabaseConfig } from "@/lib/supabase/config";
 
-export async function POST(req: Request) {
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "Internal Server Error";
+}
+
+export async function POST() {
     try {
         const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
         const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
@@ -64,7 +68,7 @@ export async function POST(req: Request) {
 
         await Promise.all(promises);
         return NextResponse.json({ success: true, devicesNotified: promises.length });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message || "Internal Server Error" }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
     }
 }

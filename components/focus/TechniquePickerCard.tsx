@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useFocusStore } from "@/lib/stores/focusStore";
 import { useSettingsStore } from "@/lib/stores/settingsStore";
 import { createStudyLayer, StudyTechniqueState } from "@/lib/engines/layersEngine";
@@ -25,11 +25,6 @@ export function TechniquePickerCard({ onClose }: { onClose: () => void }) {
     const { language, t } = useI18n();
     const { session, setLayer } = useFocusStore();
     const { settings } = useSettingsStore();
-    const [isClient, setIsClient] = useState(false);
-
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
     const [selectedId, setSelectedId] = useState<TechId>("pomodoro_25_5");
     const [isClosing, setIsClosing] = useState(false);
 
@@ -43,8 +38,8 @@ export function TechniquePickerCard({ onClose }: { onClose: () => void }) {
         },
         custom_pomodoro: {
             ...copy.techniques.custom_pomodoro,
-            focus: isClient ? settings.pomodoro_custom_focus : 25,
-            break: isClient ? settings.pomodoro_custom_short_break : 5,
+            focus: settings.pomodoro_custom_focus,
+            break: settings.pomodoro_custom_short_break,
             icon: Clock,
         },
         study_50_10: {
@@ -59,7 +54,7 @@ export function TechniquePickerCard({ onClose }: { onClose: () => void }) {
             break: 5,
             icon: RefreshCw,
         },
-    }), [copy, isClient, settings.pomodoro_custom_focus, settings.pomodoro_custom_short_break]);
+    }), [copy, settings.pomodoro_custom_focus, settings.pomodoro_custom_short_break]);
 
     const isUpdating = session?.activeLayer?.kind === "studyTechnique" && session?.activeLayer?.id !== "active_recall";
 

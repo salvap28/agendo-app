@@ -4,8 +4,28 @@ import { useFocusStore } from '@/lib/stores/focusStore';
 import { FocusSession } from '@/lib/types/focus';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
+type FocusSessionRow = {
+    id: string;
+    mode: "free" | "block" | null;
+    block_id: string | null;
+    block_type: FocusSession["blockType"] | null;
+    initiated_at: string;
+    started_at: string;
+    is_paused: boolean;
+    paused_at: string | null;
+    total_paused_ms: number;
+    planned_duration_ms: number | null;
+    active_layer: FocusSession["activeLayer"] | null;
+    history: string[] | null;
+    pause_count: number | null;
+    exit_count: number | null;
+    card_memory: FocusSession["cardMemory"] | null;
+    closure_bridge_shown: boolean | null;
+    is_active: boolean;
+};
+
 export function useFocusRemoteSync() {
-    const { session, dangerouslyInjectRemoteSession, finish } = useFocusStore();
+    const { dangerouslyInjectRemoteSession } = useFocusStore();
 
     useEffect(() => {
         let channel: RealtimeChannel | null = null;
@@ -70,7 +90,7 @@ export function useFocusRemoteSync() {
                     },
                     (payload) => {
                         console.log("[Focus Sync] Websocket received payload:", payload);
-                        const newRow = payload.new as Record<string, any>;
+                        const newRow = payload.new as FocusSessionRow;
                         const local = useFocusStore.getState().session;
 
                         // If user ended the session elsewhere

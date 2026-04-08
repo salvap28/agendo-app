@@ -219,7 +219,7 @@ describe("cardsEngine", () => {
             lastPauseReason: "manual_pause",
         });
 
-        const result = evaluateFocusContext(context);
+        const result = evaluateFocusContext(context, "es");
         const topToast = result.toastCards[0];
 
         expect(topToast.id).toBe("toast_near_end");
