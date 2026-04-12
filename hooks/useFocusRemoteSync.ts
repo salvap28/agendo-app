@@ -96,7 +96,7 @@ export function useFocusRemoteSync() {
                         // If user ended the session elsewhere
                         if (newRow.is_active === false && local?.id === newRow.id) {
                             // The session was finished on another device
-                            useFocusStore.setState({ session: null }); // Hard reset to avoid re-triggering finishes
+                            useFocusStore.setState({ session: null, isOverlayVisible: false }); // Hard reset to avoid re-triggering finishes
                         } 
                         // If it's active and someone paused/resumed/changed layer
                         else if (newRow.is_active === true) {

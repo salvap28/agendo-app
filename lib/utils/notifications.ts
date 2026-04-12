@@ -15,6 +15,39 @@ function urlB64ToUint8Array(base64String: string) {
 
 let vapidPublicKeyPromise: Promise<string | null> | null = null;
 
+function wireNotificationEvents(notification: Notification, options?: NotificationOptions) {
+    const data = typeof options?.data === "object" && options?.data
+        ? options.data as { url?: string; notificationType?: string }
+        : {};
+    const targetUrl = typeof data.url === "string" ? data.url : "";
+
+    if (targetUrl) {
+        notification.onclick = () => {
+            window.focus();
+            window.location.href = targetUrl;
+        };
+    }
+
+    if (data.notificationType) {
+        notification.onclose = () => {
+            fetch("/api/habit/events", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: "notification_dismissed",
+                    surface: "notification",
+                    metadata: {
+                        type: data.notificationType,
+                    },
+                }),
+                keepalive: true,
+            }).catch(() => {
+                // noop
+            });
+        };
+    }
+}
+
 async function getVapidPublicKey() {
     const bundledKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
     if (bundledKey) return bundledKey;
@@ -101,11 +134,13 @@ export async function sendNotification(title: string, options?: NotificationOpti
     if (!("Notification" in window)) return;
 
     if (Notification.permission === "granted") {
-        new Notification(title, options);
+        const notification = new Notification(title, options);
+        wireNotificationEvents(notification, options);
     } else if (Notification.permission !== "denied") {
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
-            new Notification(title, options);
+            const notification = new Notification(title, options);
+            wireNotificationEvents(notification, options);
         }
     }
 

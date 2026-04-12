@@ -134,7 +134,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
     const activityExperiences = useActivityExperienceStore((state) => state.experiences);
     const fetchDayExperiences = useActivityExperienceStore((state) => state.fetchDayExperiences);
     const recordCheckout = useActivityExperienceStore((state) => state.recordCheckout);
-    const { session, returnToFocus, openFree } = useFocusStore();
+    const { session, isOverlayVisible, returnToFocus, openFree } = useFocusStore();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [userName, setUserName] = useState("");
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -174,9 +174,9 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 nextFocusBlock: "SIGUIENTE BLOQUE DE FOCO",
                 unscheduledFocus: "Foco sin agenda",
                 fallbackFocus: "Foco",
-                profileFill: "Perfil cargado",
-                profileFillHelpLine1: "Se calibra con cada check-in, sesion de foco y bloque completado.",
-                profileFillHelpLine2: "Mas señal significa mejores recomendaciones y predicciones mas precisas.",
+                profileFill: "Calibracion del perfil",
+                profileFillHelpLine1: "Se calibra sobre todo con check-ins guardados y cierres de foco confirmados.",
+                profileFillHelpLine2: "Las sesiones sin respuesta aportan contexto, pero cuentan mucho menos que una confirmacion manual.",
                 planningAssist: "Asistencia de planning",
                 planningAssistBody: "Ajustes inteligentes basados en tus patrones reales.",
                 nothingToAdjust: "No hay nada para ajustar ahora. Sigue asi.",
@@ -218,9 +218,9 @@ export function SectionContext({ onNext }: SectionContextProps) {
                 nextFocusBlock: "NEXT FOCUS BLOCK",
                 unscheduledFocus: "Unscheduled Focus",
                 fallbackFocus: "Focus",
-                profileFill: "Profile fill",
-                profileFillHelpLine1: "It calibrates with every check-in, focus session, and completed block.",
-                profileFillHelpLine2: "More signal means better recommendations and sharper predictions.",
+                profileFill: "Profile calibration",
+                profileFillHelpLine1: "It calibrates mostly from saved check-ins and confirmed focus wrap-ups.",
+                profileFillHelpLine2: "Sessions without a response add context, but they count far less than manual confirmation.",
                 planningAssist: "Planning assist",
                 planningAssistBody: "Smart adjustments based on your real patterns.",
                 nothingToAdjust: "Nothing to adjust right now. Keep going.",
@@ -1037,7 +1037,7 @@ export function SectionContext({ onNext }: SectionContextProps) {
                             <Calendar className="w-4 h-4 opacity-70" />
                             {copy.openCalendar}
                         </GlassButton>
-                        {session && !session.isActive ? (
+                        {session && !isOverlayVisible ? (
                             <GlassButton onClick={returnToFocus} variant="primary" className="justify-center">
                                 {copy.returnToFocus}
                             </GlassButton>

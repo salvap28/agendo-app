@@ -166,7 +166,7 @@ export function ReflectionSheet() {
     };
 
     const handleClose = () => {
-        useFocusStore.setState({ session: null });
+        useFocusStore.setState({ session: null, isOverlayVisible: false });
     };
 
     const handleFinish = async () => {
@@ -198,7 +198,7 @@ export function ReflectionSheet() {
         } catch (error) {
             console.error("Failed to save reflection cleanly", error);
         } finally {
-            useFocusStore.setState({ session: null });
+            useFocusStore.setState({ session: null, isOverlayVisible: false });
             setIsSaving(false);
         }
     };

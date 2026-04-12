@@ -16,7 +16,7 @@ import { requestNotificationPermission } from '@/lib/utils/notifications';
 import { FocusCard as FocusCardType } from '@/lib/types/focus';
 import type { BlockType } from '@/lib/types/blocks';
 import { FocusWaveBackground } from './FocusWaveBackground';
-import { ReflectionSheet } from './ReflectionSheet';
+import { MinimalFocusCheckout } from '@/components/habit/MinimalFocusCheckout';
 import { GymTrackerPanel } from './GymTrackerPanel';
 import { RestSelector } from './RestSelector';
 import { FocusCardsCarousel } from './FocusCardsCarousel';
@@ -108,6 +108,7 @@ export function FocusOverlay() {
     const {
         session,
         lastSession,
+        isOverlayVisible,
         pause,
         resume,
         exit,
@@ -216,6 +217,7 @@ export function FocusOverlay() {
 
     useFocusRuntimeSignals({
         session,
+        isOverlayVisible,
         isEntryRitualActive,
         activeCarouselCardId,
         activeEngineToastId,
@@ -228,7 +230,7 @@ export function FocusOverlay() {
         recordStabilityRecovered,
     });
 
-    if (!session || (!session.isActive && !session.endedAt)) return null;
+    if (!isOverlayVisible || !session || (!session.isActive && !session.endedAt)) return null;
 
     const formatted = attentionAidTimer?.formatted || countdownFormatted || countUpFormatted;
     const formattedChars = formatted.split('');
@@ -739,7 +741,7 @@ export function FocusOverlay() {
                 onOpenIntentInput={(field = "intention") => openIntentEditor(false, field)}
             />
 
-            <ReflectionSheet />
+            <MinimalFocusCheckout />
         </div>
     );
 }

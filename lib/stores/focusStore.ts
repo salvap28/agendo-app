@@ -33,6 +33,7 @@ import { useSettingsStore } from '@/lib/stores/settingsStore';
 import { BlockType } from '@/lib/types/blocks';
 import { focusCardCooldowns } from '@/lib/engines/cardsEngine';
 import { persistCompletedSession, syncActiveSession } from '@/lib/services/focusService';
+import { trackHabitEvent } from '@/lib/services/habitService';
 import { resolveSessionClosureType } from '@/lib/engines/personalIntelligence/sessionAnalytics';
 
 type StudyTechniqueLayerConfig = {
@@ -333,6 +334,7 @@ interface FocusState {
     lastSession: FocusSessionSummary | null;
     intervention: FocusIntervention | null;
     interventions: FocusInterventionRecord[];
+    isOverlayVisible: boolean;
 
     // General
     openFromBlock: (blockId: string, blockType: BlockType) => void;
@@ -432,6 +434,7 @@ export const useFocusStore = create<FocusState>()(
             lastSession: null,
             intervention: null,
             interventions: [],
+            isOverlayVisible: false,
 
             openFromBlock: (blockId, blockType) => {
                 const existingSession = get().session;
@@ -441,7 +444,10 @@ export const useFocusStore = create<FocusState>()(
                     existingSession.blockId === blockId &&
                     !existingSession.endedAt
                 ) {
-                    if (existingSession.isActive) return;
+                    if (existingSession.isActive) {
+                        set({ isOverlayVisible: true });
+                        return;
+                    }
 
                     const resumedSession = appendRuntimeEvent(
                         {
@@ -462,7 +468,8 @@ export const useFocusStore = create<FocusState>()(
                     );
 
                     set({
-                        session: resumedSession
+                        session: resumedSession,
+                        isOverlayVisible: true,
                     });
                     syncActiveSession(resumedSession);
                     return;
@@ -502,16 +509,30 @@ export const useFocusStore = create<FocusState>()(
                 });
 
                 set({
-                    session: nextSession
+                    session: nextSession,
+                    isOverlayVisible: true,
                 });
                 syncActiveSession(nextSession);
+                void trackHabitEvent({
+                    name: "focus_entry_viewed",
+                    surface: "focus_overlay",
+                    blockId,
+                    sessionId: nextSession.id,
+                    metadata: {
+                        mode: "block",
+                        blockType,
+                    },
+                });
                 get().startEntryRitual();
             },
 
             openFree: () => {
                 const existingSession = get().session;
                 if (existingSession?.mode === "free" && !existingSession.endedAt) {
-                    if (existingSession.isActive) return;
+                    if (existingSession.isActive) {
+                        set({ isOverlayVisible: true });
+                        return;
+                    }
 
                     const resumedSession = appendRuntimeEvent(
                         {
@@ -532,7 +553,8 @@ export const useFocusStore = create<FocusState>()(
                     );
 
                     set({
-                        session: resumedSession
+                        session: resumedSession,
+                        isOverlayVisible: true,
                     });
                     syncActiveSession(resumedSession);
                     return;
@@ -568,9 +590,18 @@ export const useFocusStore = create<FocusState>()(
                 });
 
                 set({
-                    session: nextSession
+                    session: nextSession,
+                    isOverlayVisible: true,
                 });
                 syncActiveSession(nextSession);
+                void trackHabitEvent({
+                    name: "focus_entry_viewed",
+                    surface: "focus_overlay",
+                    sessionId: nextSession.id,
+                    metadata: {
+                        mode: "free",
+                    },
+                });
                 get().startEntryRitual();
             },
 
@@ -601,6 +632,15 @@ export const useFocusStore = create<FocusState>()(
                     session: nextSession
                 });
                 syncActiveSession(nextSession);
+                void trackHabitEvent({
+                    name: "focus_paused",
+                    surface: "focus_overlay",
+                    blockId: nextSession.blockId ?? null,
+                    sessionId: nextSession.id,
+                    metadata: {
+                        reason,
+                    },
+                });
             },
 
             resume: () => {
@@ -669,6 +709,12 @@ export const useFocusStore = create<FocusState>()(
                     session: resumedSession
                 });
                 syncActiveSession(resumedSession);
+                void trackHabitEvent({
+                    name: "focus_resumed",
+                    surface: "focus_overlay",
+                    blockId: resumedSession.blockId ?? null,
+                    sessionId: resumedSession.id,
+                });
             },
 
             exit: () => {
@@ -684,7 +730,8 @@ export const useFocusStore = create<FocusState>()(
                     });
 
                     set({
-                        session: exitedEntrySession
+                        session: exitedEntrySession,
+                        isOverlayVisible: false,
                     });
                     return;
                 }
@@ -705,7 +752,8 @@ export const useFocusStore = create<FocusState>()(
                     });
 
                     set({
-                        session: exitedSession
+                        session: exitedSession,
+                        isOverlayVisible: false,
                     });
                 }
             },
@@ -713,6 +761,10 @@ export const useFocusStore = create<FocusState>()(
             returnToFocus: () => {
                 const { session } = get();
                 if (!session) return;
+                if (session.isActive) {
+                    set({ isOverlayVisible: true });
+                    return;
+                }
                 set({
                     session: appendRuntimeEvent({
                         ...session,
@@ -720,7 +772,8 @@ export const useFocusStore = create<FocusState>()(
                         history: [...(session.history || []), 'Returned to overlay']
                     }, "session_returned", session.entryRitual?.isActive ? "entry" : "stabilized", Date.now(), {
                         source: "overlay",
-                    })
+                    }),
+                    isOverlayVisible: true,
                 });
             },
 
@@ -813,6 +866,17 @@ export const useFocusStore = create<FocusState>()(
                             : state.session,
                     }));
                 }
+
+                void trackHabitEvent({
+                    name: closureType === "abandoned" ? "focus_abandoned" : "focus_completed",
+                    surface: "focus_overlay",
+                    blockId: finishedSession.blockId ?? null,
+                    sessionId: finishedSession.id,
+                    metadata: {
+                        closureType,
+                        plannedDurationMs: finishedSession.plannedDurationMs ?? null,
+                    },
+                });
 
                 if (finishedSession.mode === "block" && finishedSession.blockId) {
                     await useBlocksStore.getState().updateBlock(finishedSession.blockId, {
@@ -1021,6 +1085,16 @@ export const useFocusStore = create<FocusState>()(
                         }
                     ]
                 });
+                void trackHabitEvent({
+                    name: "focus_started",
+                    surface: "focus_overlay",
+                    blockId: session.blockId ?? null,
+                    sessionId: session.id,
+                    metadata: {
+                        selectedStartMode,
+                        source: "entry_completed",
+                    },
+                });
             },
 
             skipEntryRitual: () => {
@@ -1082,6 +1156,16 @@ export const useFocusStore = create<FocusState>()(
                             },
                         }
                     ]
+                });
+                void trackHabitEvent({
+                    name: "focus_started",
+                    surface: "focus_overlay",
+                    blockId: session.blockId ?? null,
+                    sessionId: session.id,
+                    metadata: {
+                        selectedStartMode,
+                        source: "entry_skipped",
+                    },
                 });
             },
 

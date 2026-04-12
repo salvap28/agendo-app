@@ -50,6 +50,7 @@ export async function POST(req: Request) {
             title,
             body: options?.body,
             icon: options?.icon || "/icon.png",
+            data: options?.data ?? null,
         });
 
         const promises = subscriptions.map((sub) => {

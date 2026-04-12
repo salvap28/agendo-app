@@ -5,6 +5,7 @@ import { FocusCard, FocusSession } from "@/lib/types/focus";
 
 type UseFocusRuntimeSignalsArgs = {
     session: FocusSession | null;
+    isOverlayVisible: boolean;
     isEntryRitualActive: boolean;
     activeCarouselCardId: string | null;
     activeEngineToastId: string | null;
@@ -19,6 +20,7 @@ type UseFocusRuntimeSignalsArgs = {
 
 export function useFocusRuntimeSignals({
     session,
+    isOverlayVisible,
     isEntryRitualActive,
     activeCarouselCardId,
     activeEngineToastId,
@@ -38,7 +40,7 @@ export function useFocusRuntimeSignals({
     const trackedSessionEndedAt = session?.endedAt ?? null;
 
     React.useEffect(() => {
-        if (!trackedSessionId || isEntryRitualActive || trackedSessionPaused || trackedSessionEndedAt) return;
+        if (!isOverlayVisible || !trackedSessionId || isEntryRitualActive || trackedSessionPaused || trackedSessionEndedAt) return;
 
         let lastActivityAt = Date.now();
         let inactivityRaised = false;
@@ -91,6 +93,7 @@ export function useFocusRuntimeSignals({
         trackedSessionEndedAt,
         trackedSessionId,
         trackedSessionPaused,
+        isOverlayVisible,
     ]);
 
     React.useEffect(() => {
@@ -99,7 +102,7 @@ export function useFocusRuntimeSignals({
             foregroundExposureTimeoutRef.current = null;
         }
 
-        if (!activeCarouselCardId) return;
+        if (!isOverlayVisible || !activeCarouselCardId) return;
 
         foregroundExposureTimeoutRef.current = window.setTimeout(() => {
             markCardShown(activeCarouselCardId, Date.now());
@@ -111,9 +114,14 @@ export function useFocusRuntimeSignals({
                 foregroundExposureTimeoutRef.current = null;
             }
         };
-    }, [activeCarouselCardId, foregroundExposureMs, markCardShown]);
+    }, [activeCarouselCardId, foregroundExposureMs, isOverlayVisible, markCardShown]);
 
     React.useEffect(() => {
+        if (!isOverlayVisible) {
+            setActiveEngineToastId(null);
+            return;
+        }
+
         const toastIds = toastCards.map((toast) => toast.id);
         if (toastIds.length === 0) {
             setActiveEngineToastId(null);
@@ -123,13 +131,15 @@ export function useFocusRuntimeSignals({
         if (!activeEngineToastId || !toastIds.includes(activeEngineToastId)) {
             setActiveEngineToastId(toastIds[0]);
         }
-    }, [activeEngineToastId, setActiveEngineToastId, toastCards]);
+    }, [activeEngineToastId, isOverlayVisible, setActiveEngineToastId, toastCards]);
 
     React.useEffect(() => {
+        if (!isOverlayVisible) return;
+
         const toastId = activeEngineToastId;
         if (toastId && toastId !== prevToastIdRef.current) {
             markCardShown(toastId, Date.now());
         }
         prevToastIdRef.current = toastId;
-    }, [activeEngineToastId, markCardShown]);
+    }, [activeEngineToastId, isOverlayVisible, markCardShown]);
 }

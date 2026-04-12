@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { BackgroundEclipse } from "@/components/ui/BackgroundEclipse";
 import { SectionIntro } from "@/components/home/SectionIntro";
-import { SectionContext } from "@/components/home/SectionContext";
+import { HabitContext } from "@/components/home/HabitContext";
 import { SectionCalendar } from "@/components/home/SectionCalendar";
 import { UserMenu } from "@/components/home/UserMenu";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
@@ -13,6 +14,9 @@ import { usePerformancePreference } from "@/hooks/usePerformancePreference";
 // export const dynamic = "force-dynamic";
 
 export default function Home() {
+  const searchParams = useSearchParams();
+  const mainScrollRef = useRef<HTMLElement>(null);
+  const introRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -47,6 +51,27 @@ export default function Home() {
       return () => clearTimeout(t);
     }
   }, [isLowEnd]);
+
+  useEffect(() => {
+    const hasDirectIntent = Boolean(
+      searchParams.get("habit")
+      || searchParams.get("blockId")
+      || searchParams.get("notification")
+      || searchParams.get("source"),
+    );
+
+    if (hasDirectIntent) {
+      contextRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      return;
+    }
+
+    if (introRef.current) {
+      introRef.current.scrollIntoView({ behavior: "auto", block: "start" });
+      return;
+    }
+
+    mainScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [searchParams]);
 
   const scrollToSection = (ref: React.RefObject<HTMLElement | null>) => {
     if (ref.current) {
@@ -84,21 +109,22 @@ export default function Home() {
           </div>
         )}
 
-        <main id="main-scroll-container" className="relative w-full h-full overflow-y-auto snap-y snap-mandatory scroll-smooth">
+        <main
+          id="main-scroll-container"
+          ref={mainScrollRef}
+          className="relative w-full h-full overflow-y-auto snap-y snap-mandatory scroll-smooth"
+        >
 
           <UserMenu />
 
-          {/* --- 1. INTRO (AGENDO Wordmark) --- */}
-          <div className="relative z-10 w-full snap-start">
+          <div ref={introRef} className="relative z-10 w-full snap-start">
             <SectionIntro onNext={() => scrollToSection(contextRef)} />
           </div>
 
-          {/* --- 2. CONTEXT (Greeting & Next Block) --- */}
           <div ref={contextRef} className="relative z-10 w-full snap-start">
-            <SectionContext onNext={() => scrollToSection(calendarRef)} />
+            <HabitContext onNext={() => scrollToSection(calendarRef)} />
           </div>
 
-          {/* --- 3. CALENDAR (Full integration) --- */}
           <div ref={calendarRef} className="relative z-10 w-full snap-start">
             <SectionCalendar />
           </div>

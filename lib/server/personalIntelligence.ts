@@ -62,6 +62,29 @@ function asObject(value: unknown) {
         : undefined;
 }
 
+function clampUnit(value: number) {
+    return Math.max(0, Math.min(1, value));
+}
+
+export function calculateProfileCalibrationProgress(args: {
+    overallConfidence: number | null | undefined;
+    recentAnalyticsCount: number;
+    confirmedActivityCount: number;
+    confirmedFocusReflectionCount: number;
+}) {
+    const inferredConfidence = clampUnit(args.overallConfidence ?? 0);
+    const recentAnalyticsCoverage = Math.min(Math.max(0, args.recentAnalyticsCount), 14) / 14;
+    const confirmedActivityCoverage = Math.min(Math.max(0, args.confirmedActivityCount), 12) / 12;
+    const confirmedFocusCoverage = Math.min(Math.max(0, args.confirmedFocusReflectionCount), 8) / 8;
+
+    return Math.max(12, Math.min(100, Math.round(
+        (confirmedActivityCoverage * 50) +
+        (confirmedFocusCoverage * 20) +
+        (inferredConfidence * 20) +
+        (recentAnalyticsCoverage * 10)
+    )));
+}
+
 function mapFocusSessionRow(row: DbRow): FocusSession {
     return {
         id: asString(row.id),
@@ -966,6 +989,10 @@ export async function getHomeSummaryData(
 ) {
     const dashboard = await getInsightsDashboardData(supabase, userId, language);
     const recentAnalytics = await fetchRecentAnalytics(supabase, userId, { sinceDays: 30, limit: 40 });
+    const recentActivityExperiences = await fetchRecentActivityExperiences(supabase, userId, {
+        sinceDays: 30,
+        limit: 160,
+    });
     const summary = buildProfileSummary(dashboard.profile, recentAnalytics, language);
     const mainCard = dashboard.cards[0];
     const latestTimelinePoint = [...dashboard.timeline].reverse()[0];
@@ -998,36 +1025,52 @@ export async function getHomeSummaryData(
 
     void softRecommendation;
 
-    const calibrationProgress = Math.max(12, Math.min(100, Math.round(
-        (dashboard.profile.confidenceOverview.overall * 60)
-        + (Math.min(recentAnalytics.length, 14) / 14) * 40
-    )));
+    const confirmedExperiences = recentActivityExperiences.filter((experience) => experience.wasUserConfirmed);
+    const confirmedFocusReflections = confirmedExperiences.filter((experience) => Boolean(experience.sourceFocusSessionId));
+    const calibrationProgress = calculateProfileCalibrationProgress({
+        overallConfidence: dashboard.profile.confidenceOverview.overall,
+        recentAnalyticsCount: recentAnalytics.length,
+        confirmedActivityCount: confirmedExperiences.length,
+        confirmedFocusReflectionCount: confirmedFocusReflections.length,
+    });
+    const needsMoreConfirmedSignals = confirmedExperiences.length < 3;
+    const isCalibrationReady = dashboard.profile.warmupStage === "ready" && calibrationProgress >= 70;
 
-    const homeMainInsight = dashboard.profile.warmupStage !== "ready"
-        ? (language === "es" ? "Tu perfil todavia se esta calibrando." : "Your profile is still calibrating.")
+    const homeMainInsight = !isCalibrationReady
+        ? (
+            language === "es"
+                ? "Tu calibracion todavia necesita check-ins o reflexiones confirmadas."
+                : "Your calibration still needs confirmed check-ins or focus reflections."
+        )
         : mainCard?.title ?? summary;
 
-    const homeSoftRecommendation = dashboard.profile.bestFocusWindow
-        ? (language === "es"
-            ? `Protege un bloque importante en ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} cuando puedas.`
-            : `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} when you can.`)
-        : dashboard.profile.optimalSessionLength
-            ? (
-                dashboard.profile.optimalSessionLength.data.bucket === "medium"
+    const homeSoftRecommendation = needsMoreConfirmedSignals
+        ? (
+            language === "es"
+                ? "Guarda algunos check-ins o cierres de foco para que Agendo diferencie mejor entre inferencias y senales confirmadas."
+                : "Save a few check-ins or focus wrap-ups so Agendo can separate inferred patterns from confirmed signals."
+        )
+        : dashboard.profile.bestFocusWindow
+            ? (language === "es"
+                ? `Protege un bloque importante en ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} cuando puedas.`
+                : `Protect a meaningful block in the ${getHomeWindowLabel(dashboard.profile.bestFocusWindow.data.window, language)} when you can.`)
+            : dashboard.profile.optimalSessionLength
+                ? (
+                    dashboard.profile.optimalSessionLength.data.bucket === "medium"
+                        ? (language === "es"
+                            ? "Las sesiones medias se ven como tu ritmo mas limpio ahora."
+                            : "Medium-length sessions look like your cleanest rhythm right now.")
+                        : (language === "es"
+                            ? "Mantente cerca del rango de sesion que mejor se sostuvo ultimamente."
+                            : "Stay closer to the session range that has been holding best lately.")
+                )
+                : dashboard.profile.topFrictionSources[0]
                     ? (language === "es"
-                        ? "Las sesiones medias se ven como tu ritmo mas limpio ahora."
-                        : "Medium-length sessions look like your cleanest rhythm right now.")
+                        ? `Cuando aparezca ${dashboard.profile.topFrictionSources[0].data.label}, empieza mas pequeno.`
+                        : `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`)
                     : (language === "es"
-                        ? "Mantente cerca del rango de sesion que mejor se sostuvo ultimamente."
-                        : "Stay closer to the session range that has been holding best lately.")
-            )
-            : dashboard.profile.topFrictionSources[0]
-                ? (language === "es"
-                    ? `Cuando aparezca ${dashboard.profile.topFrictionSources[0].data.label}, empieza mas pequeno.`
-                    : `When ${dashboard.profile.topFrictionSources[0].data.label} shows up, start smaller.`)
-                : (language === "es"
-                    ? "Un uso un poco mas consistente va a volver esta lectura mas precisa."
-                    : "A bit more consistent use will make this read sharper.");
+                        ? "Un uso un poco mas consistente va a volver esta lectura mas precisa."
+                        : "A bit more consistent use will make this read sharper.");
 
     return {
         momentum_current: dashboard.compositeSignalCurrent,
