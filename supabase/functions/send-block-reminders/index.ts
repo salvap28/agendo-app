@@ -19,6 +19,23 @@ type PushSubscriptionRow = {
 
 type PushError = {
   statusCode?: number
+  body?: string
+}
+
+function shouldDeletePushSubscription(error: PushError) {
+  if (error.statusCode === 404 || error.statusCode === 410) return true
+  if (error.statusCode === 401 || error.statusCode === 403) return true
+
+  if (error.statusCode === 400) {
+    const body = error.body || ""
+    return body.includes("VapidPkHashMismatch")
+      || body.includes("authorization header do not correspond")
+      || body.includes("InvalidToken")
+      || body.includes("invalid token")
+      || body.includes("expired")
+  }
+
+  return false
 }
 
 const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')
@@ -108,7 +125,7 @@ serve(async () => {
           }
         }, payload).catch((error: PushError) => {
           console.error("Error sending push API request", error)
-          if (error.statusCode === 410 || error.statusCode === 404) {
+          if (shouldDeletePushSubscription(error)) {
             return supabase.from('push_subscriptions').delete().eq('id', sub.id)
           }
         })

@@ -3,6 +3,12 @@ import { createServerClient } from "@supabase/ssr";
 import webpush from "web-push";
 import { cookies } from "next/headers";
 import { requireSupabaseConfig } from "@/lib/supabase/config";
+import {
+    configureWebPush,
+    formatPushError,
+    shouldDeletePushSubscription,
+    type PushSubscriptionRow,
+} from "@/lib/server/pushNotifications";
 
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Internal Server Error";
@@ -10,18 +16,9 @@ function getErrorMessage(error: unknown) {
 
 export async function POST(req: Request) {
     try {
-        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-        const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-
-        if (!vapidPublicKey || !vapidPrivateKey) {
+        if (!configureWebPush()) {
             return NextResponse.json({ error: "VAPID configuration missing" }, { status: 500 });
         }
-
-        webpush.setVapidDetails(
-            'mailto:admin@agendo.app',
-            vapidPublicKey,
-            vapidPrivateKey
-        );
 
         const { title, options, excludeEndpoint } = await req.json();
 
@@ -39,7 +36,7 @@ export async function POST(req: Request) {
 
         const { data: subscriptions } = await supabase
             .from("push_subscriptions")
-            .select("*")
+            .select("id, endpoint, p256dh, auth")
             .eq("user_id", user.id);
 
         if (!subscriptions || subscriptions.length === 0) {
@@ -53,29 +50,42 @@ export async function POST(req: Request) {
             data: options?.data ?? null,
         });
 
-        const promises = subscriptions.map((sub) => {
+        let attempted = 0;
+        let invalidated = 0;
+        let delivered = 0;
+
+        const promises = (subscriptions as PushSubscriptionRow[]).map((sub) => {
             // Prevent duplicate notification on the device that triggered it locally
             if (excludeEndpoint && sub.endpoint === excludeEndpoint) {
                 return Promise.resolve();
             }
 
+            attempted += 1;
             return webpush.sendNotification(
                 {
                     endpoint: sub.endpoint,
                     keys: { p256dh: sub.p256dh, auth: sub.auth }
                 },
                 payload
-            ).catch(async (err) => {
-                if (err.statusCode === 404 || err.statusCode === 410) {
-                    await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+            ).then(() => {
+                delivered += 1;
+            }).catch(async (err) => {
+                if (shouldDeletePushSubscription(err)) {
+                    invalidated += 1;
+                    await supabase.from("push_subscriptions").delete().eq("id", sub.id);
                 } else {
-                    console.error("Error sending push notification to endpoint:", sub.endpoint, err);
+                    console.error("Error sending push notification to endpoint:", sub.endpoint, formatPushError(err));
                 }
             });
         });
 
         await Promise.all(promises);
-        return NextResponse.json({ success: true, devicesNotified: promises.length });
+        return NextResponse.json({
+            success: true,
+            devicesNotified: delivered,
+            attempted,
+            invalidated,
+        });
     } catch (error: unknown) {
         console.error("Push Broadcast Error:", error);
         return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });

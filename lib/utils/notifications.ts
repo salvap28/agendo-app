@@ -13,6 +13,23 @@ function urlB64ToUint8Array(base64String: string) {
     return outputArray;
 }
 
+function uint8ArrayToUrlB64(value: Uint8Array) {
+    let binary = "";
+    for (let i = 0; i < value.length; i += 1) {
+        binary += String.fromCharCode(value[i] ?? 0);
+    }
+
+    return window.btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/g, "");
+}
+
+function applicationServerKeyToUrlB64(value: ArrayBuffer | null) {
+    if (!value) return null;
+    return uint8ArrayToUrlB64(new Uint8Array(value));
+}
+
 let vapidPublicKeyPromise: Promise<string | null> | null = null;
 
 function wireNotificationEvents(notification: Notification, options?: NotificationOptions) {
@@ -79,6 +96,21 @@ async function syncPushSubscription(registration: ServiceWorkerRegistration) {
     }
 
     let subscription = await registration.pushManager.getSubscription();
+    let staleEndpoint: string | null = null;
+
+    if (subscription) {
+        const currentAppKey = applicationServerKeyToUrlB64(subscription.options.applicationServerKey);
+        if (currentAppKey && currentAppKey !== vapidPublicKey.trim()) {
+            staleEndpoint = subscription.endpoint;
+            try {
+                await subscription.unsubscribe();
+            } catch (error) {
+                console.warn("Unable to unsubscribe stale push subscription.", error);
+            }
+            subscription = null;
+        }
+    }
+
     if (!subscription) {
         subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
@@ -96,6 +128,13 @@ async function syncPushSubscription(registration: ServiceWorkerRegistration) {
     const user = await getClientUser(supabase);
 
     if (!user) return;
+
+    if (staleEndpoint) {
+        await supabase
+            .from("push_subscriptions")
+            .delete()
+            .eq("endpoint", staleEndpoint);
+    }
 
     await supabase.from("push_subscriptions").upsert({
         user_id: user.id,
@@ -148,8 +187,10 @@ export async function sendNotification(title: string, options?: NotificationOpti
     try {
         let currentEndpoint: string | undefined = undefined;
         if ("serviceWorker" in navigator && "PushManager" in window) {
-            const registration = await navigator.serviceWorker.getRegistration();
+            const registration = await navigator.serviceWorker.getRegistration()
+                ?? await navigator.serviceWorker.register("/sw.js");
             if (registration) {
+                await syncPushSubscription(registration);
                 const subscription = await registration.pushManager.getSubscription();
                 if (subscription) {
                     currentEndpoint = subscription.endpoint;
