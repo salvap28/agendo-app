@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, CalendarClock, ChevronRight, Flame, MoveRight, RotateCcw, ShieldCheck, TimerReset, Zap } from "lucide-react";
+import {
+    ArrowRight,
+    CalendarClock,
+    ChevronRight,
+    Flame,
+    LoaderCircle,
+    RotateCcw,
+    Zap,
+} from "lucide-react";
+import { cn } from "@/lib/cn";
 import { createClient, getClientUser } from "@/lib/supabase/client";
 import { useBlocksStore } from "@/lib/stores/blocksStore";
 import { useFocusStore } from "@/lib/stores/focusStore";
@@ -12,13 +21,35 @@ import { getIntlLocale } from "@/lib/i18n/app";
 import { enrichNewBlockWithPlanningMetadata } from "@/lib/utils/blockEnrichment";
 import { fetchHabitHome, trackHabitEvent } from "@/lib/services/habitService";
 import { recordBlockRescheduleActivity } from "@/lib/services/activityExperienceService";
+import {
+    applyPlannerProposalRequest,
+    requestPlannerProposal,
+    revisePlannerProposalRequest,
+} from "@/lib/services/planningService";
 import { sendNotification } from "@/lib/utils/notifications";
 import { HabitActivationSheet } from "@/components/habit/HabitActivationSheet";
+import { HabitCaptureCard } from "@/components/habit/HabitCaptureCard";
+import { HabitPlanningProposalSheet } from "@/components/habit/HabitPlanningProposalSheet";
 import { RadialBlockMenu } from "@/components/calendar/RadialBlockMenu";
+import { GuidedPlanningSheet } from "@/components/planning/GuidedPlanningSheet";
+import { humanizeBlockTitle } from "@/lib/engines/planner/heuristic";
+import { buildHabitDayState, getNextRelevantBlock } from "@/lib/engines/habit/selectors";
 import type { Block } from "@/lib/types/blocks";
 import type { RescuePlanAction } from "@/lib/types/habit";
+import type { PlannerProposal } from "@/lib/types/planner";
 
 type HomeSnapshot = Awaited<ReturnType<typeof fetchHabitHome>>;
+type PendingAction =
+    | "capture-plan"
+    | "start"
+    | "prepare"
+    | "move"
+    | "light"
+    | "ritual-confirm"
+    | "ritual-skip"
+    | "rescue-open"
+    | `rescue-apply:${string}`
+    | null;
 
 function durationMin(block: Pick<Block, "startAt" | "endAt">) {
     return Math.max(5, Math.round((block.endAt.getTime() - block.startAt.getTime()) / 60000));
@@ -40,38 +71,19 @@ function setNotificationGuard(key: string, value: string) {
     }
 }
 
-function Ring({ value }: { value: number }) {
-    const size = 60;
-    const stroke = 5;
-    const radius = (size - stroke) / 2;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (Math.max(0, Math.min(100, value)) / 100) * circumference;
+function getLocalDateKey(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
 
-    return (
-        <div className="relative h-[60px] w-[60px]">
-            <svg viewBox="0 0 60 60" className="-rotate-90">
-                <circle cx="30" cy="30" r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
-                <circle
-                    cx="30"
-                    cy="30"
-                    r={radius}
-                    fill="none"
-                    stroke="url(#habit-ring)"
-                    strokeWidth={stroke}
-                    strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                />
-                <defs>
-                    <linearGradient id="habit-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="rgba(125,211,252,1)" />
-                        <stop offset="100%" stopColor="rgba(110,231,183,1)" />
-                    </linearGradient>
-                </defs>
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white/85">{value}%</span>
-        </div>
-    );
+function plannerTrackingIds(proposal?: PlannerProposal | null, decisionId?: string | null) {
+    return {
+        plannerSessionId: proposal?.sessionId ?? null,
+        plannerProposalId: proposal?.proposalId ?? null,
+        plannerDecisionId: decisionId ?? null,
+    };
 }
 
 export function HabitContext({ onNext }: { onNext: () => void }) {
@@ -80,6 +92,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
     const searchParams = useSearchParams();
     const blocks = useBlocksStore((state) => state.blocks);
     const createBlock = useBlocksStore((state) => state.createBlock);
+    const fetchBlocks = useBlocksStore((state) => state.fetchBlocks);
     const updateBlock = useBlocksStore((state) => state.updateBlock);
     const { session, openFromBlock, openFree, returnToFocus } = useFocusStore();
     const { settings } = useSettingsStore();
@@ -88,58 +101,108 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [showRescue, setShowRescue] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [planningOpen, setPlanningOpen] = useState(false);
+    const [plannerProposal, setPlannerProposal] = useState<PlannerProposal | null>(null);
+    const [captureFeedback, setCaptureFeedback] = useState<string | null>(null);
+    const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const trackedRef = useRef(false);
 
     const copy = language === "es"
         ? {
             greeting: ["Buen dia", "Buenas tardes", "Buenas noches"],
-            next: "Tu proximo paso ya esta listo",
+            next: "Tu proximo paso",
             paused: "Seguimos desde aca",
             fallback: "Empeza por esto",
+            nextBlockLabel: "Tu proximo paso",
             start: "Empezar ahora",
+            startLoading: "Abriendo foco...",
             return: "Volver al foco",
             prepare: "Preparar bloque",
-            light: "Version liviana",
-            move: "Mover 15 min",
-            calendar: "Abrir calendario",
-            rescue: "Reordenemos sin empezar de cero",
-            ritual: "Esto es lo mas importante de hoy",
+            prepareLoading: "Abriendo bloque...",
+            calendar: "Calendario",
+            rescue: "Reordenemos rapido",
+            rescueBody: "Salvamos lo importante.",
+            ritual: "Esto es lo importante de hoy",
             ritualCta: "Confirmar y seguir",
-            ritualSkip: "Ahora no",
-            weekly: "Consistencia flexible",
-            calibration: "Calibracion del perfil",
-            daily: "Estado breve del dia",
-            keyBlocks: "Bloques clave",
-            completed: "Completados",
-            fallbackBody: "Si no hay un bloque claro, te dejamos uno chico y accionable.",
+            ritualCtaLoading: "Confirmando...",
+            ritualSkip: "Omitir",
+            ritualSkipLoading: "Cerrando...",
+            weekly: "Ritmo",
+            daily: "Hoy",
+            fallbackBody: "Protege uno y empeza.",
+            noBlocksToday: "Falta proteger el primero.",
+            openRescue: "Abrir",
+            timeFallback: "Ahora",
+            captureTitle: "Contame que tenes hoy",
+            captureHelper: "Texto o voz. Agendo lo ordena.",
+            capturePlaceholder: "Ej: estudiar fisica 90 min, gym 19:00, mails 30 min",
+            captureSubmit: "Planear con Agendo",
+            captureSubmitLoading: "Armando tu dia...",
+            captureVoice: "Voz",
+            captureListening: "Escuchando",
+            captureFeedbackSingle: "Listo. Deje 1 bloque.",
+            captureFeedbackMany: (count: number) => `Listo. Deje ${count} bloques.`,
+            openPlanning: "Abrir planning",
+            summaryWeekDone: "Semana solida.",
+            summaryWeekLeft: (days: number) => `Falta ${days} dia${days === 1 ? "" : "s"}.`,
+            loading: "Cargando tu proximo paso...",
+            capturePlanned: "Planea con Agendo",
         }
         : {
             greeting: ["Good morning", "Good afternoon", "Good evening"],
-            next: "Your next step is ready",
+            next: "Your next step",
             paused: "We continue from here",
             fallback: "Start with this",
+            nextBlockLabel: "Your next step",
             start: "Start now",
+            startLoading: "Opening focus...",
             return: "Return to focus",
             prepare: "Prepare block",
-            light: "Lighter version",
-            move: "Move 15 min",
-            calendar: "Open calendar",
-            rescue: "Let’s re-order without starting over",
-            ritual: "This is the most important thing today",
+            prepareLoading: "Opening block...",
+            calendar: "Calendar",
+            rescue: "Re-order quickly",
+            rescueBody: "Save what matters.",
+            ritual: "This is what matters today",
             ritualCta: "Confirm and continue",
-            ritualSkip: "Not now",
-            weekly: "Flexible consistency",
-            calibration: "Profile calibration",
-            daily: "Brief state of the day",
-            keyBlocks: "Key blocks",
-            completed: "Completed",
-            fallbackBody: "If there is no clear block yet, we leave one that is small and actionable.",
+            ritualCtaLoading: "Confirming...",
+            ritualSkip: "Skip",
+            ritualSkipLoading: "Closing...",
+            weekly: "Rhythm",
+            daily: "Today",
+            fallbackBody: "Protect one and start.",
+            noBlocksToday: "The first block is still open.",
+            openRescue: "Open",
+            timeFallback: "Now",
+            captureTitle: "Tell me what you have today",
+            captureHelper: "Text or voice. Agendo sorts it.",
+            capturePlaceholder: "Ex: study physics 90 min, gym 7 pm, emails 30 min",
+            captureSubmit: "Plan with Agendo",
+            captureSubmitLoading: "Building your day...",
+            captureVoice: "Voice",
+            captureListening: "Listening",
+            captureFeedbackSingle: "Done. I left 1 block ready.",
+            captureFeedbackMany: (count: number) => `Done. I left ${count} blocks ready.`,
+            openPlanning: "Open planning",
+            summaryWeekDone: "Solid week.",
+            summaryWeekLeft: (days: number) => `${days} more day${days === 1 ? "" : "s"}.`,
+            loading: "Loading your next step...",
+            capturePlanned: "Plan with Agendo",
         };
 
     const loadHome = useCallback(async () => {
         const data = await fetchHabitHome();
         setHome(data);
         setShowOnboarding(data.habit.onboarding.shouldShow);
+        trackedRef.current = false;
+    }, []);
+
+    const withPending = useCallback(async (key: NonNullable<PendingAction>, action: () => Promise<void> | void) => {
+        setPendingAction(key);
+        try {
+            await action();
+        } finally {
+            setPendingAction((current) => (current === key ? null : current));
+        }
     }, []);
 
     useEffect(() => {
@@ -165,6 +228,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
         if (!home || trackedRef.current) return;
         trackedRef.current = true;
         void trackHabitEvent({ name: "home_viewed", surface: "habit_home" });
+        void trackHabitEvent({ name: "planner_entry_seen", surface: "habit_home" });
         void trackHabitEvent({ name: "daily_summary_seen", surface: "habit_home" });
         void trackHabitEvent({ name: "weekly_consistency_seen", surface: "habit_home" });
         if (home.habit.nextBlock.block) {
@@ -175,9 +239,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
                 name: "adaptive_recommendation_shown",
                 surface: "habit_home",
                 blockId: home.habit.nextBlock.block?.id ?? null,
-                metadata: {
-                    type: home.habit.nextBlock.adaptiveRecommendation.type,
-                },
+                metadata: { type: home.habit.nextBlock.adaptiveRecommendation.type },
             });
         }
     }, [home]);
@@ -204,11 +266,34 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
     const hour = new Date().getHours();
     const greeting = hour < 12 ? copy.greeting[0] : hour < 18 ? copy.greeting[1] : copy.greeting[2];
     const pausedSession = session && !session.endedAt && !session.isActive;
-    const nextBlock = home?.habit.nextBlock.block ? blocks.find((item) => item.id === home.habit.nextBlock.block?.id) ?? null : null;
+    const localNextRelevant = useMemo(() => getNextRelevantBlock({
+        blocks,
+        language,
+    }), [blocks, language]);
+    const displayedNext = useMemo(() => {
+        if (!home) return localNextRelevant;
+
+        const remoteBlockId = home.habit.nextBlock.block?.id ?? null;
+        if (!remoteBlockId) {
+            return localNextRelevant.block ? localNextRelevant : home.habit.nextBlock;
+        }
+
+        if (localNextRelevant.block && localNextRelevant.block.id !== remoteBlockId) {
+            return localNextRelevant;
+        }
+
+        const resolvedRemoteBlock = blocks.find((item) => item.id === remoteBlockId) ?? home.habit.nextBlock.block;
+        return {
+            ...home.habit.nextBlock,
+            block: resolvedRemoteBlock,
+        };
+    }, [blocks, home, localNextRelevant]);
+    const nextBlock = displayedNext.block ? blocks.find((item) => item.id === displayedNext.block?.id) ?? displayedNext.block : null;
+    const dayState = useMemo(() => buildHabitDayState(blocks, new Date(), language), [blocks, language]);
 
     useEffect(() => {
         if (!home) return;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getLocalDateKey();
 
         if (nextBlock && settings.notify_block_reminders) {
             const startsInMin = Math.round((nextBlock.startAt.getTime() - Date.now()) / 60000);
@@ -217,7 +302,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
                 setNotificationGuard(guardKey, today);
                 void trackHabitEvent({ name: "notification_scheduled", surface: "habit_home", blockId: nextBlock.id, metadata: { type: "before_block" } });
                 void sendNotification(language === "es" ? "Tu bloque esta listo" : "Your block is ready", {
-                    body: home.habit.nextBlock.context,
+                    body: displayedNext.context,
                     data: { url: `/?blockId=${encodeURIComponent(nextBlock.id)}&habit=start&notification=before_block`, notificationType: "before_block" },
                 });
                 void trackHabitEvent({ name: "notification_sent", surface: "habit_home", blockId: nextBlock.id, metadata: { type: "before_block" } });
@@ -236,7 +321,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
                 void trackHabitEvent({ name: "notification_sent", surface: "habit_home", metadata: { type: "rescue" } });
             }
         }
-    }, [home, language, nextBlock, settings.notify_block_reminders, settings.notify_daily_briefing]);
+    }, [displayedNext.context, home, language, nextBlock, settings.notify_block_reminders, settings.notify_daily_briefing]);
 
     const startNext = useCallback(async () => {
         if (pausedSession) {
@@ -245,6 +330,7 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
         }
         if (nextBlock) {
             await trackHabitEvent({ name: "next_block_started_from_home", surface: "habit_home", blockId: nextBlock.id });
+            await trackHabitEvent({ name: "next_step_started", surface: "habit_home", blockId: nextBlock.id });
             if (searchParams.get("source") === "widget") {
                 await trackHabitEvent({ name: "widget_started_block", surface: "widget", blockId: nextBlock.id });
             }
@@ -264,32 +350,219 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
             return;
         }
         openFree();
-    }, [createBlock, language, loadHome, nextBlock, openFree, openFromBlock, pausedSession, returnToFocus]);
+    }, [createBlock, language, loadHome, nextBlock, openFree, openFromBlock, pausedSession, returnToFocus, searchParams]);
 
-    const adjustBlock = useCallback(async (mode: "move" | "light") => {
-        if (!nextBlock) return;
-        const nextVersion: Block = {
-            ...nextBlock,
-            startAt: mode === "move" ? new Date(nextBlock.startAt.getTime() + 15 * 60000) : nextBlock.startAt,
-            endAt: mode === "move"
-                ? new Date(nextBlock.endAt.getTime() + 15 * 60000)
-                : new Date(nextBlock.startAt.getTime() + Math.max(20, Math.round(durationMin(nextBlock) * 0.7)) * 60000),
-        };
-        await updateBlock(nextBlock.id, { startAt: nextVersion.startAt, endAt: nextVersion.endAt });
-        await recordBlockRescheduleActivity(nextBlock, nextVersion);
-        await trackHabitEvent({
-            name: "adaptive_recommendation_accepted",
-            surface: "habit_home",
-            blockId: nextBlock.id,
-            metadata: { action: mode },
+    const openBlockPreparation = useCallback(async () => {
+        if (nextBlock) {
+            setSelectedBlockId(nextBlock.id);
+            return;
+        }
+        onNext();
+    }, [nextBlock, onNext]);
+
+    const handleOpenPlanning = useCallback(async () => {
+        setPlanningOpen(true);
+        await trackHabitEvent({ name: "guided_planning_opened", surface: "habit_home", metadata: { source: "capture_card" } });
+    }, []);
+
+    const handleCapturePlan = useCallback(async (input: string, source: "text" | "voice") => {
+        await withPending("capture-plan", async () => {
+            await trackHabitEvent({
+                name: "planner_input_submitted",
+                surface: "habit_home",
+                metadata: { source, inputLength: input.length },
+            });
+
+            const now = new Date();
+            const proposal = await requestPlannerProposal({
+                input,
+                source,
+                surface: "habit_home",
+                targetDate: getLocalDateKey(now),
+                nowIso: now.toISOString(),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            });
+
+            await trackHabitEvent({
+                name: "planner_interpretation_completed",
+                surface: "habit_home",
+                ...plannerTrackingIds(proposal),
+                metadata: {
+                    source,
+                    tasksDetected: proposal.interpretation.items.length,
+                    totalDurationMin: proposal.totalDurationMin,
+                    engine: proposal.engine,
+                },
+            });
+
+            if (proposal.drafts.length === 0) {
+                setPlanningOpen(true);
+                await trackHabitEvent({
+                    name: "guided_planning_opened",
+                    surface: "habit_home",
+                    ...plannerTrackingIds(proposal),
+                    metadata: { source: "empty_capture" },
+                });
+                return;
+            }
+
+            await trackHabitEvent({
+                name: "planner_proposal_shown",
+                surface: "habit_home",
+                ...plannerTrackingIds(proposal),
+                metadata: {
+                    source,
+                    blocksProposed: proposal.drafts.length,
+                    explicitTimesCount: proposal.explicitTimesCount,
+                    engine: proposal.engine,
+                },
+            });
+
+            setPlannerProposal(proposal);
         });
-        await loadHome();
-    }, [loadHome, nextBlock, updateBlock]);
+    }, [withPending]);
+
+    const applyPlannerProposal = useCallback(async () => {
+        if (!plannerProposal) return;
+
+        await withPending("capture-plan", async () => {
+            const result = await applyPlannerProposalRequest(plannerProposal);
+
+            await trackHabitEvent({
+                name: "planner_proposal_accepted",
+                surface: "habit_home",
+                blockId: result.createdBlockIds[0] ?? null,
+                ...plannerTrackingIds(plannerProposal, result.acceptedDecisionId),
+                metadata: {
+                    blocksCreated: result.totalCreated,
+                    engine: plannerProposal.engine,
+                },
+            });
+            await trackHabitEvent({
+                name: "planner_plan_applied",
+                surface: "habit_home",
+                blockId: result.createdBlockIds[0] ?? null,
+                ...plannerTrackingIds(plannerProposal, result.appliedDecisionId),
+                metadata: {
+                    blocksCreated: result.totalCreated,
+                    engine: plannerProposal.engine,
+                },
+            });
+
+            setPlannerProposal(null);
+            await fetchBlocks();
+            await loadHome();
+
+            if (result.totalCreated > 0) {
+                setCaptureFeedback(
+                    result.totalCreated <= 1
+                        ? copy.captureFeedbackSingle
+                        : copy.captureFeedbackMany(result.totalCreated),
+                );
+                window.setTimeout(() => setCaptureFeedback(null), 5000);
+            }
+
+            if (result.guidedPlanningRecommended) {
+                setPlanningOpen(true);
+                await trackHabitEvent({
+                    name: "guided_planning_opened",
+                    surface: "habit_home",
+                    ...plannerTrackingIds(plannerProposal, result.appliedDecisionId),
+                    metadata: { source: "planner_applied" },
+                });
+            }
+        });
+    }, [copy.captureFeedbackMany, copy.captureFeedbackSingle, fetchBlocks, loadHome, plannerProposal, withPending]);
+
+    const lightenCurrentPlannerProposal = useCallback(async () => {
+        if (!plannerProposal) return;
+        const result = await revisePlannerProposalRequest({
+            sessionId: plannerProposal.sessionId,
+            proposalId: plannerProposal.proposalId,
+            action: "lighten",
+            targetDate: plannerProposal.targetDate,
+            timezone: plannerProposal.context.timezone,
+            nowIso: new Date().toISOString(),
+        });
+        if (result.proposal) {
+            setPlannerProposal(result.proposal);
+        }
+        await trackHabitEvent({
+            name: "planner_proposal_lightened",
+            surface: "habit_home",
+            ...plannerTrackingIds(result.proposal ?? plannerProposal, result.decisionId),
+            metadata: { blocksProposed: (result.proposal ?? plannerProposal).drafts.length },
+        });
+    }, [plannerProposal]);
+
+    const regenerateCurrentPlannerProposal = useCallback(async () => {
+        if (!plannerProposal) return;
+        const result = await revisePlannerProposalRequest({
+            sessionId: plannerProposal.sessionId,
+            proposalId: plannerProposal.proposalId,
+            action: "regenerate",
+            targetDate: plannerProposal.targetDate,
+            timezone: plannerProposal.context.timezone,
+            nowIso: new Date().toISOString(),
+        });
+        if (result.proposal) {
+            setPlannerProposal(result.proposal);
+        }
+        await trackHabitEvent({
+            name: "planner_proposal_regenerated",
+            surface: "habit_home",
+            ...plannerTrackingIds(result.proposal ?? plannerProposal, result.decisionId),
+            metadata: { blocksProposed: (result.proposal ?? plannerProposal).drafts.length },
+        });
+    }, [plannerProposal]);
+
+    const editPlannerProposal = useCallback(async (index: number, mode: "earlier" | "later" | "shorter") => {
+        if (!plannerProposal) return;
+        const result = await revisePlannerProposalRequest({
+            sessionId: plannerProposal.sessionId,
+            proposalId: plannerProposal.proposalId,
+            action: "edit",
+            draftIndex: index,
+            editMode: mode,
+            targetDate: plannerProposal.targetDate,
+            timezone: plannerProposal.context.timezone,
+            nowIso: new Date().toISOString(),
+        });
+        if (result.proposal) {
+            setPlannerProposal(result.proposal);
+        }
+        await trackHabitEvent({
+            name: "planner_proposal_edited",
+            surface: "habit_home",
+            ...plannerTrackingIds(result.proposal ?? plannerProposal, result.decisionId),
+            metadata: { index, mode },
+        });
+    }, [plannerProposal]);
+
+    const closePlannerProposal = useCallback(async () => {
+        if (!plannerProposal) return;
+        const result = await revisePlannerProposalRequest({
+            sessionId: plannerProposal.sessionId,
+            proposalId: plannerProposal.proposalId,
+            action: "reject",
+            targetDate: plannerProposal.targetDate,
+            timezone: plannerProposal.context.timezone,
+            nowIso: new Date().toISOString(),
+        });
+        await trackHabitEvent({
+            name: "planner_proposal_rejected",
+            surface: "habit_home",
+            ...plannerTrackingIds(plannerProposal, result.decisionId),
+            metadata: {
+                reason: "dismissed_sheet",
+            },
+        });
+        setPlannerProposal(null);
+    }, [plannerProposal]);
 
     const applyRescue = useCallback(async (action: RescuePlanAction) => {
         const block = blocks.find((item) => item.id === action.blockId);
         if (!block) return;
-
         if (action.type === "cancel") {
             await updateBlock(block.id, { status: "canceled" });
         } else {
@@ -299,9 +572,14 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
             await updateBlock(block.id, { startAt, endAt });
             await recordBlockRescheduleActivity(block, nextVersion);
         }
-
         await trackHabitEvent({
             name: "rescue_plan_applied",
+            surface: "habit_home",
+            blockId: action.blockId,
+            metadata: { action: action.type },
+        });
+        await trackHabitEvent({
+            name: "rescue_applied",
             surface: "habit_home",
             blockId: action.blockId,
             metadata: { action: action.type },
@@ -352,125 +630,350 @@ export function HabitContext({ onNext }: { onNext: () => void }) {
         return (
             <section className="flex min-h-[100dvh] items-center justify-center px-6">
                 <div className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-white/50">
-                    Loading your next step...
+                    {copy.loading}
                 </div>
             </section>
         );
     }
 
-    return (
-        <section className="relative min-h-[100dvh] px-4 pb-12 pt-24 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-[1160px] flex-col gap-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <p className="text-sm text-white/45">{greeting}, {userName || (language === "es" ? "vos" : "there")}.</p>
-                        <h1 className="mt-2 text-[clamp(2.3rem,5vw,4.5rem)] font-semibold leading-[0.94] tracking-[-0.05em] text-white/94">
-                            {pausedSession ? copy.paused : nextBlock ? copy.next : copy.fallback}
-                        </h1>
-                        <p className="mt-3 max-w-[40rem] text-sm leading-7 text-white/48">
-                            {pausedSession ? home.habit.nextBlock.context : (home.habit.nextBlock.context || copy.fallbackBody)}
-                        </p>
-                    </div>
+    const nextBlockTitle = humanizeBlockTitle(pausedSession ? (session?.intention || copy.return) : (nextBlock?.title || copy.fallback));
+    const nextBlockTime = nextBlock
+        ? nextBlock.startAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+        : copy.timeFallback;
+    const nextBlockDuration = `${displayedNext.suggestedDurationMin ?? (nextBlock ? durationMin(nextBlock) : 30)} min`;
+    const isBusy = pendingAction !== null;
+    const dayPrimaryValue = dayState.totalKeyBlocks > 0 ? `${dayState.completedKeyBlocks}/${dayState.totalKeyBlocks}` : "0";
+    const daySecondaryLine = dayState.totalKeyBlocks > 0
+        ? dayState.remainingLabel
+        : copy.noBlocksToday;
+    const weeklyValue = language === "es"
+        ? `${home.habit.weeklyConsistency.meaningfulDays} de 7 dias`
+        : `${home.habit.weeklyConsistency.meaningfulDays} of 7 days`;
+    const daysToTarget = Math.max(0, 3 - home.habit.weeklyConsistency.meaningfulDays);
+    const weeklyLine = daysToTarget === 0
+        ? copy.summaryWeekDone
+        : copy.summaryWeekLeft(daysToTarget);
+    const visibleRescueActions = home.habit.rescuePlan?.suggestedActions.slice(0, 2) ?? [];
 
-                    <button
-                        type="button"
-                        onClick={onNext}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.07]"
-                    >
-                        <CalendarClock className="h-4 w-4" />
-                        {copy.calendar}
-                    </button>
+    return (
+        <section className="relative min-h-[100dvh] px-4 pb-8 pt-16 sm:px-6 lg:px-8">
+            <div className="pointer-events-none absolute inset-x-0 top-10 z-0 mx-auto h-[66vh] max-w-[1180px] rounded-[40px] bg-[radial-gradient(circle_at_top,rgba(15,18,30,0.7),rgba(7,10,18,0.18)_42%,transparent_70%)] blur-2xl" />
+
+            <div className="relative z-10 mx-auto flex max-w-[1120px] flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <p className="text-sm text-white/42">{greeting}, {userName || (language === "es" ? "vos" : "there")}.</p>
+                    <ActionButton label={copy.calendar} icon={CalendarClock} onClick={onNext} variant="ghost" compact />
                 </div>
 
+                <HabitCaptureCard
+                    badgeLabel={copy.capturePlanned}
+                    title={copy.captureTitle}
+                    helper={copy.captureHelper}
+                    placeholder={copy.capturePlaceholder}
+                    submitLabel={copy.captureSubmit}
+                    submitLoadingLabel={copy.captureSubmitLoading}
+                    voiceLabel={copy.captureVoice}
+                    voiceListeningLabel={copy.captureListening}
+                    onSubmit={handleCapturePlan}
+                    onTextStart={() => {
+                        void trackHabitEvent({ name: "planner_text_started", surface: "habit_home" });
+                    }}
+                    onVoiceStart={() => {
+                        void trackHabitEvent({ name: "planner_voice_started", surface: "habit_home" });
+                    }}
+                    onVoiceStop={() => {
+                        void trackHabitEvent({ name: "planner_voice_stopped", surface: "habit_home" });
+                    }}
+                    loading={pendingAction === "capture-plan"}
+                    disabled={isBusy && pendingAction !== "capture-plan"}
+                    feedback={captureFeedback}
+                    openPlanningLabel={copy.openPlanning}
+                    onOpenPlanning={() => {
+                        void handleOpenPlanning();
+                    }}
+                />
+
                 {home.habit.dailyRitual.shouldShow && (
-                    <div className="rounded-[28px] border border-cyan-300/15 bg-cyan-400/10 p-5">
-                        <h2 className="text-2xl font-semibold tracking-[-0.03em] text-white/92">{copy.ritual}</h2>
-                        <p className="mt-2 max-w-[38rem] text-sm leading-7 text-white/60">{home.habit.dailyRitual.body}</p>
-                        <div className="mt-4 flex flex-wrap gap-3">
-                            <button type="button" onClick={() => void confirmRitual()} className="inline-flex h-12 items-center justify-center gap-3 rounded-[18px] bg-gradient-to-r from-[#79c2ff] via-[#7dd3fc] to-[#6ee7b7] px-5 text-sm font-semibold text-slate-950">
-                                <Flame className="h-4.5 w-4.5" />
-                                {copy.ritualCta}
-                            </button>
-                            <button type="button" onClick={() => void skipRitual()} className="inline-flex h-12 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-5 text-sm text-white/70">
-                                {copy.ritualSkip}
-                            </button>
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-cyan-300/16 bg-cyan-400/8 px-4 py-3 backdrop-blur-md">
+                        <span className="text-sm font-medium text-cyan-50/86">{copy.ritual}</span>
+                        <div className="flex flex-wrap gap-2">
+                            <ActionButton
+                                label={pendingAction === "ritual-confirm" ? copy.ritualCtaLoading : copy.ritualCta}
+                                icon={Flame}
+                                loading={pendingAction === "ritual-confirm"}
+                                disabled={isBusy}
+                                onClick={() => void withPending("ritual-confirm", confirmRitual)}
+                                variant="primary"
+                                compact
+                            />
+                            <ActionButton
+                                label={pendingAction === "ritual-skip" ? copy.ritualSkipLoading : copy.ritualSkip}
+                                icon={ArrowRight}
+                                loading={pendingAction === "ritual-skip"}
+                                disabled={isBusy}
+                                onClick={() => void withPending("ritual-skip", skipRitual)}
+                                variant="ghost"
+                                compact
+                            />
                         </div>
                     </div>
                 )}
 
-                <div className="grid gap-6 lg:grid-cols-[1.6fr_0.8fr]">
-                    <div className="rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,14,24,0.96),rgba(6,8,16,0.96))] p-5 sm:p-7">
-                        <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{language === "es" ? "Proximo bloque" : "Next block"}</p>
-                            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white/92">
-                                {pausedSession ? (session?.intention || copy.return) : (nextBlock?.title || copy.fallback)}
-                            </h2>
-                            <div className="mt-4 flex flex-wrap gap-3 text-sm text-white/65">
-                                {nextBlock && <span className="rounded-full border border-white/10 bg-black/20 px-3 py-2">{nextBlock.startAt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</span>}
-                                {nextBlock && <span className="rounded-full border border-white/10 bg-black/20 px-3 py-2">{durationMin(nextBlock)} min</span>}
-                                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-2">{home.habit.nextBlock.reason}</span>
-                            </div>
-                            <div className="mt-5 flex flex-wrap gap-3">
-                                <button type="button" onClick={() => void startNext()} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] bg-gradient-to-r from-[#79c2ff] via-[#7dd3fc] to-[#6ee7b7] px-5 text-sm font-semibold text-slate-950">
-                                    <Zap className="h-4.5 w-4.5" />
-                                    {pausedSession ? copy.return : copy.start}
-                                </button>
-                                <button type="button" onClick={() => nextBlock ? setSelectedBlockId(nextBlock.id) : onNext()} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white/78">
-                                    <ArrowRight className="h-4 w-4" />
-                                    {copy.prepare}
-                                </button>
-                                {nextBlock && <button type="button" onClick={() => void adjustBlock("move")} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white/78"><MoveRight className="h-4 w-4" />{copy.move}</button>}
-                                {nextBlock && <button type="button" onClick={() => void adjustBlock("light")} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white/78"><TimerReset className="h-4 w-4" />{copy.light}</button>}
-                            </div>
-                        </div>
-                    </div>
+                <div className="space-y-3">
+                    <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(160deg,rgba(8,12,22,0.94),rgba(10,14,26,0.88))] p-5 shadow-[0_34px_120px_-64px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-7">
+                        <div className="pointer-events-none absolute -right-24 top-0 h-60 w-60 rounded-full bg-[radial-gradient(circle,rgba(125,211,252,0.16),transparent_72%)] blur-3xl" />
+                        <div className="pointer-events-none absolute left-8 top-8 h-24 w-24 rounded-full bg-[radial-gradient(circle,rgba(110,231,183,0.1),transparent_72%)] blur-2xl" />
 
-                    <div className="space-y-4">
-                        <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{copy.daily}</p>
-                            <div className="mt-4 grid grid-cols-2 gap-3">
-                                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4"><p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{copy.keyBlocks}</p><p className="mt-3 text-3xl font-semibold text-white/92">{home.habit.dayState.totalKeyBlocks}</p></div>
-                                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4"><p className="text-[10px] uppercase tracking-[0.18em] text-white/35">{copy.completed}</p><p className="mt-3 text-3xl font-semibold text-white/92">{home.habit.dayState.completedKeyBlocks}</p></div>
+                        <div className="relative flex min-h-[260px] flex-col justify-between gap-8">
+                            <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/34">{copy.nextBlockLabel}</p>
+                                <h1 className="mt-4 max-w-[16ch] text-[clamp(2.45rem,4.4vw,4.35rem)] font-semibold leading-[0.9] tracking-[-0.06em] text-white/97">
+                                    {nextBlockTitle}
+                                </h1>
+                                <p className="mt-3 max-w-[32rem] text-sm text-white/56">{displayedNext.context}</p>
                             </div>
-                            <p className="mt-4 text-sm leading-7 text-white/55">{home.habit.dayState.remainingLabel}</p>
-                        </div>
 
-                        <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{copy.weekly}</p>
-                            <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-white/92">{home.habit.weeklyConsistency.headline}</h3>
-                            <p className="mt-2 text-sm leading-7 text-white/55">{home.habit.weeklyConsistency.body}</p>
-                        </div>
-
-                        <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5">
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{copy.calibration}</p>
-                                    <p className="mt-2 text-sm leading-7 text-white/55">{home.summary.soft_recommendation}</p>
+                            <div>
+                                <div className="flex flex-wrap gap-2.5">
+                                    <DetailPill label={nextBlockTime} />
+                                    <DetailPill label={nextBlockDuration} />
                                 </div>
-                                <Ring value={home.summary.profile_calibration_progress} />
+                                <div className="mt-6 flex flex-wrap items-center gap-3">
+                                    <ActionButton
+                                        label={pendingAction === "start" ? copy.startLoading : (pausedSession ? copy.return : copy.start)}
+                                        icon={Zap}
+                                        loading={pendingAction === "start"}
+                                        disabled={isBusy}
+                                        onClick={() => void withPending("start", startNext)}
+                                        variant="primary"
+                                        emphasis
+                                    />
+                                    <InlineAction
+                                        label={pendingAction === "prepare" ? copy.prepareLoading : copy.prepare}
+                                        icon={ArrowRight}
+                                        onClick={() => void withPending("prepare", openBlockPreparation)}
+                                        loading={pendingAction === "prepare"}
+                                        disabled={isBusy}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{language === "es" ? "Rescate rapido" : "Quick rescue"}</p>
-                            <h3 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white/92">{home.habit.rescuePlan?.headline || copy.rescue}</h3>
-                            <p className="mt-2 max-w-[42rem] text-sm leading-7 text-white/55">{home.habit.rescuePlan?.tone || home.summary.main_insight}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                            <button type="button" onClick={() => void openRescue("lost_rhythm")} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white/78"><RotateCcw className="h-4 w-4" />{language === "es" ? "Perdi el ritmo" : "Lost the rhythm"}</button>
-                            <button type="button" onClick={() => void openRescue("save_priority")} className="inline-flex h-13 items-center justify-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 text-sm text-white/78"><ShieldCheck className="h-4 w-4" />{language === "es" ? "Salvar una prioridad" : "Save a priority"}</button>
+                    <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(155deg,rgba(17,12,30,0.84),rgba(10,12,24,0.78))] px-4 py-4 shadow-[0_28px_90px_-70px_rgba(168,85,247,0.45)] backdrop-blur-xl sm:px-5">
+                        <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.14),transparent_72%)] blur-3xl" />
+                        <div className="relative flex flex-col gap-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/34">{copy.rescue}</p>
+                                    <p className="mt-1 text-sm text-white/56">{copy.rescueBody}</p>
+                                </div>
+
+                                <ActionButton
+                                    label={copy.openRescue}
+                                    icon={RotateCcw}
+                                    onClick={() => void withPending("rescue-open", () => openRescue("hero_rescue"))}
+                                    loading={pendingAction === "rescue-open"}
+                                    disabled={isBusy}
+                                    variant={showRescue ? "secondary" : "ghost"}
+                                    pressed={showRescue}
+                                    compact
+                                />
+                            </div>
+
+                            {showRescue && visibleRescueActions.length > 0 && (
+                                <div className="grid gap-2 border-t border-white/10 pt-3">
+                                    {visibleRescueActions.map((action) => {
+                                        const actionKey = `rescue-apply:${action.blockId}:${action.type}` as const;
+                                        return (
+                                            <button
+                                                key={`${action.blockId}:${action.type}`}
+                                                type="button"
+                                                onClick={() => void withPending(actionKey, () => applyRescue(action))}
+                                                disabled={isBusy}
+                                                className={cn(
+                                                    "group flex cursor-pointer items-center justify-between gap-4 rounded-[18px] border border-white/10 bg-black/18 px-4 py-3 text-left transition-all duration-200",
+                                                    "hover:border-white/18 hover:bg-white/[0.05]",
+                                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0f1a]",
+                                                    "active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60",
+                                                )}
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-white/92">{action.title}</p>
+                                                    <p className="truncate text-sm text-white/52">{action.summary}</p>
+                                                </div>
+                                                {pendingAction === actionKey ? (
+                                                    <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-white/72" />
+                                                ) : (
+                                                    <ChevronRight className="h-4 w-4 shrink-0 text-white/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-white/68" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
-                    {showRescue && home.habit.rescuePlan && <div className="mt-5 grid gap-3">{home.habit.rescuePlan.suggestedActions.map((action) => <button key={`${action.blockId}:${action.type}`} type="button" onClick={() => void applyRescue(action)} className="flex items-center justify-between rounded-[22px] border border-white/10 bg-black/20 px-4 py-4 text-left transition-colors hover:border-white/20"><div><p className="text-sm font-semibold text-white/90">{action.title}</p><p className="mt-1 text-sm leading-7 text-white/50">{action.summary}</p></div><ChevronRight className="h-4 w-4 text-white/40" /></button>)}</div>}
+
+                    <SummaryStrip
+                        items={[
+                            { label: copy.daily, value: dayPrimaryValue, detail: daySecondaryLine },
+                            { label: copy.weekly, value: weeklyValue, detail: weeklyLine },
+                        ]}
+                    />
                 </div>
             </div>
 
             <HabitActivationSheet open={showOnboarding} onComplete={() => { setShowOnboarding(false); void loadHome(); }} />
+            <HabitPlanningProposalSheet
+                open={Boolean(plannerProposal)}
+                proposal={plannerProposal}
+                busy={pendingAction === "capture-plan"}
+                onClose={() => { void withPending("capture-plan", closePlannerProposal); }}
+                onAccept={() => { void applyPlannerProposal(); }}
+                onLighten={() => { void lightenCurrentPlannerProposal(); }}
+                onRegenerate={() => { void regenerateCurrentPlannerProposal(); }}
+                onAdjust={(index, mode) => { void editPlannerProposal(index, mode); }}
+            />
+            <GuidedPlanningSheet open={planningOpen} onOpenChange={setPlanningOpen} date={getLocalDateKey()} />
             {selectedBlockId && <RadialBlockMenu blockId={selectedBlockId} onClose={() => { setSelectedBlockId(null); void loadHome(); }} />}
         </section>
+    );
+}
+
+function ActionButton({
+    label,
+    icon: Icon,
+    onClick,
+    variant = "secondary",
+    loading = false,
+    disabled = false,
+    pressed = false,
+    emphasis = false,
+    compact = false,
+}: {
+    label: string;
+    icon: typeof CalendarClock;
+    onClick: () => void;
+    variant?: "primary" | "secondary" | "ghost";
+    loading?: boolean;
+    disabled?: boolean;
+    pressed?: boolean;
+    emphasis?: boolean;
+    compact?: boolean;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-pressed={pressed || undefined}
+            className={cn(
+                "group inline-flex cursor-pointer items-center justify-center gap-3 rounded-[18px] border px-4 text-sm font-medium transition-all duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090d16]",
+                "active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60",
+                emphasis && "min-w-[176px]",
+                compact ? "h-10 px-3.5 text-[0.92rem]" : "h-12",
+                variant === "primary" && [
+                    "border-transparent bg-gradient-to-r from-[#79c2ff] via-[#7dd3fc] to-[#6ee7b7] text-slate-950 shadow-[0_22px_50px_-30px_rgba(125,211,252,0.7)]",
+                    "hover:-translate-y-[1px] hover:shadow-[0_28px_58px_-28px_rgba(125,211,252,0.82)]",
+                ],
+                variant === "secondary" && [
+                    "border-white/12 bg-white/[0.045] text-white/86 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+                    "hover:border-white/22 hover:bg-white/[0.08] hover:text-white",
+                    pressed && "border-cyan-300/22 bg-cyan-400/10 text-white",
+                ],
+                variant === "ghost" && [
+                    "border-white/10 bg-black/18 text-white/74 backdrop-blur-md",
+                    "hover:border-white/18 hover:bg-white/[0.06] hover:text-white",
+                    pressed && "border-cyan-300/20 bg-cyan-400/10 text-white",
+                ],
+            )}
+        >
+            {loading ? (
+                <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+            ) : (
+                <Icon className="h-4.5 w-4.5 transition-transform duration-200 group-hover:translate-x-[1px]" />
+            )}
+            <span className="tracking-[-0.02em]">{label}</span>
+        </button>
+    );
+}
+
+function InlineAction({
+    label,
+    icon: Icon,
+    onClick,
+    loading = false,
+    disabled = false,
+    pressed = false,
+    compact = false,
+}: {
+    label: string;
+    icon: typeof CalendarClock;
+    onClick: () => void;
+    loading?: boolean;
+    disabled?: boolean;
+    pressed?: boolean;
+    compact?: boolean;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-pressed={pressed || undefined}
+            className={cn(
+                "group inline-flex cursor-pointer items-center gap-2 rounded-full border text-white/74 transition-all duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090d16]",
+                "active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60",
+                compact ? "h-9 px-3 text-[0.9rem]" : "h-10 px-3.5 text-sm",
+                pressed
+                    ? "border-cyan-300/18 bg-cyan-400/10 text-white"
+                    : "border-white/10 bg-black/18 hover:border-white/18 hover:bg-white/[0.06] hover:text-white",
+            )}
+        >
+            {loading ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+                <Icon className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-[1px]" />
+            )}
+            <span className="tracking-[-0.02em]">{label}</span>
+        </button>
+    );
+}
+
+function DetailPill({ label, subtle = false }: { label: string; subtle?: boolean }) {
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center rounded-full border px-3 py-2 text-sm",
+                subtle
+                    ? "border-white/8 bg-white/[0.05] text-white/72"
+                    : "border-white/10 bg-black/20 text-white/68",
+            )}
+        >
+            {label}
+        </span>
+    );
+}
+
+function SummaryStrip({
+    items,
+}: {
+    items: Array<{ label: string; value: string; detail: string }>;
+}) {
+    return (
+        <div className="rounded-[24px] border border-white/10 bg-black/18 px-4 py-3 shadow-[0_20px_70px_-60px_rgba(0,0,0,0.85)] backdrop-blur-xl">
+            <div className="grid gap-3 md:grid-cols-2">
+                {items.map((item) => (
+                    <div key={item.label} className="space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">{item.label}</p>
+                        <p className="text-lg font-semibold tracking-[-0.03em] text-white/94">{item.value}</p>
+                        <p className="text-sm text-white/54">{item.detail}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }

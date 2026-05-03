@@ -1,4 +1,11 @@
 import { PlanningGuideResult, PlanningPreferencesInput, PlanningRecommendation } from "@/lib/types/planning";
+import {
+    PlannerApplyResult,
+    PlannerProposal,
+    PlannerProposalRevisionRequest,
+    PlannerRequest,
+    PlannerRevisionResult,
+} from "@/lib/types/planner";
 
 function parseGuide(payload: PlanningGuideResult): PlanningGuideResult {
     return payload;
@@ -45,6 +52,42 @@ export async function fetchGuidedPlanning(date: string, preferences?: PlanningPr
     });
 
     return parseGuide(await readJson<PlanningGuideResult>(response));
+}
+
+export async function requestPlannerProposal(payload: PlannerRequest) {
+    const response = await fetch("/api/planning/planner/propose", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    });
+
+    return readJson<PlannerProposal>(response);
+}
+
+export async function applyPlannerProposalRequest(proposal: PlannerProposal) {
+    const response = await fetch("/api/planning/planner/apply", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ proposal }),
+    });
+
+    return readJson<PlannerApplyResult>(response);
+}
+
+export async function revisePlannerProposalRequest(payload: PlannerProposalRevisionRequest) {
+    const response = await fetch("/api/planning/planner/decision", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    });
+
+    return readJson<PlannerRevisionResult>(response);
 }
 
 export async function dismissPlanningRecommendation(recommendationId: string) {

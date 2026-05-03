@@ -281,6 +281,9 @@ async function fetchRecentHabitEvents(
         surface: asNullableString((row as DbRow).surface),
         blockId: asNullableString((row as DbRow).block_id),
         sessionId: asNullableString((row as DbRow).session_id),
+        plannerSessionId: asNullableString((row as DbRow).planner_session_id),
+        plannerProposalId: asNullableString((row as DbRow).planner_proposal_id),
+        plannerDecisionId: asNullableString((row as DbRow).planner_decision_id),
         metadataJson: asObject((row as DbRow).metadata_json) ?? {},
     }));
 }
@@ -348,6 +351,9 @@ export async function recordHabitEvent(
         surface: payload.surface ?? null,
         block_id: payload.blockId ?? null,
         session_id: payload.sessionId ?? null,
+        planner_session_id: payload.plannerSessionId ?? null,
+        planner_proposal_id: payload.plannerProposalId ?? null,
+        planner_decision_id: payload.plannerDecisionId ?? null,
         metadata_json: payload.metadata ?? {},
         event_date: occurredAt.slice(0, 10),
     };

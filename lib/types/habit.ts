@@ -162,6 +162,9 @@ export interface HabitEventPayload {
     occurredAt?: string;
     blockId?: string | null;
     sessionId?: string | null;
+    plannerSessionId?: string | null;
+    plannerProposalId?: string | null;
+    plannerDecisionId?: string | null;
     surface?: string | null;
     metadata?: Record<string, unknown>;
 }

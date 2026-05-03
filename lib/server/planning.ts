@@ -446,7 +446,7 @@ export function isSuppressed(row: PersistedPlanningRecommendation) {
     return false;
 }
 
-async function fetchBehaviorProfile(
+export async function fetchBehaviorProfile(
     supabase: SupabaseClient,
     userId: string,
     analytics: FocusSessionAnalytics[],
@@ -468,7 +468,7 @@ async function fetchBehaviorProfile(
     return buildEmptyBehaviorProfile(userId);
 }
 
-async function fetchRecentAnalytics(supabase: SupabaseClient, userId: string) {
+export async function fetchRecentAnalytics(supabase: SupabaseClient, userId: string) {
     const since = new Date();
     since.setDate(since.getDate() - 45);
 
@@ -483,7 +483,7 @@ async function fetchRecentAnalytics(supabase: SupabaseClient, userId: string) {
     return (data ?? []).map((row) => mapAnalyticsRow(row as DbRow));
 }
 
-async function fetchPlanningFeedbackSummary(supabase: SupabaseClient, userId: string) {
+export async function fetchPlanningFeedbackSummary(supabase: SupabaseClient, userId: string) {
     const since = new Date();
     since.setDate(since.getDate() - 60);
 
@@ -498,7 +498,7 @@ async function fetchPlanningFeedbackSummary(supabase: SupabaseClient, userId: st
     return summarizePlanningFeedback((data ?? []).map((row) => mapRecommendationRow(row as DbRow)));
 }
 
-async function fetchCalendarBlocks(
+export async function fetchCalendarBlocks(
     supabase: SupabaseClient,
     userId: string,
     targetDate: string,
